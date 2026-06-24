@@ -7,9 +7,9 @@
     <div class="grid gap-3" wire:key="data-products">
         <div class="overflow-x-auto">
             <table class="table">
-                <tbody id="sortableItems">
+                <tbody class="model-products-rows">
                 @foreach($products as $index => $product)
-                    <tr class="hover:bg-base-300 cursor-grab">
+                    <tr wire:key="product-row-{{ $index }}" class="hover:bg-base-300 cursor-grab">
                         <td class="px-3 relative" colspan="2">
                             <div class="space-y-3">
                                 @if(in_array($from, ['Quote', 'Order']) || class_basename($model) == 'Delivery')
@@ -34,16 +34,16 @@
                                 <div class="grid {{ ($creating != 'Delivery') ? 'lg:grid-cols-4' : null }} gap-2">
                                     @if($creating != 'Delivery')
                                         @if(in_array($from, ['Quote', 'Order']) && $creating != 'PurchaseOrder')
-                                            <x-mary-input wire:model.blur="products.{{ $index }}.unit_price" label="{{ ucfirst(__('laravel-crm::lang.price')) }}" prefix="$" x-mask:dynamic="$money($input)" x-on:keyup="$el.dispatchEvent(new Event('input'))" readonly />
+                                            <x-mary-input wire:model.live.debounce.500ms="products.{{ $index }}.unit_price" label="{{ ucfirst(__('laravel-crm::lang.price')) }}" prefix="$" x-mask:dynamic="$money($input)" x-on:keyup="$el.dispatchEvent(new Event('input'))" readonly />
                                         @else
-                                            <x-mary-input wire:model.blur="products.{{ $index }}.unit_price" label="{{ ucfirst(__('laravel-crm::lang.price')) }}" prefix="$" x-mask:dynamic="$money($input)" x-on:keyup="$el.dispatchEvent(new Event('input'))" />
+                                            <x-mary-input wire:model.live.debounce.500ms="products.{{ $index }}.unit_price" label="{{ ucfirst(__('laravel-crm::lang.price')) }}" prefix="$" x-mask:dynamic="$money($input)" x-on:keyup="$el.dispatchEvent(new Event('input'))" />
                                         @endif
                                     @endif
 
                                     @if(in_array($from, ['Order']) && $creating != 'PurchaseOrder')
-                                        <x-mary-select wire:model.blur="products.{{ $index }}.quantity" label="{{ ucfirst(__('laravel-crm::lang.quantity')) }}" :options="$products[$index]['quantities']" />
+                                        <x-mary-select wire:model.live="products.{{ $index }}.quantity" label="{{ ucfirst(__('laravel-crm::lang.quantity')) }}" :options="$products[$index]['quantities']" />
                                     @else
-                                        <x-mary-input wire:model.blur="products.{{ $index }}.quantity" label="{{ ucfirst(__('laravel-crm::lang.quantity')) }}" type="number" />
+                                        <x-mary-input wire:model.live.debounce.500ms="products.{{ $index }}.quantity" label="{{ ucfirst(__('laravel-crm::lang.quantity')) }}" type="number" />
                                     @endif
 
                                     @if($creating != 'Delivery')    

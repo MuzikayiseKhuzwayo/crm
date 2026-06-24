@@ -23,14 +23,20 @@
         @break
 
     @case('checkbox_multiple')
-        <x-mary-choices
-            wire:model="{{ $key }}"
-            label="{{ $label }}"
-            :options="$field->fieldOptions"
-            option-value="id"
-            option-label="label"
-            searchable
-        />
+        <div>
+            <fieldset class="fieldset py-0">
+                <legend class="fieldset-legend mb-2">{{ $label }}</legend>
+                <div class="gap-1 grid [&_fieldset]:py-0">
+                    @foreach($field->fieldOptions as $option)
+                        <x-mary-checkbox
+                            wire:model="{{ $key }}"
+                            value="{{ $option->id }}"
+                            label="{{ $option->label }}"
+                        />
+                    @endforeach
+                </div>
+            </fieldset>
+        </div>
         @break
 
     @case('radio')

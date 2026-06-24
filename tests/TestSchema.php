@@ -309,6 +309,26 @@ class TestSchema
             $table->softDeletes();
         });
 
+        Schema::create($prefix.'files', function (Blueprint $table) {
+            $table->bigIncrements('id');
+            $table->string('external_id')->nullable();
+            $table->unsignedBigInteger('team_id')->nullable();
+            $table->morphs('fileable');
+            $table->string('file');
+            $table->string('name')->nullable();
+            $table->string('title')->nullable();
+            $table->string('format')->nullable();
+            $table->string('filesize')->nullable();
+            $table->string('mime')->nullable();
+            $table->string('disk')->default('local');
+            $table->unsignedBigInteger('user_created_id')->nullable();
+            $table->unsignedBigInteger('user_updated_id')->nullable();
+            $table->unsignedBigInteger('user_deleted_id')->nullable();
+            $table->unsignedBigInteger('user_restored_id')->nullable();
+            $table->timestamps();
+            $table->softDeletes();
+        });
+
         Schema::create($prefix.'tasks', function (Blueprint $table) {
             $table->bigIncrements('id');
             $table->string('external_id')->nullable();
@@ -875,6 +895,7 @@ class TestSchema
             $table->boolean('is_public')->default(true);
             $table->unsignedInteger('votes_count')->default(0);
             $table->unsignedInteger('comments_count')->default(0);
+            $table->unsignedInteger('views_count')->default(0);
             $table->unsignedBigInteger('feature_status_id')->nullable();
             $table->unsignedBigInteger('submitted_by_user_id')->nullable();
             $table->unsignedBigInteger('user_created_id')->nullable();
@@ -910,6 +931,15 @@ class TestSchema
             $table->unsignedBigInteger('user_id');
             $table->timestamps();
             $table->unique(['feature_id', 'user_id']);
+        });
+
+        Schema::create($prefix.'feature_views', function (Blueprint $table) {
+            $table->bigIncrements('id');
+            $table->unsignedBigInteger('feature_id');
+            $table->unsignedBigInteger('user_id')->nullable();
+            $table->unsignedBigInteger('team_id')->nullable();
+            $table->string('ip_hash', 64)->nullable();
+            $table->timestamp('viewed_at');
         });
 
         Schema::create($prefix.'monitors', function (Blueprint $table) {

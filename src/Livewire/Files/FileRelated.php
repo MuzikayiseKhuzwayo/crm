@@ -21,13 +21,35 @@ class FileRelated extends Component
 
     public $uploadedFile;
 
+    public int $maxFileSizeKb = 10240;
+
+    public array $allowedMimes = ['pdf', 'jpg', 'jpeg', 'png', 'gif', 'webp', 'doc', 'docx', 'xls', 'xlsx', 'csv', 'tsv', 'txt', 'zip'];
+
+    public function getMaxFileSizeLabelProperty(): string
+    {
+        if ($this->maxFileSizeKb >= 1024) {
+            return (int) ($this->maxFileSizeKb / 1024).' MB';
+        }
+
+        return $this->maxFileSizeKb.' KB';
+    }
+
     public function save(): void
     {
         $this->validate([
-            'uploadedFile' => 'required|file|max:10240',
+            'uploadedFile' => [
+                'required',
+                'file',
+                'max:'.$this->maxFileSizeKb,
+                'mimes:'.implode(',', $this->allowedMimes),
+            ],
         ]);
 
         $disk = config('filesystems.default', 'local');
+
+        $originalName = $this->uploadedFile->getClientOriginalName();
+        $filesize = $this->uploadedFile->getSize();
+        $mime = $this->uploadedFile->getMimeType();
 
         $path = $this->uploadedFile->store(
             'laravel-crm/'.strtolower(class_basename($this->model)).'/'.$this->model->id.'/files',
@@ -36,9 +58,9 @@ class FileRelated extends Component
 
         $fileModel = $this->model->files()->create([
             'file' => $path,
-            'name' => $this->uploadedFile->getClientOriginalName(),
-            'filesize' => $this->uploadedFile->getSize(),
-            'mime' => $this->uploadedFile->getMimeType(),
+            'name' => $originalName,
+            'filesize' => $filesize,
+            'mime' => $mime,
             'disk' => $disk,
         ]);
 
