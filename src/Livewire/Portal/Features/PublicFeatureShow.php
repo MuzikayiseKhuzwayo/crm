@@ -13,7 +13,29 @@ class PublicFeatureShow extends Component
     {
         abort_unless($feature->is_public, 404);
 
+        if (config('laravel-crm.teams')) {
+            $portalTeamId = $this->portalTeamId();
+
+            abort_if($portalTeamId === null, 404);
+            abort_if((int) $feature->team_id !== $portalTeamId, 404);
+        }
+
         $this->feature = $feature;
+    }
+
+    protected function portalTeamId(): ?int
+    {
+        $configured = config('laravel-crm.portal.team_id');
+
+        if ($configured !== null && $configured !== '') {
+            return (int) $configured;
+        }
+
+        if (($user = auth()->user()) && ($team = $user->currentTeam ?? null)) {
+            return (int) $team->id;
+        }
+
+        return null;
     }
 
     public function hasVoted(): bool

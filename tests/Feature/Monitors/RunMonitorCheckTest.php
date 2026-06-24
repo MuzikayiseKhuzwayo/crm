@@ -164,7 +164,8 @@ test('perf alert fires when response_time_ms exceeds perf_threshold_ms', functio
 
     expect($monitor->last_status)->toBe('slow');
     expect($monitor->last_response_time)->toBe(1500);
-    expect($monitor->notified_at)->not->toBeNull();
+    expect($monitor->perf_notified_at)->not->toBeNull();
+    expect($monitor->notified_at)->toBeNull();
 
     Notification::assertSentTo($owner, MonitorPerformanceNotification::class);
 });

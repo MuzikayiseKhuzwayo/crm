@@ -875,6 +875,7 @@ return [
     // Features
     'feature' => 'feature',
     'features' => 'features',
+    'cannot_delete_status_with_features' => 'cannot delete a status that still has features assigned',
     'feature_request' => 'feature request',
     'submit_feature' => 'submit feature',
     'vote' => 'vote',

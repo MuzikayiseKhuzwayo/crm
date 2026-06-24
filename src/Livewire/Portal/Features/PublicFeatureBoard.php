@@ -33,16 +33,38 @@ class PublicFeatureBoard extends Component
 
     public function statuses(): Collection
     {
-        return FeatureStatus::orderBy('order')->orderBy('id')->get();
+        $portalTeamId = $this->portalTeamId();
+
+        return FeatureStatus::query()
+            ->withoutGlobalScopes()
+            ->when(config('laravel-crm.teams'), function ($q) use ($portalTeamId) {
+                if ($portalTeamId === null) {
+                    $q->whereRaw('1 = 0');
+                } else {
+                    $q->where('team_id', $portalTeamId);
+                }
+            })
+            ->orderBy('order')
+            ->orderBy('id')
+            ->get();
     }
 
     public function features(): LengthAwarePaginator
     {
         $userId = auth()->id();
+        $portalTeamId = $this->portalTeamId();
 
         $query = Feature::query()
+            ->withoutGlobalScopes()
             ->public()
             ->with('status')
+            ->when(config('laravel-crm.teams'), function ($q) use ($portalTeamId) {
+                if ($portalTeamId === null) {
+                    $q->whereRaw('1 = 0');
+                } else {
+                    $q->where('team_id', $portalTeamId);
+                }
+            })
             ->when($this->feature_status_id, fn (Builder $q) => $q->where('feature_status_id', $this->feature_status_id));
 
         if ($userId) {
@@ -59,6 +81,21 @@ class PublicFeatureBoard extends Component
         }
 
         return $query->paginate(10);
+    }
+
+    protected function portalTeamId(): ?int
+    {
+        $configured = config('laravel-crm.portal.team_id');
+
+        if ($configured !== null && $configured !== '') {
+            return (int) $configured;
+        }
+
+        if (($user = auth()->user()) && ($team = $user->currentTeam ?? null)) {
+            return (int) $team->id;
+        }
+
+        return null;
     }
 
     public function render()

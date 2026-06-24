@@ -168,6 +168,23 @@ return [
     |
     */
 
+    /*
+    |--------------------------------------------------------------------------
+    | Portal
+    |--------------------------------------------------------------------------
+    |
+    | Settings for the public-facing portal (feature voting board, etc.).
+    | When multi-tenant `teams` mode is enabled the portal is single-tenant by
+    | default — set `portal.team_id` to the id of the team whose public
+    | content should be exposed on the portal. When teams mode is off this
+    | value is ignored.
+    |
+    */
+
+    'portal' => [
+        'team_id' => env('LARAVEL_CRM_PORTAL_TEAM_ID'),
+    ],
+
     'modules' => [
         'leads',
         'deals',
@@ -201,6 +218,7 @@ return [
         'default_ssl_days_before_expiry_alert' => env('LARAVEL_CRM_MONITORING_DEFAULT_SSL_DAYS_BEFORE_EXPIRY_ALERT', 14),
         'request_timeout_seconds' => env('LARAVEL_CRM_MONITORING_REQUEST_TIMEOUT_SECONDS', 15),
         'ssl_recheck_hours' => env('LARAVEL_CRM_MONITORING_SSL_RECHECK_HOURS', 12),
+        'max_response_bytes' => env('LARAVEL_CRM_MONITORING_MAX_RESPONSE_BYTES', 5 * 1024 * 1024),
 
         // Set true to allow monitors to target loopback / private / reserved
         // addresses. Off by default to mitigate SSRF from any admin who can

@@ -32,8 +32,13 @@ class FeatureStatusEdit extends Component
         $this->validate();
 
         if ($this->is_default) {
+            $teamId = config('laravel-crm.teams')
+                ? optional(auth()->user()->currentTeam ?? null)->id
+                : null;
+
             FeatureStatus::where('is_default', true)
                 ->where('id', '!=', $this->featureStatus->id)
+                ->when(config('laravel-crm.teams') && $teamId, fn ($q) => $q->where('team_id', $teamId))
                 ->update(['is_default' => false]);
         }
 

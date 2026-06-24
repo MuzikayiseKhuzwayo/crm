@@ -57,7 +57,7 @@ class RunMonitorCheck implements ShouldQueue
     {
         MonitorCheck::create([
             'monitor_id' => $this->monitorId,
-            'type' => 'uptime',
+            'type' => 'error',
             'status' => 'error',
             'error_message' => mb_substr($e->getMessage(), 0, 1000),
             'checked_at' => Carbon::now(),
@@ -154,21 +154,22 @@ class RunMonitorCheck implements ShouldQueue
         if ($status === 'slow') {
             $rateLimitMinutes = (int) config('laravel-crm.monitoring.perf_alert_rate_limit_minutes', 60);
 
-            if ($monitor->notified_at === null || $monitor->notified_at->lte($now->copy()->subMinutes($rateLimitMinutes))) {
+            if ($monitor->perf_notified_at === null || $monitor->perf_notified_at->lte($now->copy()->subMinutes($rateLimitMinutes))) {
                 $this->notifyRecipients($monitor, fn ($owner) => new MonitorPerformanceNotification($monitor, $owner, $result));
-                $monitor->notified_at = $now;
+                $monitor->perf_notified_at = $now;
             }
 
             return;
         }
 
-        if ($monitor->down_since_at !== null || $monitor->notified_at !== null) {
+        if ($monitor->down_since_at !== null || $monitor->notified_at !== null || $monitor->perf_notified_at !== null) {
             if ($previousStatus === 'down' || $previousStatus === 'slow') {
                 $this->notifyRecipients($monitor, fn ($owner) => new MonitorRecoveredNotification($monitor, $owner, $result));
             }
 
             $monitor->down_since_at = null;
             $monitor->notified_at = null;
+            $monitor->perf_notified_at = null;
         }
     }
 

@@ -44,7 +44,13 @@ class FeatureStatusIndex extends Component
     {
         $this->authorize('manageStatuses', Feature::class);
 
-        if ($featureStatus = FeatureStatus::find($id)) {
+        if ($featureStatus = FeatureStatus::withCount('features')->find($id)) {
+            if ($featureStatus->features_count > 0) {
+                $this->error(ucfirst(__('laravel-crm::lang.cannot_delete_status_with_features')));
+
+                return;
+            }
+
             $featureStatus->delete();
 
             $this->success(ucfirst(trans('laravel-crm::lang.deleted')));

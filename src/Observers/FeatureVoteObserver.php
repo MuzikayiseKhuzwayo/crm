@@ -7,6 +7,24 @@ use VentureDrake\LaravelCrm\Models\FeatureVote;
 
 class FeatureVoteObserver
 {
+    public function creating(FeatureVote $vote)
+    {
+        if ($vote->team_id === null
+            && config('laravel-crm.teams')
+            && ($user = auth()->user())
+            && ($team = $user->currentTeam ?? null)
+        ) {
+            $vote->team_id = $team->id;
+        }
+
+        if ($vote->team_id === null) {
+            $feature = Feature::withoutGlobalScopes()->find($vote->feature_id);
+            if ($feature) {
+                $vote->team_id = $feature->team_id;
+            }
+        }
+    }
+
     /**
      * Handle the feature vote "created" event.
      *

@@ -18,6 +18,7 @@ class PublicFeatureController extends Controller
     public function show(Feature $feature)
     {
         abort_unless($feature->is_public, 404);
+        $this->ensurePortalTeam($feature);
 
         return view('laravel-crm::portal.features.show', compact('feature'));
     }
@@ -56,6 +57,7 @@ class PublicFeatureController extends Controller
     public function vote(Feature $feature, FeatureService $featureService)
     {
         abort_unless($feature->is_public, 404);
+        $this->ensurePortalTeam($feature);
 
         if ($redirect = $this->requireAuth(route('laravel-crm.portal.features.show', $feature->external_id))) {
             return $redirect;
@@ -69,6 +71,7 @@ class PublicFeatureController extends Controller
     public function unvote(Feature $feature, FeatureService $featureService)
     {
         abort_unless($feature->is_public, 404);
+        $this->ensurePortalTeam($feature);
 
         if ($redirect = $this->requireAuth(route('laravel-crm.portal.features.show', $feature->external_id))) {
             return $redirect;
@@ -82,6 +85,7 @@ class PublicFeatureController extends Controller
     public function comment(Request $request, Feature $feature, FeatureService $featureService)
     {
         abort_unless($feature->is_public, 404);
+        $this->ensurePortalTeam($feature);
 
         if ($redirect = $this->requireAuth(route('laravel-crm.portal.features.show', $feature->external_id))) {
             return $redirect;
@@ -106,5 +110,22 @@ class PublicFeatureController extends Controller
         session()->put('url.intended', $intended);
 
         return redirect()->route('laravel-crm.portal.login', ['intended' => $intended]);
+    }
+
+    private function ensurePortalTeam(Feature $feature): void
+    {
+        if (! config('laravel-crm.teams')) {
+            return;
+        }
+
+        $configured = config('laravel-crm.portal.team_id');
+        $portalTeamId = ($configured !== null && $configured !== '') ? (int) $configured : null;
+
+        if ($portalTeamId === null && ($user = Auth::user()) && ($team = $user->currentTeam ?? null)) {
+            $portalTeamId = (int) $team->id;
+        }
+
+        abort_if($portalTeamId === null, 404);
+        abort_if((int) $feature->team_id !== $portalTeamId, 404);
     }
 }

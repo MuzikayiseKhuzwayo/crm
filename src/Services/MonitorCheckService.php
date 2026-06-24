@@ -3,7 +3,10 @@
 namespace VentureDrake\LaravelCrm\Services;
 
 use Carbon\Carbon;
+use GuzzleHttp\Exception\TooManyRedirectsException;
 use Illuminate\Support\Facades\Http;
+use Psr\Http\Message\UriInterface;
+use RuntimeException;
 use Throwable;
 use VentureDrake\LaravelCrm\Models\Monitor;
 
@@ -19,6 +22,7 @@ class MonitorCheckService
         ];
 
         $timeout = (int) config('laravel-crm.monitoring.request_timeout_seconds', 15);
+        $maxBytes = (int) config('laravel-crm.monitoring.max_response_bytes', 5 * 1024 * 1024);
 
         $start = microtime(true);
 
@@ -28,8 +32,49 @@ class MonitorCheckService
             return $result;
         }
 
+        $host = parse_url($monitor->url, PHP_URL_HOST);
+        $allowPrivate = (bool) config('laravel-crm.monitoring.allow_private_targets');
+        $resolved = ($host && ! $allowPrivate) ? MonitorUrlGuard::resolvePublicIps($host) : [];
+
+        if (! $allowPrivate && $resolved === []) {
+            $result['error'] = 'URL host could not be safely resolved.';
+
+            return $result;
+        }
+
         try {
-            $response = Http::timeout($timeout)->get($monitor->url);
+            $response = Http::timeout($timeout)
+                ->withOptions([
+                    'allow_redirects' => [
+                        'max' => 5,
+                        'strict' => false,
+                        'referer' => false,
+                        'protocols' => ['http', 'https'],
+                        'track_redirects' => false,
+                        'on_redirect' => static function ($request, $response, UriInterface $uri): void {
+                            if (MonitorUrlGuard::reasonForRejection((string) $uri) !== null) {
+                                throw new RuntimeException('Redirect to non-public host blocked.');
+                            }
+                        },
+                    ],
+                    'curl' => $resolved !== []
+                        ? [CURLOPT_RESOLVE => self::buildCurlResolve($host, $resolved)]
+                        : [],
+                ])
+                ->withHeaders(['Accept-Encoding' => 'identity'])
+                ->sink(fopen('php://temp', 'r+'))
+                ->get($monitor->url);
+
+            $contentLength = (int) ($response->header('Content-Length') ?: 0);
+
+            if ($contentLength > $maxBytes) {
+                $result['response_time_ms'] = (int) round((microtime(true) - $start) * 1000);
+                $result['status_code'] = $response->status();
+                $result['error'] = 'Response exceeds maximum allowed size.';
+                $result['status'] = 'down';
+
+                return $result;
+            }
 
             $result['response_time_ms'] = (int) round((microtime(true) - $start) * 1000);
             $result['status_code'] = $response->status();
@@ -46,6 +91,9 @@ class MonitorCheckService
                 $result['status'] = 'down';
                 $result['error'] = 'HTTP '.$response->status();
             }
+        } catch (TooManyRedirectsException $e) {
+            $result['response_time_ms'] = (int) round((microtime(true) - $start) * 1000);
+            $result['error'] = 'Too many redirects (or redirect blocked): '.$e->getMessage();
         } catch (Throwable $e) {
             $result['response_time_ms'] = (int) round((microtime(true) - $start) * 1000);
             $result['error'] = $e->getMessage();
@@ -77,6 +125,15 @@ class MonitorCheckService
             return $result;
         }
 
+        $allowPrivate = (bool) config('laravel-crm.monitoring.allow_private_targets');
+        $resolved = $allowPrivate ? [] : MonitorUrlGuard::resolvePublicIps($host);
+
+        if (! $allowPrivate && $resolved === []) {
+            $result['error'] = 'SSL host could not be safely resolved.';
+
+            return $result;
+        }
+
         $timeout = (int) config('laravel-crm.monitoring.request_timeout_seconds', 15);
 
         $context = stream_context_create([
@@ -92,8 +149,13 @@ class MonitorCheckService
         $errno = 0;
         $errstr = '';
 
+        $connectIp = $resolved[0] ?? $host;
+        $connectHost = filter_var($connectIp, FILTER_VALIDATE_IP, FILTER_FLAG_IPV6)
+            ? '['.$connectIp.']'
+            : $connectIp;
+
         $client = @stream_socket_client(
-            'ssl://'.$host.':443',
+            'ssl://'.$connectHost.':443',
             $errno,
             $errstr,
             $timeout,
@@ -156,5 +218,29 @@ class MonitorCheckService
         }
 
         return $result;
+    }
+
+    /**
+     * Build CURLOPT_RESOLVE entries so the actual HTTP call uses the IP the
+     * guard already approved — this closes the DNS-rebinding window between
+     * MonitorUrlGuard::resolvePublicIps() and the outbound request.
+     *
+     * @param  array<int, string>  $ips
+     * @return array<int, string>
+     */
+    private static function buildCurlResolve(?string $host, array $ips): array
+    {
+        if (! $host || $ips === []) {
+            return [];
+        }
+
+        $entries = [];
+        $primary = $ips[0];
+
+        foreach ([80, 443] as $port) {
+            $entries[] = sprintf('%s:%d:%s', $host, $port, $primary);
+        }
+
+        return $entries;
     }
 }

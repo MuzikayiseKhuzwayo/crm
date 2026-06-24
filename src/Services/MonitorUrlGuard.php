@@ -49,6 +49,32 @@ class MonitorUrlGuard
     }
 
     /**
+     * Resolve $host to public IPs. Returns an empty array if resolution fails
+     * or if any of the resolved addresses are non-public — callers can use the
+     * absence of IPs as a "do not contact" signal and avoid the request
+     * entirely.
+     *
+     * @return array<int, string>
+     */
+    public static function resolvePublicIps(string $host): array
+    {
+        $host = trim($host, '[]');
+        $ips = self::resolveHost($host);
+
+        if ($ips === []) {
+            return [];
+        }
+
+        foreach ($ips as $ip) {
+            if (! self::isPublicIp($ip)) {
+                return [];
+            }
+        }
+
+        return $ips;
+    }
+
+    /**
      * @return array<int, string>
      */
     private static function resolveHost(string $host): array
