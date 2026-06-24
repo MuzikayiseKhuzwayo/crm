@@ -45,11 +45,24 @@ class PublicFeatureController extends Controller
             'description' => 'nullable|string|max:5000',
         ]);
 
-        $feature = $featureService->create([
+        $payload = [
             'title' => $data['title'],
             'description' => $data['description'] ?? null,
             'is_public' => true,
-        ], Auth::user());
+        ];
+
+        if (config('laravel-crm.teams')) {
+            $portalTeamId = $this->resolvePortalTeamId();
+            abort_if($portalTeamId === null, 404);
+
+            $user = Auth::user();
+            $userTeamId = ($user && ($team = $user->currentTeam ?? null)) ? (int) $team->id : null;
+            abort_if($userTeamId !== $portalTeamId, 403);
+
+            $payload['team_id'] = $portalTeamId;
+        }
+
+        $feature = $featureService->create($payload, Auth::user());
 
         return redirect()
             ->route('laravel-crm.portal.features.show', $feature->external_id)
@@ -120,6 +133,14 @@ class PublicFeatureController extends Controller
             return;
         }
 
+        $portalTeamId = $this->resolvePortalTeamId();
+
+        abort_if($portalTeamId === null, 404);
+        abort_if((int) $feature->team_id !== $portalTeamId, 404);
+    }
+
+    private function resolvePortalTeamId(): ?int
+    {
         $configured = config('laravel-crm.portal.team_id');
         $portalTeamId = ($configured !== null && $configured !== '') ? (int) $configured : null;
 
@@ -127,7 +148,6 @@ class PublicFeatureController extends Controller
             $portalTeamId = (int) $team->id;
         }
 
-        abort_if($portalTeamId === null, 404);
-        abort_if((int) $feature->team_id !== $portalTeamId, 404);
+        return $portalTeamId;
     }
 }

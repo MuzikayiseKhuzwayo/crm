@@ -168,23 +168,6 @@ return [
     |
     */
 
-    /*
-    |--------------------------------------------------------------------------
-    | Portal
-    |--------------------------------------------------------------------------
-    |
-    | Settings for the public-facing portal (feature voting board, etc.).
-    | When multi-tenant `teams` mode is enabled the portal is single-tenant by
-    | default — set `portal.team_id` to the id of the team whose public
-    | content should be exposed on the portal. When teams mode is off this
-    | value is ignored.
-    |
-    */
-
-    'portal' => [
-        'team_id' => env('LARAVEL_CRM_PORTAL_TEAM_ID'),
-    ],
-
     'modules' => [
         'leads',
         'deals',
@@ -232,15 +215,37 @@ return [
     |--------------------------------------------------------------------------
     |
     | Settings for the public-facing portal (feature board, signed quote /
-    | invoice / purchase-order links). `allow_registration` opts the host
-    | application into letting anonymous visitors create user accounts via
-    | /p/register. Off by default: enabling it writes rows to the host app's
-    | users table and dispatches Laravel's Registered event for each signup.
+    | invoice / purchase-order links). When multi-tenant `teams` mode is
+    | enabled the portal is single-tenant by default — set `portal.team_id`
+    | to the id of the team whose public content should be exposed. When
+    | teams mode is off this value is ignored. `allow_registration` opts
+    | the host application into letting anonymous visitors create user
+    | accounts via /p/register. Off by default: enabling it writes rows
+    | to the host app's users table and dispatches Laravel's Registered
+    | event for each signup.
     |
     */
 
     'portal' => [
+        'team_id' => env('LARAVEL_CRM_PORTAL_TEAM_ID'),
         'allow_registration' => env('LARAVEL_CRM_PORTAL_ALLOW_REGISTRATION', false),
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
+    | API
+    |--------------------------------------------------------------------------
+    |
+    | Settings for the REST API V2. `token_attempts_per_account` and
+    | `token_attempts_decay_seconds` together throttle the POST /api/crm/v2
+    | /auth/token endpoint per email address, on top of the IP-keyed
+    | throttle:6,1 limiter. Defaults to 5 failed attempts per 10 minutes.
+    |
+    */
+
+    'api' => [
+        'token_attempts_per_account' => env('LARAVEL_CRM_API_TOKEN_ATTEMPTS_PER_ACCOUNT', 5),
+        'token_attempts_decay_seconds' => env('LARAVEL_CRM_API_TOKEN_ATTEMPTS_DECAY_SECONDS', 600),
     ],
 
     /*

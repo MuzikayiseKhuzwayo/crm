@@ -31,7 +31,17 @@ trait ResolvesFeatureRecipients
             ->join($roleTable, $modelHasRoles.'.role_id', '=', $roleTable.'.id')
             ->where($roleTable.'.name', 'Owner');
 
-        if (config('laravel-crm.teams') && $teamId) {
+        if (Schema::hasColumn($roleTable, 'crm_role')) {
+            $query->where($roleTable.'.crm_role', 1);
+        }
+
+        if (config('laravel-crm.teams')) {
+            if (! $teamId) {
+                // Refuse to fan out across all tenants when teams are enabled
+                // but the caller couldn't determine which team owns the record.
+                return collect();
+            }
+
             $query->where($modelHasRoles.'.team_id', $teamId);
         }
 

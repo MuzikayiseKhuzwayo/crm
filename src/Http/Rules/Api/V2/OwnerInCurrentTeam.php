@@ -7,8 +7,9 @@ use Illuminate\Contracts\Validation\ValidationRule;
 
 /**
  * Reject `user_owner_id` values that point at a user outside the caller's
- * current team. When teams are disabled, or the caller has no current team,
- * this rule is a no-op.
+ * current team. When teams are disabled this rule is a no-op. When teams
+ * are enabled but the caller has no current team, the rule fails closed
+ * to prevent cross-tenant owner assignment.
  */
 class OwnerInCurrentTeam implements ValidationRule
 {
@@ -31,6 +32,8 @@ class OwnerInCurrentTeam implements ValidationRule
         $currentTeamId = $caller->currentTeam->id ?? null;
 
         if (! $currentTeamId) {
+            $fail('A current team must be set to assign an owner.');
+
             return;
         }
 

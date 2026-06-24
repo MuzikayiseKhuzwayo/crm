@@ -23,7 +23,7 @@ class FeatureService
 
     public function create(array $data, ?User $submittedBy = null): Feature
     {
-        return Feature::create([
+        $attributes = [
             'title' => $data['title'] ?? null,
             'description' => $data['description'] ?? null,
             'is_public' => $data['is_public'] ?? false,
@@ -31,7 +31,13 @@ class FeatureService
             'submitted_by_user_id' => $submittedBy?->id ?? ($data['submitted_by_user_id'] ?? null),
             'user_owner_id' => $data['user_owner_id'] ?? null,
             'user_assigned_id' => $data['user_assigned_id'] ?? null,
-        ]);
+        ];
+
+        if (array_key_exists('team_id', $data) && $data['team_id'] !== null) {
+            $attributes['team_id'] = $data['team_id'];
+        }
+
+        return Feature::create($attributes);
     }
 
     public function update(Feature $feature, array $data): Feature
