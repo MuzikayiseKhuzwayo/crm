@@ -2,6 +2,7 @@
 
 namespace VentureDrake\LaravelCrm\Http\Rules\Api\V2;
 
+use Illuminate\Support\Facades\Schema;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\Rules\Exists;
 
@@ -19,6 +20,13 @@ class ScopedExists
         $rule = Rule::exists($table, $column);
 
         if (! config('laravel-crm.teams')) {
+            return $rule;
+        }
+
+        // Tables without a team_id column are package-wide globals (e.g.
+        // labels, lead_sources) and cannot be team-scoped — fall back to a
+        // bare exists check rather than producing a SQL error at validation.
+        if (! Schema::hasColumn($table, 'team_id')) {
             return $rule;
         }
 

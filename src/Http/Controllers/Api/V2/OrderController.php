@@ -116,18 +116,31 @@ class OrderController extends ApiController
             ->values()
             ->all();
 
-        $products = $this->buildProducts($request->input('line_items', []), $existing);
+        $lineItems = $request->input('line_items', []);
+        $products = $this->buildProducts($lineItems, $existing);
+
+        $discount = $request->input('discount', $existing && $existing->discount !== null ? $existing->discount / 100 : null);
+        $tax = $request->input('tax', $existing && $existing->tax !== null ? $existing->tax / 100 : null);
+        $adjustment = $request->input('adjustments', $existing && $existing->adjustments !== null ? $existing->adjustments / 100 : null);
+
+        if (! empty($lineItems)) {
+            $subTotal = (float) collect($lineItems)->sum('amount');
+        } else {
+            $subTotal = $existing && $existing->subtotal !== null ? $existing->subtotal / 100 : null;
+        }
+
+        $total = $subTotal === null ? null : (float) $subTotal - (float) ($discount ?? 0) + (float) ($tax ?? 0) + (float) ($adjustment ?? 0);
 
         $payload = (object) [
             'description' => $request->input('description', $existing?->description),
             'reference' => $request->input('reference', $existing?->reference),
             'currency' => $request->input('currency', $existing?->currency) ?: 'USD',
             'terms' => $request->input('terms', $existing?->terms),
-            'sub_total' => $request->input('subtotal', $existing && $existing->subtotal !== null ? $existing->subtotal / 100 : null),
-            'discount' => $request->input('discount', $existing && $existing->discount !== null ? $existing->discount / 100 : null),
-            'tax' => $request->input('tax', $existing && $existing->tax !== null ? $existing->tax / 100 : null),
-            'adjustment' => $request->input('adjustments', $existing && $existing->adjustments !== null ? $existing->adjustments / 100 : null),
-            'total' => $request->input('total', $existing && $existing->total !== null ? $existing->total / 100 : null),
+            'sub_total' => $subTotal,
+            'discount' => $discount,
+            'tax' => $tax,
+            'adjustment' => $adjustment,
+            'total' => $total,
             'lead_id' => $lead?->id ?? $existing?->lead_id,
             'deal_id' => $deal?->id ?? $existing?->deal_id,
             'quote_id' => $quote?->id ?? $existing?->quote_id,

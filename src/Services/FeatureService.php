@@ -103,12 +103,12 @@ class FeatureService
         ]);
     }
 
-    public function comment(Feature $feature, User $user, string $body): FeatureComment
+    public function comment(Feature $feature, User $user, string $body, ?bool $isAdminReply = null): FeatureComment
     {
         return $feature->comments()->create([
             'body' => $body,
             'user_created_id' => $user->id,
-            'is_admin_reply' => $this->isAdminCommenter($user),
+            'is_admin_reply' => $isAdminReply ?? $this->isAdminCommenter($user),
         ]);
     }
 

@@ -110,7 +110,10 @@ class PublicFeatureController extends Controller
             'body' => 'required|string|max:5000',
         ]);
 
-        $featureService->comment($feature, Auth::user(), $data['body']);
+        // Portal posts are always treated as public-user comments, even if the
+        // authenticated session belongs to a CRM admin who happens to be
+        // browsing the public board.
+        $featureService->comment($feature, Auth::user(), $data['body'], isAdminReply: false);
 
         return redirect()->route('laravel-crm.portal.features.show', $feature->external_id);
     }
@@ -142,12 +145,7 @@ class PublicFeatureController extends Controller
     private function resolvePortalTeamId(): ?int
     {
         $configured = config('laravel-crm.portal.team_id');
-        $portalTeamId = ($configured !== null && $configured !== '') ? (int) $configured : null;
 
-        if ($portalTeamId === null && ($user = Auth::user()) && ($team = $user->currentTeam ?? null)) {
-            $portalTeamId = (int) $team->id;
-        }
-
-        return $portalTeamId;
+        return ($configured !== null && $configured !== '') ? (int) $configured : null;
     }
 }

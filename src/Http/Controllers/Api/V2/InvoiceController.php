@@ -106,7 +106,18 @@ class InvoiceController extends ApiController
             ->values()
             ->all();
 
-        $products = $this->buildProducts($request->input('line_items', []), $existing);
+        $lineItems = $request->input('line_items', []);
+        $products = $this->buildProducts($lineItems, $existing);
+
+        $tax = $request->input('tax', $existing && $existing->tax !== null ? $existing->tax / 100 : null);
+
+        if (! empty($lineItems)) {
+            $subTotal = (float) collect($lineItems)->sum('amount');
+        } else {
+            $subTotal = $existing && $existing->subtotal !== null ? $existing->subtotal / 100 : null;
+        }
+
+        $total = $subTotal === null ? null : (float) $subTotal + (float) ($tax ?? 0);
 
         $payload = (object) [
             'reference' => $request->input('reference', $existing?->reference),
@@ -114,9 +125,9 @@ class InvoiceController extends ApiController
             'due_date' => $request->input('due_date', $existing?->due_date?->toIso8601String()),
             'currency' => $request->input('currency', $existing?->currency) ?: 'USD',
             'terms' => $request->input('terms', $existing?->terms),
-            'sub_total' => $request->input('subtotal', $existing && $existing->subtotal !== null ? $existing->subtotal / 100 : null),
-            'tax' => $request->input('tax', $existing && $existing->tax !== null ? $existing->tax / 100 : null),
-            'total' => $request->input('total', $existing && $existing->total !== null ? $existing->total / 100 : null),
+            'sub_total' => $subTotal,
+            'tax' => $tax,
+            'total' => $total,
             'order_id' => $order?->id ?? $existing?->order_id,
             'user_owner_id' => $request->input('user_owner_id', $existing?->user_owner_id ?? $request->user()?->id),
             'labels' => $labelIds,

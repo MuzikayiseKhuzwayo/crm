@@ -11,7 +11,17 @@ class FeatureComment extends Model
     use BelongsToTeams;
     use SoftDeletes;
 
-    protected $guarded = ['id'];
+    protected $fillable = [
+        'feature_id',
+        'parent_id',
+        'body',
+        'is_admin_reply',
+        'team_id',
+        'user_created_id',
+        'user_updated_id',
+        'user_deleted_id',
+        'user_restored_id',
+    ];
 
     protected $casts = [
         'is_admin_reply' => 'boolean',
