@@ -58,10 +58,19 @@ class FeatureService
 
     public function vote(Feature $feature, User $user): FeatureVote
     {
-        return FeatureVote::firstOrCreate([
+        $attrs = [
             'feature_id' => $feature->id,
             'user_id' => $user->id,
-        ]);
+        ];
+
+        try {
+            return FeatureVote::firstOrCreate($attrs);
+        } catch (\Illuminate\Database\UniqueConstraintViolationException $e) {
+            // Race: another request created the vote between the firstOrCreate
+            // SELECT and INSERT. The unique (feature_id, user_id) index caught
+            // it — return the winning row.
+            return FeatureVote::where($attrs)->firstOrFail();
+        }
     }
 
     public function unvote(Feature $feature, User $user): bool
@@ -97,6 +106,9 @@ class FeatureService
 
         return FeatureView::create([
             'feature_id' => $feature->id,
+            // Inherit the parent feature's team so anonymous portal views
+            // aren't filtered out of team-scoped analytics queries.
+            'team_id' => $feature->team_id,
             'user_id' => $user?->id,
             'ip_hash' => $ipHash,
             'viewed_at' => now(),

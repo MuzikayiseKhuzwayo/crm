@@ -85,7 +85,7 @@ class MonitorUrlGuard
             return [$host];
         }
 
-        $records = @dns_get_record($host, DNS_A + DNS_AAAA);
+        $records = @dns_get_record($host, DNS_A | DNS_AAAA);
 
         if (! is_array($records) || $records === []) {
             // If DNS resolution fails we'd rather error out the check itself
@@ -102,6 +102,12 @@ class MonitorUrlGuard
             } elseif (isset($record['ipv6'])) {
                 $ips[] = $record['ipv6'];
             }
+        }
+
+        // Records were returned but none carried an ip/ipv6 field (e.g. a
+        // CNAME-only chain). Fail closed rather than allowing the request.
+        if ($ips === []) {
+            return ['127.0.0.1'];
         }
 
         return $ips;

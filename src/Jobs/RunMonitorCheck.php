@@ -150,8 +150,11 @@ class RunMonitorCheck implements ShouldQueue
                 ?? config('laravel-crm.monitoring.down_debounce_minutes', 2));
 
             if ($monitor->notified_at === null && $monitor->down_since_at->lte($now->copy()->subMinutes($debounceMinutes))) {
-                $this->notifyRecipients($monitor, fn ($owner) => new MonitorDownNotification($monitor, $owner, $result));
+                // Persist the notified timestamp before dispatching so a job
+                // retry after a downstream failure cannot re-send the alert.
                 $monitor->notified_at = $now;
+                $monitor->save();
+                $this->notifyRecipients($monitor, fn ($owner) => new MonitorDownNotification($monitor, $owner, $result));
             }
 
             return;
@@ -161,8 +164,9 @@ class RunMonitorCheck implements ShouldQueue
             $rateLimitMinutes = (int) config('laravel-crm.monitoring.perf_alert_rate_limit_minutes', 60);
 
             if ($monitor->perf_notified_at === null || $monitor->perf_notified_at->lte($now->copy()->subMinutes($rateLimitMinutes))) {
-                $this->notifyRecipients($monitor, fn ($owner) => new MonitorPerformanceNotification($monitor, $owner, $result));
                 $monitor->perf_notified_at = $now;
+                $monitor->save();
+                $this->notifyRecipients($monitor, fn ($owner) => new MonitorPerformanceNotification($monitor, $owner, $result));
             }
 
             return;
@@ -170,14 +174,23 @@ class RunMonitorCheck implements ShouldQueue
 
         if ($monitor->down_since_at !== null || $monitor->notified_at !== null || $monitor->perf_notified_at !== null) {
             $wasNotified = $monitor->notified_at !== null || $monitor->perf_notified_at !== null;
+            $recoveryRateLimitMinutes = (int) config('laravel-crm.monitoring.recovered_alert_rate_limit_minutes', 60);
+            $recoveryDue = $monitor->recovered_notified_at === null
+                || $monitor->recovered_notified_at->lte($now->copy()->subMinutes($recoveryRateLimitMinutes));
 
-            if ($wasNotified && ($previousStatus === 'down' || $previousStatus === 'slow')) {
-                $this->notifyRecipients($monitor, fn ($owner) => new MonitorRecoveredNotification($monitor, $owner, $result));
-            }
+            $shouldNotifyRecovery = $wasNotified
+                && ($previousStatus === 'down' || $previousStatus === 'slow')
+                && $recoveryDue;
 
             $monitor->down_since_at = null;
             $monitor->notified_at = null;
             $monitor->perf_notified_at = null;
+
+            if ($shouldNotifyRecovery) {
+                $monitor->recovered_notified_at = $now;
+                $monitor->save();
+                $this->notifyRecipients($monitor, fn ($owner) => new MonitorRecoveredNotification($monitor, $owner, $result));
+            }
         }
     }
 
@@ -204,13 +217,14 @@ class RunMonitorCheck implements ShouldQueue
             return;
         }
 
+        $monitor->ssl_notified_at = $now;
+        $monitor->save();
+
         if (! $result['valid']) {
             $this->notifyRecipients($monitor, fn ($owner) => new MonitorSslInvalidNotification($monitor, $owner, $result));
         } else {
             $this->notifyRecipients($monitor, fn ($owner) => new MonitorSslExpiringNotification($monitor, $owner, $result));
         }
-
-        $monitor->ssl_notified_at = $now;
     }
 
     private function notifyRecipients(Monitor $monitor, callable $factory): void

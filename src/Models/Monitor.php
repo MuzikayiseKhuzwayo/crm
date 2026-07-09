@@ -25,6 +25,7 @@ class Monitor extends Model
         'down_since_at' => 'datetime',
         'notified_at' => 'datetime',
         'perf_notified_at' => 'datetime',
+        'recovered_notified_at' => 'datetime',
         'ssl_last_checked_at' => 'datetime',
         'ssl_expires_at' => 'datetime',
         'ssl_notified_at' => 'datetime',

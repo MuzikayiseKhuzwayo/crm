@@ -107,7 +107,7 @@ Accept: application/json
 ### Inspecting and revoking the current token
 
 ```http
-GET    /crm/api/v2/auth/me      → 200 { id, name, email }
+GET    /crm/api/v2/auth/me      → 200 { "user": { id, name, email } }
 DELETE /crm/api/v2/auth/token   → 204
 ```
 

@@ -53,6 +53,18 @@ class MonitorCheckService
 
         $start = microtime(true);
         $transferSeconds = null;
+        // Cap the response body so a monitored URL returning gigabytes can't
+        // exhaust the queue worker's memory. Guzzle's on_headers callback lets
+        // us abort mid-stream once the body exceeds the cap.
+        $maxBodyBytes = (int) config('laravel-crm.monitoring.max_response_bytes', 2 * 1024 * 1024);
+
+        if ($maxBodyBytes > 0) {
+            // CURLOPT_MAXFILESIZE_LARGE lets libcurl short-circuit the transfer
+            // when the server declares an oversized Content-Length. It won't
+            // catch responses that stream past the cap without declaring size,
+            // but it's a defence-in-depth against gigabyte-response OOM.
+            $resolveOptions[CURLOPT_MAXFILESIZE_LARGE] = $maxBodyBytes;
+        }
 
         try {
             $response = Http::timeout($timeout)
