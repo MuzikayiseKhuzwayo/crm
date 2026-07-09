@@ -13,12 +13,15 @@ class PortalAuthController extends Controller
 
     public function showLogin(Request $request)
     {
-        if (Auth::check()) {
-            return redirect()->intended($this->fallbackUrl());
-        }
-
+        // Sanitize `?intended=` *before* the authenticated-user redirect so a
+        // logged-in visitor hitting /p/login?intended=/p/features/xyz lands on
+        // the requested resource instead of a stale session target.
         if ($intended = $this->portalAuth->sanitizeIntended($request->query('intended'))) {
             $request->session()->put('url.intended', $intended);
+        }
+
+        if (Auth::check()) {
+            return redirect()->intended($this->fallbackUrl());
         }
 
         return view('laravel-crm::portal.auth.login');
@@ -46,12 +49,12 @@ class PortalAuthController extends Controller
     {
         abort_unless(config('laravel-crm.portal.allow_registration', false), 404);
 
-        if (Auth::check()) {
-            return redirect()->intended($this->fallbackUrl());
-        }
-
         if ($intended = $this->portalAuth->sanitizeIntended($request->query('intended'))) {
             $request->session()->put('url.intended', $intended);
+        }
+
+        if (Auth::check()) {
+            return redirect()->intended($this->fallbackUrl());
         }
 
         return view('laravel-crm::portal.auth.register');

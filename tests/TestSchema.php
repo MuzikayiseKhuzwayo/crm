@@ -972,6 +972,7 @@ class TestSchema
             $table->timestamp('down_since_at')->nullable();
             $table->timestamp('notified_at')->nullable();
             $table->timestamp('perf_notified_at')->nullable();
+            $table->timestamp('recovered_notified_at')->nullable();
             $table->timestamp('ssl_last_checked_at')->nullable();
             $table->string('ssl_status')->nullable();
             $table->string('ssl_issuer')->nullable();
