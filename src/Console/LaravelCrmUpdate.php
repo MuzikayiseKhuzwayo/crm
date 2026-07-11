@@ -95,7 +95,7 @@ class LaravelCrmUpdate extends Command
         $this->info('Publishing Flasher assets...');
 
         try {
-            $this->call('flasher:install', ['--force' => true]);
+            $this->call('flasher:install');
         } catch (\Throwable $e) {
             $this->warn('Could not publish Flasher assets: '.$e->getMessage());
         }

@@ -11,7 +11,13 @@ return new class extends Migration
      */
     public function up(): void
     {
-        Schema::table('crm_addresses', function (Blueprint $table) {
+        $tableName = config('laravel-crm.db_table_prefix').'addresses';
+
+        if (! Schema::hasTable($tableName)) {
+            return;
+        }
+
+        Schema::table($tableName, function (Blueprint $table) {
             $table->string('line1', 1000)->nullable()->change();
         });
     }
@@ -21,7 +27,13 @@ return new class extends Migration
      */
     public function down(): void
     {
-        Schema::table('crm_addresses', function (Blueprint $table) {
+        $tableName = config('laravel-crm.db_table_prefix').'addresses';
+
+        if (! Schema::hasTable($tableName)) {
+            return;
+        }
+
+        Schema::table($tableName, function (Blueprint $table) {
             $table->string('line1', 1000)->nullable(false)->change();
         });
     }
