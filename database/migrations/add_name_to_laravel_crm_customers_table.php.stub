@@ -13,11 +13,17 @@ class AddNameToLaravelCrmCustomersTable extends Migration
      */
     public function up()
     {
-        Schema::table(config('laravel-crm.db_table_prefix').'customers', function (Blueprint $table) {
+        $tableName = config('laravel-crm.db_table_prefix').'customers';
+
+        if (! Schema::hasTable($tableName) || Schema::hasColumn($tableName, 'name')) {
+            return;
+        }
+
+        Schema::table($tableName, function (Blueprint $table) {
             $table->string('name')->after('customerable_id')->nullable();
             $table->string('customerable_type')->nullable()->change();
             $table->unsignedBigInteger('customerable_id')->nullable()->change();
-        });  
+        });
     }
 
     /**

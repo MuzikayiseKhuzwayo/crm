@@ -74,9 +74,14 @@ class LaravelCrmUpdate extends Command
 
         $this->info('Publishing migrations...');
 
+        // Force so any previously-published migration stubs are refreshed with the
+        // current package versions (idempotency guards, fixes, etc.). New migrations
+        // still get a fresh timestamp; already-run migrations are unaffected by the
+        // rewrite because Laravel keys the migrations table by filename, not content.
         $this->call('vendor:publish', [
             '--provider' => 'VentureDrake\LaravelCrm\LaravelCrmServiceProvider',
             '--tag' => 'migrations',
+            '--force' => true,
         ]);
 
         $this->info('Publishing assets...');

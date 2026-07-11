@@ -13,54 +13,15 @@ class AddCustomerToLaravelCrmDealsTable extends Migration
      */
     public function up()
     {
-        Schema::table(config('laravel-crm.db_table_prefix').'leads', function (Blueprint $table) {
-            $table->string('url')->nullable();
-        });  
-        
-        Schema::table(config('laravel-crm.db_table_prefix').'deals', function (Blueprint $table) {
-            $table->string('url')->nullable();
-        }); 
-        
-        Schema::table(config('laravel-crm.db_table_prefix').'quotes', function (Blueprint $table) {
-            $table->string('url')->nullable();
-        }); 
-        
-        Schema::table(config('laravel-crm.db_table_prefix').'orders', function (Blueprint $table) {
-            $table->string('url')->nullable();
-        }); 
-        
-        Schema::table(config('laravel-crm.db_table_prefix').'invoices', function (Blueprint $table) {
-            $table->string('url')->nullable();
-        }); 
-        
-        Schema::table(config('laravel-crm.db_table_prefix').'deliveries', function (Blueprint $table) {
-            $table->string('url')->nullable();
-        }); 
-        
-        Schema::table(config('laravel-crm.db_table_prefix').'customers', function (Blueprint $table) {
-            $table->string('url')->nullable();
-        }); 
-        
-        Schema::table(config('laravel-crm.db_table_prefix').'organizations', function (Blueprint $table) {
-            $table->string('url')->nullable();
-        }); 
-        
-        Schema::table(config('laravel-crm.db_table_prefix').'people', function (Blueprint $table) {
-            $table->string('url')->nullable();
-        }); 
-                
-       
-        Schema::table(config('laravel-crm.db_table_prefix').'users', function (Blueprint $table) {
-            $table->string('url')->nullable();
-        }); 
-        
-        Schema::table('crm_teams', function (Blueprint $table) {
-            $table->string('url')->nullable();
-        }); 
-        
-        Schema::table(config('laravel-crm.db_table_prefix').'products', function (Blueprint $table) {
-            $table->string('url')->nullable();
-        }); 
+        $tableName = config('laravel-crm.db_table_prefix').'deals';
+
+        if (! Schema::hasTable($tableName) || Schema::hasColumn($tableName, 'customer_id')) {
+            return;
+        }
+
+        Schema::table($tableName, function (Blueprint $table) {
+            $table->foreignIdFor(\VentureDrake\LaravelCrm\Models\Customer::class)->after('organization_id')->nullable();
+        });
     }
 
     /**
@@ -70,52 +31,8 @@ class AddCustomerToLaravelCrmDealsTable extends Migration
      */
     public function down()
     {
-        Schema::table(config('laravel-crm.db_table_prefix').'leads', function (Blueprint $table) {
-             $table->dropColumn('url');
-        });
-        
         Schema::table(config('laravel-crm.db_table_prefix').'deals', function (Blueprint $table) {
-             $table->dropColumn('url');
-        });
-        
-        Schema::table(config('laravel-crm.db_table_prefix').'quotes', function (Blueprint $table) {
-             $table->dropColumn('url');
-        });
-        
-        Schema::table(config('laravel-crm.db_table_prefix').'orders', function (Blueprint $table) {
-             $table->dropColumn('url');
-        });
-        
-        Schema::table(config('laravel-crm.db_table_prefix').'invoices', function (Blueprint $table) {
-             $table->dropColumn('url');
-        });
-        
-        Schema::table(config('laravel-crm.db_table_prefix').'deliveries', function (Blueprint $table) {
-             $table->dropColumn('url');
-        });
-        
-        Schema::table(config('laravel-crm.db_table_prefix').'customers', function (Blueprint $table) {
-             $table->dropColumn('url');
-        });
-        
-        Schema::table(config('laravel-crm.db_table_prefix').'organizations', function (Blueprint $table) {
-             $table->dropColumn('url');
-        });
-        
-        Schema::table(config('laravel-crm.db_table_prefix').'people', function (Blueprint $table) {
-             $table->dropColumn('url');
-        });
-        
-        Schema::table(config('laravel-crm.db_table_prefix').'users', function (Blueprint $table) {
-             $table->dropColumn('url');
-        });
-        
-        Schema::table('crm_teams', function (Blueprint $table) {
-             $table->dropColumn('url');
-        });
-        
-        Schema::table(config('laravel-crm.db_table_prefix').'products', function (Blueprint $table) {
-             $table->dropColumn('url');
+            $table->dropColumn('customer_id');
         });
     }
 }

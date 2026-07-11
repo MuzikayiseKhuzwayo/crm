@@ -678,7 +678,6 @@ class LaravelCrmServiceProvider extends ServiceProvider
             // Publishing the migrations.
             $this->publishes([
                 __DIR__.'/../database/migrations/create_permission_tables.php.stub' => $this->getMigrationFileName($filesystem, 'create_permission_tables.php', 1), // Spatie Permissions
-                __DIR__.'/../database/migrations/add_teams_fields.php.stub' => $this->getMigrationFileName($filesystem, 'add_teams_fields.php', 2), // Spatie Permissions
                 __DIR__.'/../database/migrations/create_laravel_crm_tables.php.stub' => $this->getMigrationFileName($filesystem, 'create_laravel_crm_tables.php', 3),
                 __DIR__.'/../database/migrations/create_laravel_crm_settings_table.php.stub' => $this->getMigrationFileName($filesystem, 'create_laravel_crm_settings_table.php', 4),
                 __DIR__.'/../database/migrations/add_fields_to_roles_permissions_tables.php.stub' => $this->getMigrationFileName($filesystem, 'add_fields_to_roles_permissions_tables.php', 5),
@@ -699,8 +698,6 @@ class LaravelCrmServiceProvider extends ServiceProvider
                 __DIR__.'/../database/migrations/create_laravel_crm_contact_types_table.php.stub' => $this->getMigrationFileName($filesystem, 'create_laravel_crm_contact_types_table.php', 20),
                 __DIR__.'/../database/migrations/create_laravel_crm_contact_contact_type_table.php.stub' => $this->getMigrationFileName($filesystem, 'create_laravel_crm_contact_contact_type_table.php', 21),
                 __DIR__.'/../database/migrations/create_devices_table.php.stub' => $this->getMigrationFileName($filesystem, 'create_devices_table.php', 22), // Laravel Auth Checker
-                __DIR__.'/../database/migrations/create_logins_table.php.stub' => $this->getMigrationFileName($filesystem, 'create_logins_table.php', 23), // Laravel Auth Checker
-                __DIR__.'/../database/migrations/update_logins_and_devices_table_user_relation.php.stub' => $this->getMigrationFileName($filesystem, 'update_logins_and_devices_table_user_relation.php', 25), // Laravel Auth Checker
                 __DIR__.'/../database/migrations/create_laravel_crm_organization_types_table.php.stub' => $this->getMigrationFileName($filesystem, 'create_laravel_crm_organization_types_table.php', 26),
                 __DIR__.'/../database/migrations/change_morph_col_names_on_laravel_crm_notes_table.php.stub' => $this->getMigrationFileName($filesystem, 'change_morph_col_names_on_laravel_crm_notes_table.php', 27),
                 __DIR__.'/../database/migrations/add_related_note_to_laravel_crm_notes_table.php.stub' => $this->getMigrationFileName($filesystem, 'add_related_note_to_laravel_crm_notes_table.php', 28),
@@ -740,16 +737,16 @@ class LaravelCrmServiceProvider extends ServiceProvider
                 __DIR__.'/../database/migrations/create_laravel_crm_deliveries_table.php.stub' => $this->getMigrationFileName($filesystem, 'create_laravel_crm_deliveries_table.php', 62),
                 __DIR__.'/../database/migrations/create_laravel_crm_delivery_products_table.php.stub' => $this->getMigrationFileName($filesystem, 'create_laravel_crm_delivery_products_table.php', 63),
                 __DIR__.'/../database/migrations/alter_url_on_laravel_crm_usage_requests_table.php.stub' => $this->getMigrationFileName($filesystem, 'alter_url_on_laravel_crm_usage_requests_table.php', 64),
-                __DIR__.'/../database/migrations/create_laravel_crm_clients_table.php.stub' => $this->getMigrationFileName($filesystem, 'create_laravel_crm_clients_table.php', 65),
+                __DIR__.'/../database/migrations/create_laravel_crm_customers_table.php.stub' => $this->getMigrationFileName($filesystem, 'create_laravel_crm_customers_table.php', 65),
                 __DIR__.'/../database/migrations/create_laravel_crm_xero_invoices_table.php.stub' => $this->getMigrationFileName($filesystem, 'create_laravel_crm_xero_invoices_table.php', 66),
                 __DIR__.'/../database/migrations/add_contact_to_laravel_crm_addresses_table.php.stub' => $this->getMigrationFileName($filesystem, 'add_contact_to_laravel_crm_addresses_table.php', 67),
                 __DIR__.'/../database/migrations/add_phone_to_laravel_crm_addresses_table.php.stub' => $this->getMigrationFileName($filesystem, 'add_phone_to_laravel_crm_addresses_table.php', 68),
-                __DIR__.'/../database/migrations/add_name_to_laravel_crm_clients_table.php.stub' => $this->getMigrationFileName($filesystem, 'add_name_to_laravel_crm_clients_table.php', 69),
+                __DIR__.'/../database/migrations/add_name_to_laravel_crm_customers_table.php.stub' => $this->getMigrationFileName($filesystem, 'add_name_to_laravel_crm_customers_table.php', 69),
                 __DIR__.'/../database/migrations/add_delivery_dates_to_laravel_crm_deliveries_table.php.stub' => $this->getMigrationFileName($filesystem, 'add_delivery_dates_to_laravel_crm_deliveries_table.php', 70),
-                __DIR__.'/../database/migrations/add_client_to_laravel_crm_orders_table.php.stub' => $this->getMigrationFileName($filesystem, 'add_client_to_laravel_crm_orders_table.php', 71),
-                __DIR__.'/../database/migrations/add_client_to_laravel_crm_leads_table.php.stub' => $this->getMigrationFileName($filesystem, 'add_client_to_laravel_crm_leads_table.php', 72),
-                __DIR__.'/../database/migrations/add_client_to_laravel_crm_deals_table.php.stub' => $this->getMigrationFileName($filesystem, 'add_client_to_laravel_crm_deals_table.php', 73),
-                __DIR__.'/../database/migrations/add_client_to_laravel_crm_quotes_table.php.stub' => $this->getMigrationFileName($filesystem, 'add_client_to_laravel_crm_quotes_table.php', 74),
+                __DIR__.'/../database/migrations/add_customer_to_laravel_crm_orders_table.php.stub' => $this->getMigrationFileName($filesystem, 'add_customer_to_laravel_crm_orders_table.php', 71),
+                __DIR__.'/../database/migrations/add_customer_to_laravel_crm_leads_table.php.stub' => $this->getMigrationFileName($filesystem, 'add_customer_to_laravel_crm_leads_table.php', 72),
+                __DIR__.'/../database/migrations/add_customer_to_laravel_crm_deals_table.php.stub' => $this->getMigrationFileName($filesystem, 'add_customer_to_laravel_crm_deals_table.php', 73),
+                __DIR__.'/../database/migrations/add_customer_to_laravel_crm_quotes_table.php.stub' => $this->getMigrationFileName($filesystem, 'add_customer_to_laravel_crm_quotes_table.php', 74),
                 __DIR__.'/../database/migrations/add_account_codes_to_laravel_crm_products_table.php.stub' => $this->getMigrationFileName($filesystem, 'add_account_codes_to_laravel_crm_products_table.php', 75),
                 __DIR__.'/../database/migrations/add_prefix_to_laravel_crm_quotes_table.php.stub' => $this->getMigrationFileName($filesystem, 'add_prefix_to_laravel_crm_quotes_table.php', 76),
                 __DIR__.'/../database/migrations/add_prefix_to_laravel_crm_orders_table.php.stub' => $this->getMigrationFileName($filesystem, 'add_prefix_to_laravel_crm_orders_table.php', 77),

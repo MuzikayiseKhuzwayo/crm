@@ -13,9 +13,15 @@ class AddCustomerToLaravelCrmLeadsTable extends Migration
      */
     public function up()
     {
-        Schema::table(config('laravel-crm.db_table_prefix').'leads', function (Blueprint $table) {
+        $tableName = config('laravel-crm.db_table_prefix').'leads';
+
+        if (! Schema::hasTable($tableName) || Schema::hasColumn($tableName, 'customer_id')) {
+            return;
+        }
+
+        Schema::table($tableName, function (Blueprint $table) {
             $table->foreignIdFor(\VentureDrake\LaravelCrm\Models\Customer::class)->after('organization_id')->nullable();
-        });  
+        });
     }
 
     /**

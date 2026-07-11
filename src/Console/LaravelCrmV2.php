@@ -77,15 +77,12 @@ class LaravelCrmV2 extends Command
             return self::SUCCESS;
         }
 
-        $this->info('Updating Laravel CRM version 1 updates..');
-
-        $this->call('laravelcrm:update');
-
-        $this->info('Laravel CRM version 1 updates complete. Now performing database changes for version 2...');
-
-        $this->info('Updating Laravel CRM to version 2...');
-
         $this->prefix = config('laravel-crm.db_table_prefix', 'crm_');
+
+        // Rename v1 tables/columns/morph types BEFORE running v2 migrations and seeders.
+        // The v2 migrations reference the renamed tables (e.g. `organizations`, `customers`,
+        // `organization_id`, `customer_id`), so they would otherwise fail on a v1 database.
+        $this->info('Applying v1 -> v2 database renames...');
 
         Schema::disableForeignKeyConstraints();
 
@@ -99,6 +96,10 @@ class LaravelCrmV2 extends Command
         } finally {
             Schema::enableForeignKeyConstraints();
         }
+
+        $this->info('v1 -> v2 renames complete. Publishing and running v2 migrations...');
+
+        $this->call('laravelcrm:update');
 
         $this->info('Laravel CRM is now updated to version 2.');
     }
