@@ -56,6 +56,16 @@
             {{--<x-mary-button label="Messages" icon="o-envelope" link="###" class="btn-ghost btn-sm" responsive />
             <x-mary-button label="Notifications" icon="o-bell" link="###" class="btn-ghost btn-sm" responsive />--}}
             <x-mary-theme-toggle class="btn btn-ghost" />
+            @if (class_exists('\Laravel\Jetstream\Jetstream') && Laravel\Jetstream\Jetstream::hasTeamFeatures())
+                <x-mary-dropdown label="{{ Auth::user()->currentTeam?->name }}" class="btn-neutral btn-sm" right>
+                    @if (Auth::user()->currentTeam)
+                        <x-mary-menu-item href="{{ route('teams.show', Auth::user()->currentTeam->id) }}" title="{{ __('Team Settings') }}" />
+                    @endif
+                    @can('create', Laravel\Jetstream\Jetstream::newTeamModel())
+                        <x-mary-menu-item href="{{ route('teams.create') }}" title="{{ __('Create New Team') }}" />
+                    @endcan
+                </x-mary-dropdown>
+            @endif
             @if (class_exists('\Laravel\Jetstream\Jetstream') && Laravel\Jetstream\Jetstream::managesProfilePhotos())
                 <x-mary-avatar :image="auth()->user()->profile_photo_url" alt="{{ Auth::user()->name }}" />
             @else    
