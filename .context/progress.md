@@ -23941,3 +23941,223 @@ layer.
   re-confirmed across 70+ consecutive stories with byte-exact
   parity.** The failure pattern is extremely stable; any future
   deviation from 32/7 is a regression to investigate.
+
+
+## US-006: Extend UsesExternalIdRoutingTraitTest dataset to cover Field + FieldGroup resources (new sequence)
+- Two-line edit to `/Users/andrewdrake/Packages/laravel-crm-filament/tests/Feature/UsesExternalIdRoutingTraitTest.php`:
+  1. Added `use VentureDrake\LaravelCrmFilament\Resources\FieldGroups\FieldGroupResource;` and
+     `use VentureDrake\LaravelCrmFilament\Resources\Fields\FieldResource;` imports alphabetically
+     between `DeliveryResource` and `InvoiceResource`.
+  2. Appended `'FieldResource' => FieldResource::class,` AND
+     `'FieldGroupResource' => FieldGroupResource::class,` as the 21st and 22nd (final)
+     entries in the `$traitResources` associative array, immediately after `LabelResource`.
+- **Trait presence verified before dataset addition**: grep of the two resource files
+  at session start confirmed both apply the trait (added by US-004 of the new sequence
+  for FieldResource and US-005 for FieldGroupResource — trait imports at line 27+35 and
+  13+21 respectively). The trait provides both `getRecordRouteKeyName()` (returns
+  `'external_id'`) AND the `getUrl()` override that swaps the Model for its `external_id`
+  before delegating to `parent::getUrl()`.
+- **Dataset math**: went from 20 → 22 entries (+2 rows). Each row exercises 4
+  dataset-driven `it(...)` cases:
+  1. Uses the UsesExternalIdRouting trait (`class_uses_recursive` check).
+  2. Routes by external_id via the trait (`getRecordRouteKeyName() === 'external_id'`).
+  3. Inherits `getRecordRouteKeyName` from the trait file (`ReflectionMethod::getFileName()`
+     comparison against the trait's file).
+  4. Inherits `getUrl` from the trait file (same comparison shape).
+  Net: 2 new resources × 4 tests = **+8 test cases** matching the AC exactly.
+- Used the established `str_replace`-with-idempotency-guard script pattern from countless
+  prior stories (US-002 of the new stories series, US-006 of the new sequence for
+  ProductCategoryResource, etc.). Two-line addition to the imports block, two-line
+  addition to the dataset array. Zero touching of the round-trip test's separate
+  dataset (which only covers the 7 primary CRUD resources — Field/FieldGroup are
+  lookup entities without the full round-trip contract).
+- **Quality gates green**:
+  - AC-named `./vendor/bin/pint --dirty --test` on the modified file reports
+    `{"tool":"pint","result":"passed"}`.
+  - AC-named targeted `pest --filter='UsesExternalIdRoutingTrait' --no-coverage`
+    → **97 passed (133 assertions)** in 5.56s — matches the pre-story 89 tests +
+    8 new (2 resources × 4 dataset-driven cases). Zero failures.
+  - Full plugin pest suite → **1826 passed / 32 failed / 7 skipped (6278 assertions)**
+    in 321.01s. The 32 failures + 7 skipped are IDENTICAL byte-for-byte to the
+    pre-existing baseline noted across the prior 70+ stories. Net +8 passing tests
+    match exactly the 8 new dataset iterations. Zero net new failures.
+- **Working-tree discipline**: the plugin repo carried 7 pre-existing unrelated dirty
+  files at session start (3 label files with pending `sales.products` additions + 4
+  ProductCategory files with the Section-wrapper-to-direct-Livewire follow-up work —
+  same baseline noted across every prior new-sequence Label / LeadSource / TaxRate /
+  Field / FieldGroup story). Used explicit `git add tests/Feature/UsesExternalIdRoutingTraitTest.php`
+  to stage ONLY the US-006 test file. The 7 pre-existing dirty files remain untouched
+  in the working tree for their proper follow-up story. Verified via `git diff --cached
+  --stat` showing only my 1 file (4 insertions). Commit `fb4d4a8` on `main`.
+
+### Files changed (in `/Users/andrewdrake/Packages/laravel-crm-filament`)
+- **Modified** `tests/Feature/UsesExternalIdRoutingTraitTest.php` (+4 lines: 2 imports
+  + 2 dataset entries)
+
+### Learnings for future iterations
+- **Third occurrence of the "add trait dataset entries in a follow-up story"** shape.
+  Prior instances: US-002 of the new stories series (ChatConversationResource added
+  after US-002 of that series applied the trait); US-006 of the new sequence
+  (ProductCategoryResource added after US-003 applied the trait to it). Now US-006 of
+  the new sequence adds BOTH FieldResource + FieldGroupResource in a single story after
+  US-004 and US-005 applied the trait to each. The recurring pattern:
+  1. Story N: refactor the resource to apply the trait (delete local
+     `getRecordRouteKeyName()`, add `use UsesExternalIdRouting;` trait line).
+  2. Story N+1 (or later): extend the trait regression test's dataset with the resource
+     so all 4 dataset-driven contracts (trait presence + route-key check + method
+     inheritance from trait file × 2) apply going forward.
+  When a series applies the trait to MULTIPLE resources across multiple stories, the
+  dataset-extension follow-up can bundle all of them into a single story (as US-006
+  does with 2 resources). This is functionally equivalent to two sequential
+  add-one-resource stories AND reads more cleanly in the commit log.
+- **The AC's numeric prediction (`+8 new test cases`) matches exactly the
+  dataset-math contract** (2 rows × 4 dataset-driven `it(...)` cases). When the AC's
+  numeric prediction is derivable from the dataset math, verifying that math BEFORE
+  running pest is a cheap sanity check. If the numeric prediction diverges from the
+  math (e.g. "targeting +8-10 tests" style hedges), the math is authoritative.
+  Same discipline as many prior "add trait dataset entry" stories.
+- **The `str_replace`-with-idempotency-guard script template** continues to work
+  verbatim across simple two-line test-file additions. Same shape as the
+  ChatConversationResource dataset addition (US-002 of the new stories series) and
+  the ProductCategoryResource dataset addition (US-006 of the new sequence). Idempotency
+  guard via `str_contains($src, 'FieldGroupResource::class') && str_contains($src,
+  'FieldResource::class')` before mutating produces safe re-runs; `exit(1)` on
+  missing anchors fails loudly.
+- **The 32-failure pre-existing baseline preserved gate has now been re-confirmed
+  across 71+ consecutive stories with byte-exact parity.** The failure pattern is
+  extremely stable; any future deviation from 32/7 is a regression to investigate.
+
+
+## US-003: Restyle ViewChatWidget header actions with backToIndex + pill Edit/Delete
+- Restyled `ViewChatWidget::getHeaderActions()` at
+  `/Users/andrewdrake/Packages/laravel-crm-filament/src/Resources/ChatWidgets/Pages/ViewChatWidget.php`
+  to the canonical 3-pill sequence matching the 8+ sibling ViewXxx pages
+  in this codebase:
+  ```php
+  return [
+      ChatWidgetResource::backToIndexAction(),
+      Actions\EditAction::make()->button()->hiddenLabel()->icon('heroicon-m-pencil-square'),
+      Actions\DeleteAction::make()->button()->hiddenLabel()->icon('heroicon-m-trash'),
+  ];
+  ```
+  Preserved CRITICAL bits verbatim:
+  - `protected string $view = 'laravel-crm-filament::chat-widgets.embed';`
+  - `getEmbedSnippet(): string` — reads
+    `route('laravel-crm.portal.chat.embed', ['publicKey' => $widget->public_key])`
+    and returns the `<script src="…" async defer></script>` snippet the
+    embed Blade uses.
+  - `getIframeUrl(): string` — reads
+    `route('laravel-crm.portal.chat.widget', ['publicKey' => $widget->public_key])`
+    for the live iframe preview.
+  - No `content(Schema)` / Grid / Section layout introduced.
+- Added `ChatWidgetResource::backToIndexAction()` static factory to
+  `src/Resources/ChatWidgets/ChatWidgetResource.php` between `table()` and
+  `getPages()` — mirrors `LabelResource::backToIndexAction()` byte-for-byte
+  except the label translation key. The AC assumed the factory existed;
+  since none was declared prior, adding it as a supporting change is
+  strictly necessary to satisfy the AC's "prepend
+  `ChatWidgetResource::backToIndexAction()`" contract without breaking
+  the callsite at autoload.
+- Added new translation key `actions.back_to_chat_widgets` across en/fr/es
+  labels.php (Back to chat widgets / Retour aux widgets de chat / Volver
+  a widgets de chat). Anchored after the pre-existing `actions.back_to_fields`
+  entry (the last `back_to_*` key added by US-002 of the new sequence).
+  Used the established 30th+ consecutive labels-only script pattern
+  (regex anchored INTO the `actions.*` namespace via
+  `('actions' \s*=> \[(?:(?!^\s+\],).)*?'back_to_fields' \s*=> '...')`
+  shape; per-key idempotency guard skips re-runs; anchor-value regex
+  handles escaped quotes). Idempotency confirmed via double-execution
+  (second run reported "SKIP: already has back_to_chat_widgets" for all
+  three files with zero file modifications).
+- **AC-named quality gate**: `./vendor/bin/pint --dirty --test` on the
+  full working tree → `{"tool":"pint","result":"passed"}`. Pre-story
+  restore of pint on just the 5 staged files also reported passed.
+- **Working-tree discipline**: the plugin repo carried 8 pre-existing
+  unrelated dirty files at session start (3 label files with
+  `sales.products` + `sales.fields` additions + 5 ProductCategory/Field
+  files with follow-up polish work — same baseline noted across every
+  prior new-sequence Label / LeadSource / TaxRate / Field / FieldGroup
+  story). Used the backup-restore-recompute discipline (established
+  across US-005, US-007, US-002 of the new sequence and prior stories):
+  1. `cp` current dirty state of the 3 label files to `/tmp/us003_bak_*.php`.
+  2. `git checkout HEAD -- resources/lang/{en,fr,es}/labels.php` to
+     restore clean HEAD state.
+  3. Run labels script on HEAD-clean files, producing 1-key insertion
+     diff per locale.
+  4. Modify `ChatWidgetResource.php` + `ViewChatWidget.php` via `cat`
+     heredoc (both files were clean at session start; no backup needed).
+  5. Stage my 5 files (3 labels + 1 resource + 1 page) and commit
+     `6e67f75`.
+  6. `cp /tmp/us003_bak_*.php back to resources/lang/{en,fr,es}/labels.php`
+     — restores the pre-existing `sales.products` + `sales.fields`
+     additions to the working tree for their proper follow-up story.
+  7. Re-run the labels script on the restored dirty files — idempotency
+     guard skips the already-committed key (my `back_to_chat_widgets` is
+     in HEAD; backup files didn't have it, but the script's presence
+     check now sees it after HEAD restore + backup overlay).
+  Final `git status --short` post-commit shows 8 unrelated pre-existing
+  dirty files preserved untouched. Same discipline as many prior stories.
+
+### Files changed (in `/Users/andrewdrake/Packages/laravel-crm-filament`)
+- **Modified** `src/Resources/ChatWidgets/Pages/ViewChatWidget.php` (+9/-2
+  diff: `getHeaderActions()` body rewritten to the canonical 3-pill
+  sequence; `$view`, `getEmbedSnippet()`, `getIframeUrl()` preserved
+  byte-for-byte)
+- **Modified** `src/Resources/ChatWidgets/ChatWidgetResource.php` (+9
+  lines: `backToIndexAction()` static factory between `table()` and
+  `getPages()`)
+- **Modified** `resources/lang/en/labels.php` (+1 key:
+  `actions.back_to_chat_widgets` after `actions.back_to_fields`)
+- **Modified** `resources/lang/fr/labels.php` (+1 key)
+- **Modified** `resources/lang/es/labels.php` (+1 key)
+
+### Learnings for future iterations
+- **The "restyle ViewXxx header actions" story pattern** naturally
+  cascades into TWO supporting changes when the sibling `Resource::backToIndexAction()`
+  factory doesn't yet exist AND the corresponding translation key is
+  missing:
+  1. Add the `Resource::backToIndexAction()` static factory (mirrors
+     the byte-shape of a sibling Resource's factory).
+  2. Add the `actions.back_to_{slug}` translation key across en/fr/es.
+  3. Restyle the ViewXxx `getHeaderActions()` body.
+  All three are strictly necessary for the callsite to autoload and
+  resolve the label at render time. The story's AC prose focused only
+  on the header restyle, but the two supporting changes are implicit
+  in the "prepend `Resource::backToIndexAction()`" directive — a
+  reference to a non-existent method would fatal at autoload; a call
+  through a non-existent translation key would render the literal
+  key string in the UI. Both supporting changes together satisfy the
+  end-to-end contract.
+- **The "CRITICAL: preserve X verbatim" clause in an AC** is the
+  clearest possible instruction to test with a careful before/after
+  read. My rewrite kept `$view`, `getEmbedSnippet()`, and
+  `getIframeUrl()` byte-for-byte identical — no whitespace changes, no
+  reformatting, no reordering. The `cat > file << 'PHPEOF'` heredoc
+  approach with a full-file rewrite is the safest way to guarantee
+  no accidental drift on the preserved bits: the heredoc body is
+  literal, matches expected structure exactly.
+- **`->color('gray')` on the pre-existing EditAction was dropped in
+  the restyle** because the AC-named `->button()->hiddenLabel()->icon(...)`
+  modifier chain establishes the pill styling explicitly. Filament's
+  EditAction defaults to primary color when rendered as a button;
+  overriding to gray would conflict with the "canonical Edit pill"
+  convention across the 8+ sibling ViewXxx pages (all of which use
+  the default primary color for their Edit pill). Same posture for
+  DeleteAction (defaults to red/danger, which is intentional for
+  destructive actions). When a story restyles action pills, drop
+  any legacy `->color(...)` overrides that conflict with the new
+  visual convention.
+- **The 30+ consecutive labels-only script pattern applications** now
+  span across every prior series in this codebase. The regex-anchored
+  script + per-key idempotency guard + escaped-quote-safe anchor
+  value regex + optional per-locale loop is fully stable. The
+  "run twice for idempotency smoke test" discipline continues to
+  catch anchor-regex collisions immediately.
+- **The 32-failure pre-existing baseline preserved gate** was NOT
+  re-run for this story since the AC's only completion gate was
+  `./vendor/bin/pint --dirty --test`. When the AC explicitly names
+  a specific completion gate (pint) AND doesn't require the full
+  pest suite, the story's contract is that gate alone. Same
+  discipline as many prior labels-only stories and pint-only
+  scaffolding stories that defer the full-suite run to the next
+  story that actually exercises the changed code path.
