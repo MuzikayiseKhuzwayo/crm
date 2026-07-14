@@ -1,42 +1,36 @@
-<div class="grid lg:grid-cols-10 gap-5">
-    <div class="lg:col-span-2">
-        @include('laravel-crm::layouts.partials.nav-settings')
-    </div>
-    <div class="lg:col-span-8">
-        <div class="crm-content">
-            <x-mary-header title="Xero" class="mb-5" progress-indicator></x-mary-header>
-            <x-mary-card shadow separator>
-                <div class="grid gap-y-5">
-                    <p>Connect to xero accounting to sync contacts, products, quotes & generate invoices.</p>
-                    <hr />
-                    @if(isset($tenantName))
-                        <div role="alert" class="alert alert-info">
-                            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" class="h-6 w-6 shrink-0 stroke-current">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
-                            </svg>
-                            <span>You are connected to the Xero organization <strong>{{ $tenantName }}</strong>.</span>
-                        </div>
-                        <hr />
-                        <x-mary-button label="Disconnect Xero" link="{{ route('laravel-crm.integrations.xero.disconnect')  }}" class="btn btn-success btn-outline" />
-                        <hr />
-                        <h3>Settings</h3>
-                        <form wire:submit.prevent="updateSettings">
-                            <x-mary-toggle label="Sync Contacts" wire:model="setting_contacts" right />
-                            <x-mary-toggle label="Sync Products" wire:model="setting_products" right />
-                           {{-- <x-mary-toggle label="Create & Update Quotes" wire:model="setting_quotes" right />--}}
-                            <x-mary-toggle label="Create & Update Invoices" wire:model="setting_invoices" right />
-                            <hr />
-                            <div class="form-group">
-                                <button type="submit" class="btn btn-primary">{{ ucwords(__('laravel-crm::lang.save_changes')) }}</button>
-                            </div>
-                        </form>
-                    @else
-                        <x-mary-button label="Connect to Xero" link="{{ route('laravel-crm.integrations.xero.connect') }}" class="btn btn-outline" />
-                    @endif
+<div class="crm-content">
+    @include('laravel-crm::layouts.partials.nav-integrations')
+    <x-mary-header title="Xero" class="mb-5" progress-indicator></x-mary-header>
+    <x-mary-card shadow separator>
+        <div class="grid gap-y-5">
+            <p>Connect to xero accounting to sync contacts, products, quotes & generate invoices.</p>
+            <hr />
+            @if(isset($tenantName))
+                <div role="alert" class="alert alert-info">
+                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" class="h-6 w-6 shrink-0 stroke-current">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                    </svg>
+                    <span>You are connected to the Xero organization <strong>{{ $tenantName }}</strong>.</span>
                 </div>
-            </x-mary-card>
+                <hr />
+                <x-mary-button label="Disconnect Xero" link="{{ route('laravel-crm.integrations.xero.disconnect')  }}" class="btn btn-success btn-outline" />
+                <hr />
+                <h3>Settings</h3>
+                <form wire:submit.prevent="updateSettings">
+                    <x-mary-toggle label="Sync Contacts" wire:model="setting_contacts" right />
+                    <x-mary-toggle label="Sync Products" wire:model="setting_products" right />
+                   {{-- <x-mary-toggle label="Create & Update Quotes" wire:model="setting_quotes" right />--}}
+                    <x-mary-toggle label="Create & Update Invoices" wire:model="setting_invoices" right />
+                    <hr />
+                    <div class="form-group">
+                        <button type="submit" class="btn btn-primary">{{ ucwords(__('laravel-crm::lang.save_changes')) }}</button>
+                    </div>
+                </form>
+            @else
+                <x-mary-button label="Connect to Xero" link="{{ route('laravel-crm.integrations.xero.connect') }}" class="btn btn-outline" />
+            @endif
         </div>
-    </div>
+    </x-mary-card>
 </div>
 
 @push('livewire-js')
