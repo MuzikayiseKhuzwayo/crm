@@ -64,6 +64,18 @@
                     @can('create', Laravel\Jetstream\Jetstream::newTeamModel())
                         <x-mary-menu-item href="{{ route('teams.create') }}" title="{{ __('Create New Team') }}" />
                     @endcan
+                    @if (Auth::user()->allTeams()->count() > 1)
+                        <x-mary-menu-separator />
+                        <x-mary-menu-item title="{{ __('Switch Teams') }}" class="menu-title" />
+                        @foreach (Auth::user()->allTeams() as $team)
+                            <form method="POST" action="{{ route('current-team.update') }}" x-data>
+                                @csrf
+                                @method('PUT')
+                                <input type="hidden" name="team_id" value="{{ $team->id }}">
+                                <x-mary-menu-item @click.prevent="$root.submit();" title="{{ $team->name }}" @if (Auth::user()->isCurrentTeam($team)) icon="o-check" @endif />
+                            </form>
+                        @endforeach
+                    @endif
                 </x-mary-dropdown>
             @endif
             @if (class_exists('\Laravel\Jetstream\Jetstream') && Laravel\Jetstream\Jetstream::managesProfilePhotos())
