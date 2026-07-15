@@ -27516,3 +27516,306 @@ rendering layer.
   re-confirmed across 81+ consecutive stories with byte-exact parity.**
   Extremely stable pattern. Any future deviation from 32/7 is a
   regression to investigate.
+
+
+## US-007: Add backToIndex to EditEmailCampaign header and wrap Create/Edit payloads via FormPayload (new sequence)
+- Three surgical edits split across two files in
+  `/Users/andrewdrake/Packages/laravel-crm-filament/src/Resources/EmailCampaigns/Pages/`:
+  1. **`CreateEmailCampaign.php`**: added
+     `use VentureDrake\LaravelCrmFilament\Support\FormPayload;` import
+     alphabetically after `EmailCampaignResource`. Swapped
+     `app(EmailCampaignService::class)->create($data)` →
+     `->create(FormPayload::wrap($data)->toArray())`.
+  2. **`EditEmailCampaign.php` — same import** added below the
+     `EmailCampaignResource` import.
+  3. **`EditEmailCampaign.php` — header actions**: prepended
+     `EmailCampaignResource::backToIndexAction()` as the first entry in
+     `getHeaderActions()`. Final ordering is now `[backToIndex, view,
+     delete]` matching the AC. Existing View + Delete icon-pill chains
+     preserved byte-for-byte.
+  4. **`EditEmailCampaign.php` — update call**: swapped
+     `app(EmailCampaignService::class)->update($data, $record)` →
+     `->update(FormPayload::wrap($data)->toArray(), $record)`. The
+     `return $record->refresh();` tail preserved verbatim.
+- **Runtime behavior identical per AC**: `FormPayload::wrap($data)` returns
+  an `Illuminate\Support\Fluent` wrapper; calling `->toArray()` immediately
+  returns the underlying attribute array. Since `EmailCampaignService::create(array $data)`
+  AND `update(array $data, EmailCampaign $campaign)` both take a plain array
+  (verified via `grep "function create\|function update"
+  /Users/andrewdrake/Packages/laravel-crm/src/Services/EmailCampaignService.php`),
+  the wrap-and-unwrap round-trip produces byte-identical `$data` at the
+  service call boundary. Same posture as US-002 of the new sequence for
+  ProductCategory's Fluent wrap around array-signature services.
+- Used a one-shot `php /tmp/us007_apply.php` heredoc script with
+  `str_contains($src, $needle)` idempotency guards on all 5 edit points
+  (2 imports + 1 header block + 2 service-call swaps). Fail-loudly on
+  missing anchors via `exit(1)`. Ran the script twice to confirm
+  idempotency — the second run reported "already present" for every
+  edit point with zero file modifications. Same reusable template as
+  the 30+ prior labels-only + surgical-code-addition stories.
+- **Quality gates green**:
+  - AC-named `./vendor/bin/pint --dirty --test` reports
+    `{"tool":"pint","result":"passed"}` on both modified files.
+  - `php -l` on both files reports "No syntax errors detected".
+  - AC-named targeted `pest --filter='EmailCampaign|CampaignPerformance|CampaignClicksDrilldown|BulkActions|LocalizationTest'
+    --no-coverage` → **103 passed (269 assertions)** in 9.77s. Every
+    EmailCampaign-adjacent test (campaign performance, campaign clicks
+    drilldown, send-now action, recipients/clicks relation managers,
+    bulk actions, localization key parity) remains green.
+  - Full plugin pest suite → **1942 passed / 32 failed / 7 skipped
+    (6605 assertions)** in 337.38s. The 32 failures + 7 skipped are
+    IDENTICAL byte-for-byte to the post-US-006 baseline noted across
+    the prior 81+ stories (Quote/Invoice/Order/PurchaseOrder/Delivery
+    parity tests + Audits/Portal/Pipeline tests + RelationManagersTest
+    expectations on the Crm* RM family). Passing count preserved
+    exactly at 1942 (matches post-US-006 checkpoint). Zero net new
+    failures + zero net new tests, as expected for a
+    runtime-behavior-identical refactor.
+- **Working-tree discipline**: the plugin repo carried 11 pre-existing
+  unrelated dirty files + 2 untracked at session start (3 label files
+  with pending `sales.products` / `sales.fields` / `integrations.xero_description`
+  / dashboard-adjacent follow-up additions from prior series + 5
+  modified source files across Fields / ProductCategory / Pages /
+  Integrations / ClickSend + 3 modified test files including
+  ClickSendIntegrationPageTest + ProductCategory tests + 2 untracked
+  Blade views for clicksend + integrations). Used explicit
+  `git add src/Resources/EmailCampaigns/Pages/CreateEmailCampaign.php
+  src/Resources/EmailCampaigns/Pages/EditEmailCampaign.php` to stage
+  ONLY the 2 US-007 files. Post-commit `git status --short` shows the
+  same 11 pre-existing dirty + 2 untracked files preserved untouched
+  for their proper follow-up story. Commit `e634afa` on `main` in the
+  plugin repo — 2 files changed / +5 insertions / -2 deletions.
+
+### Files changed (in `/Users/andrewdrake/Packages/laravel-crm-filament`)
+- **Modified** `src/Resources/EmailCampaigns/Pages/CreateEmailCampaign.php`
+  (+2/-1 diff: 1 new `FormPayload` import + service-call wrap
+  `->create($data)` → `->create(FormPayload::wrap($data)->toArray())`)
+- **Modified** `src/Resources/EmailCampaigns/Pages/EditEmailCampaign.php`
+  (+3/-1 diff: 1 new `FormPayload` import + prepended
+  `EmailCampaignResource::backToIndexAction()` in `getHeaderActions()` +
+  service-call wrap `->update($data, $record)` →
+  `->update(FormPayload::wrap($data)->toArray(), $record)`)
+
+### Learnings for future iterations
+- **The `FormPayload::wrap($data)->toArray()` idiom is a no-op wrapper
+  around array-signature services** — semantically equivalent to
+  passing `$data` directly. Its value is CONSISTENCY: every
+  Create/Edit page in the plugin routes through the same shape
+  regardless of whether the target service takes a `$request`-fluent
+  or a plain array. When core CRM's service authors switch service
+  signatures over time (e.g. a future refactor of
+  `EmailCampaignService::create(array)` → `create($request)`), the
+  panel-side call sites remain identical — only the FormPayload
+  wrapper's return type flips (Fluent stays a Fluent; `->toArray()`
+  is redundant when the target takes Fluent OR is still required
+  when target takes array). The `->toArray()` suffix is the
+  "concretize the shape for array-signature services" call. Same
+  posture as US-002 of the new sequence for ProductCategory and
+  many prior Create/Edit page refactors across the parity series.
+- **The 3-pill "backToIndex + view + delete" header on an EditRecord
+  page** (as opposed to the ViewRecord page's canonical
+  "backToIndex + edit + delete") is the EmailCampaign-specific
+  variant per this AC. ViewEmailCampaign has 7 pills including
+  send-now/schedule/cancel — EditEmailCampaign is deliberately
+  simpler (no send-now workflow from the Edit page; users must
+  navigate back to View to trigger those). Same posture as many
+  prior EditXxx pages in the codebase that carry different
+  header-action sets than their ViewXxx siblings.
+- **`EmailCampaignResource::backToIndexAction()` was pre-existing**
+  (added by US-002 of the current EmailCampaign parity series in
+  commit `3427228`). This story consumes the factory from
+  EditEmailCampaign — same pattern as US-002 established the
+  factory for future consumers. Any resource's `backToIndexAction()`
+  factory can be called from any of its page classes (Edit / View /
+  custom sub-pages) — the factory is fully reusable.
+- **The 32-failure pre-existing baseline preserved gate has now been
+  re-confirmed across 82+ consecutive stories with byte-exact
+  parity.** Extremely stable pattern.
+
+
+## US-008: Add EmailCampaignResourceParityTest regression suite (new sequence — EmailCampaign parity wrap)
+- New `tests/Feature/EmailCampaignResourceParityTest.php` (13 tests / 99
+  assertions) locks every AC contract from the EmailCampaign parity series
+  (US-001..US-007) in a single-file regression gate. Mirrors the
+  `LabelResourceRedesignTest` / `PipelineStageResourceRedesignTest` shape
+  with EmailCampaign-specific expected values + workflow-action coverage.
+- Test inventory (13 focused tests covering every AC bullet):
+  1. **UsesExternalIdRouting trait + method inheritance** — asserts
+     `class_uses_recursive` contains the trait, `getRecordRouteKeyName()
+     === 'external_id'`, AND BOTH `getRecordRouteKeyName` + `getUrl`
+     methods are inherited from the trait file via
+     `ReflectionMethod::getFileName()` comparison. Single test combines
+     the trait presence + route key check + method inheritance guard.
+  2. **backToIndexAction factory contract** — Reflection asserts public
+     + static + 0 params; direct invocation confirms name `backToIndex`,
+     color `gray`, icon `heroicon-o-arrow-left`, URL equals
+     `EmailCampaignResource::getUrl('index')`, label resolves via
+     `actions.back_to_email_campaigns`.
+  3. **7 source-parity table columns in exact order** — mounts via
+     `livewire(ListEmailCampaigns::class)->instance()->getTable()->getColumns()`,
+     asserts `array_keys()` equals
+     `[campaign_id, name, subject, status, total_recipients, scheduled_at,
+     sent_at]`. Positive-presence check for `campaign_id` (new column
+     added by US-003) AND negative-presence guard for `unique_opens_count`
+     (dropped column). Uses RoleSeeder + Admin login `beforeEach`
+     scaffold — same shape as sibling `OrganizationListColumnsTest` /
+     `LeadResourceTableParityTest`.
+  4. **Table source structural markers** — `substr_count('->since()') >= 2`
+     locks two ->since() timestamp columns; positive-presence checks for
+     `TextColumn::make('scheduled_at')` + `TextColumn::make('sent_at')`;
+     positive-presence for the AC-named searchable-closure OR-search
+     pattern (`Builder $query, string $search): Builder { ... `->where('name',
+     'like', ...)->orWhere('subject', 'like', ...)->orWhere('campaign_id',
+     'like', ...)`).
+  5. **RecordActions positional ordering** — source-grep for the three
+     literal call sites AND positional `strpos` walk asserts
+     View → Edit → Delete order. Locks `->button()->hiddenLabel()` chain
+     on all three AND `->requiresConfirmation()` on Delete AND
+     `->visible(fn ($record) => $record->isEditable())` gate on Edit.
+  6. **ViewEmailCampaign header ordering** — extends `ViewRecord` +
+     header actions `[backToIndex, preview, sendNow, schedule, cancel,
+     edit, delete]` in exact order (7 pills) via Reflection on
+     protected `getHeaderActions()`. Per-pill instance types (Action /
+     EditAction / DeleteAction) + icon assertions
+     (`heroicon-o-arrow-left` on backToIndex, `heroicon-m-pencil-square`
+     on Edit, `heroicon-m-trash` on Delete) + Delete confirmation
+     requirement.
+  7. **EditEmailCampaign header ordering** — extends `EditRecord` +
+     header actions `[backToIndex, view, delete]` in exact order (3
+     pills) via Reflection. Per-pill instance types (Action /
+     ViewAction / DeleteAction). Locks the AC-named ordering distinct
+     from ViewEmailCampaign's 7-pill sequence.
+  8. **EmailCampaignStatsWidget structural contract** — extends
+     `StatsOverviewWidget`; `columnSpan === 'full'` via Reflection on
+     the protected property; `public ?EmailCampaign $record` property
+     with null default (typed + nullable + default null via Reflection);
+     `getColumns()` returns 4; `getStats()` returns exactly 4 Stat
+     instances with `'—'` value on null record (locks the em-dash
+     fallback path).
+  9. **ViewEmailCampaign registers EmailCampaignStatsWidget as header
+     widget with getHeaderWidgetsColumns === 4** — Reflection on
+     `getHeaderWidgets()` asserts array contains the widget class;
+     `getHeaderWidgetsColumns()` public API returns 4.
+  10. **Infolist Details section + 9 TextEntries + 6 rate TextEntries
+      absent** — source-grep for the Details Section heading literal
+      (`Section::make('Details')->heading(__('...sections.details'))`);
+      loop over 9 AC-named `TextEntry::make(...)` literals; regression
+      guard for `$record->timezone` (locks the scheduled_at state
+      closure's timezone-appending contract); negative-presence loop
+      over 6 pre-existing rate TextEntry literals (open_rate /
+      click_rate / unsubscribe_rate / sent_count_state /
+      failed_count_state / skipped_count_state).
+  11. **FormPayload::wrap in Create + Edit pages** — source-grep on
+      both CreateEmailCampaign + EditEmailCampaign pages asserts:
+      (a) FormPayload import present on both; (b) each service call
+      routes through `FormPayload::wrap($data)->toArray()`; (c) Create
+      calls `EmailCampaignService::create(...)`; (d) Edit calls
+      `EmailCampaignService::update(..., $record)` with the record as
+      second arg.
+  12. **Preserved contracts (RelationManagers + footer widgets)** —
+      `EmailCampaignResource::getRelations()` returns exactly
+      `[RecipientsRelationManager::class, ClicksRelationManager::class]`
+      in that order; `ViewEmailCampaign::getFooterWidgets()` returns
+      an array containing both `EmailCampaignSendsOverTimeChart::class`
+      + `EmailCampaignTopUrlsWidget::class`.
+  13. **en/fr/es label file translation parity** — loops over the 3
+      locales, `require`s each locale's `labels.php`, asserts
+      `actions.back_to_email_campaigns` exists as a non-empty string
+      in all 3.
+- **AC-named `pest --filter='EmailCampaign|CampaignPerformance|CampaignClicks|Localization'` all green** —
+  77 passed (288 assertions) in 9.33s. Every EmailCampaign-adjacent
+  test AND the LocalizationTest key-parity gate remain green alongside
+  the 13 new US-008 tests.
+- Full plugin pest suite → **1955 passed / 32 failed / 7 skipped (6704
+  assertions)** in 314.04s. The 32 failures + 7 skipped are IDENTICAL
+  byte-for-byte to the pre-existing baseline noted across the prior
+  82+ stories in the parity series + features+monitors series + product
+  list series + prices RM series + ViewFeature redesign series + Settings
+  cluster evacuation series + activity feed series + new stories series
+  + chat list rewrite series + calendar refactor series + pipeline view
+  page series + PipelineStage view page series + new sequence
+  (ProductCategory parity + LeadSource redesign + LabelResource arc +
+  TaxRate + Field/FieldGroup + chat widget parity + integrations sub-nav
+  + dashboard parity + EmailCampaign parity US-001..US-007) —
+  (Quote/Invoice/Order/PurchaseOrder/Delivery parity tests +
+  Audits/Portal/Pipeline tests + RelationManagersTest expectations on
+  the Crm* RM family). Net **+13 passing tests** vs the post-US-007
+  baseline of 1942 — matches exactly the 13 new tests. AC target was
+  "grows by ~14" — my delivery is 13 tests / 99 assertions comfortably
+  inside the AC's stated range. Zero net new failures.
+- Quality gates: `./vendor/bin/pint --dirty --test` reports `passed`
+  on the new file (no auto-fixes needed).
+- **Working-tree discipline**: the plugin repo carried 10 pre-existing
+  unrelated dirty files + 2 untracked at session start (3 label files
+  with pending `sales.products` / `sales.fields` / `dashboard.*` /
+  `integrations.xero_description` follow-up additions from prior
+  series + 5 modified source files across Fields / ProductCategory /
+  Pages / Integrations / ClickSend + 3 modified test files including
+  ClickSendIntegrationPageTest + ProductCategory tests + 2 untracked
+  Blade views for clicksend + integrations). Used explicit
+  `git add tests/Feature/EmailCampaignResourceParityTest.php` to
+  stage ONLY the 1 US-008 file. Post-commit `git status --short`
+  shows the same 10 pre-existing dirty + 2 untracked files preserved
+  untouched for their proper follow-up story. Commit `2b7f8b1` on
+  `main` in the plugin repo — 1 file changed / +293 insertions.
+
+### Files changed (in `/Users/andrewdrake/Packages/laravel-crm-filament`)
+- **Added** `tests/Feature/EmailCampaignResourceParityTest.php` (13
+  tests / 99 assertions locking the AC contract as a single-file
+  regression gate; ~293 lines)
+
+### Learnings for future iterations
+- **The AC's "~14 tests / ~55 assertions" numeric range** was
+  comfortably satisfied with 13 tests / 99 assertions. Same "AC's
+  numeric prediction is a target/floor, not a ceiling" pattern
+  documented across many prior stories. When the AC's assertion
+  count is exceeded (99 vs target 55), it means the regression gate
+  is MORE robust than the minimum — each test consolidates multiple
+  related assertions inside a single `it(...)` block via chained
+  `->and(...)` calls, reducing the test-count overhead while
+  keeping the assertion coverage high. Reusable pattern: prefer
+  fewer well-scoped tests with more chained assertions over
+  many tiny tests when the assertions logically belong together.
+- **Combining "trait presence + route key check + method inheritance
+  guard" into a SINGLE test** (instead of the LabelResourceRedesignTest
+  pattern of two separate tests) reads more cleanly for parity
+  regression gates. The three contracts are related (all three
+  answer "is the trait correctly applied?"), so bundling them into
+  one test with per-check assertion chains is a natural fit. The
+  trade-off: a single test failure surfaces all three issues at
+  once, which is fine for a regression gate but might obscure the
+  specific broken contract compared to the split test approach.
+  Either shape works; bundled is denser + reads faster.
+- **The `livewire(ListXxx::class)->instance()->getTable()->getColumns()`
+  pattern** requires a RoleSeeder + actingAs Admin `beforeEach`
+  scaffold to satisfy the resource's authorization gate at mount
+  time. Without this, the mount fails with `PermissionDoesNotExist`.
+  Same scaffold shape locked-in across OrganizationListColumnsTest /
+  LeadResourceTableParityTest / PersonListColumnsTest and every
+  other Livewire-mounted-table test in the codebase. Reusable
+  recipe for any future parity test that exercises the actual
+  `getTable()->getColumns()` API rather than source-grep alone.
+- **The `substr_count($source, '->since()') >= 2` regression guard**
+  is the right shape when the AC contract is "at least N occurrences
+  of a specific idiom must be present in the source". Distinct
+  from `>= exact-count` (which would false-negative if a future
+  refactor legitimately adds more) OR `> 0` (which would
+  false-positive if a future refactor drops one to zero). The
+  `>=` shape locks a lower bound while permitting expansion. Same
+  discipline documented across many prior parity + regression
+  stories.
+- **13 focused single-file regression tests can lock a 7-story
+  parity refactor arc.** US-008 is the culminating regression gate
+  for the entire EmailCampaign parity series (US-001..US-007). The
+  test file's shape mirrors the well-established
+  LabelResourceRedesignTest / PipelineStageResourceRedesignTest /
+  ProductCategoryResourceRedesignTest / TaxRateResourceRedesignTest /
+  LeadSourceResourceRedesignTest / FieldResourceRedesignTest /
+  FieldGroupResourceRedesignTest / LabelResourceRedesignTest
+  precedents. Any future "wrap the parity refactor with a
+  regression gate" story can copy the shape verbatim, swap FQCNs +
+  AC-specific expected values, and land in <30 minutes.
+- **The 32-failure pre-existing baseline preserved gate has now
+  been re-confirmed across 83+ consecutive stories with byte-exact
+  parity.** Extremely stable pattern. Any future deviation from
+  32/7 is a regression to investigate, not a baseline shift.
