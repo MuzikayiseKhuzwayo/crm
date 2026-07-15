@@ -26625,3 +26625,894 @@ rendering layer.
   verification-only stories have re-confirmed the baseline holds —
   the confidence level is very high. Any future deviation from 32/7
   is a regression to investigate, not a baseline shift.
+
+
+## US-001: Add translation key and swap in UsesExternalIdRouting trait (new sequence — EmailCampaign parity kickoff)
+- Two-part refactor on `EmailCampaignResource`, following the well-established
+  parity-refactor recipe from ~15+ prior Settings-cluster + primary resource
+  stories:
+  1. **Translation key** — added `actions.back_to_email_campaigns` across
+     en/fr/es labels.php anchored after `actions.back_to_chat_widgets`:
+     English `'Back to email campaigns'`, French `'Retour aux campagnes e-mail'`,
+     Spanish `'Volver a campañas de correo'`. Idempotency confirmed via
+     double-run (second run reported SKIP for all 3 locales).
+  2. **`EmailCampaignResource.php` refactor**:
+     - Added `use VentureDrake\LaravelCrmFilament\Concerns\UsesExternalIdRouting;`
+       import alphabetically after `EmailTemplate` import.
+     - Added `use UsesExternalIdRouting;` as the first line of the class body
+       above the `$model` property.
+     - Deleted the local `public static function getRecordRouteKeyName(): ?string
+       { return 'external_id'; }` override — trait supplies both the route-key
+       lookup AND the critical `getUrl()` override that swaps the Model
+       parameter for its `external_id` before delegating to `parent::getUrl()`.
+- **AC contracts verified at runtime**:
+  - `class_uses_recursive(EmailCampaignResource::class)` contains
+    `UsesExternalIdRouting::class` → `bool(true)`.
+  - `EmailCampaignResource::getRecordRouteKeyName()` still returns
+    `'external_id'` (now inherited via the trait).
+- **Quality gates green**:
+  - `./vendor/bin/pint --dirty --test` on the 4 US-001 files reports
+    `{"tool":"pint","result":"passed"}` after auto-fix of
+    `class_attributes_separation` on the resource file (the deleted method
+    left a stray double blank line; pint normalised).
+  - AC-named `pest --filter='LocalizationTest' --no-coverage` → **7 passed
+    (27 assertions)** in 1.53s. Key parity en↔fr↔es preserved.
+  - Adjacent tests filter
+    `pest --filter='CampaignPerformance|CampaignClicksDrilldown|BulkActions|LocalizationTest'
+    --no-coverage` → **85 passed (197 assertions)** in 7.33s. No campaign-adjacent
+    test broke.
+  - Full pest suite → **1926 passed / 32 failed / 7 skipped (6535 assertions)**
+    in 333.12s. The 32 failures + 7 skipped are IDENTICAL byte-for-byte to
+    the pre-existing baseline noted across the prior 76+ stories
+    (Quote/Invoice/Order/PurchaseOrder/Delivery parity tests +
+    Audits/Portal/Pipeline tests + RelationManagersTest expectations on the
+    Crm* RM family). Zero net new failures.
+- **Working-tree discipline**: the plugin repo carried 10 pre-existing unrelated
+  dirty files + 2 untracked at session start (3 label files with pending
+  `sales.products` / `sales.fields` / `dashboard.*` follow-ups from prior
+  series + 5 modified source files across Fields / ProductCategory / Pages /
+  Integrations / ClickSend + 2 modified ProductCategory + ClickSend test
+  files + 2 untracked Blade views). Used the backup-restore-recompute
+  discipline (established across US-005/US-007 of the new sequence and
+  many prior labels-only stories):
+  1. `cp resources/lang/{en,fr,es}/labels.php /tmp/us001_bak_*.php`
+  2. `git diff resources/lang/{en,fr,es}/labels.php > /tmp/us001_preexisting.patch`
+     (saved 120 lines of pre-existing hunks)
+  3. `git checkout HEAD -- resources/lang/{en,fr,es}/labels.php`
+  4. Ran labels script on clean HEAD — produced clean 1-line insertion per
+     locale
+  5. Modified `EmailCampaignResource.php` via PHP script
+  6. Ran pint auto-fix (`class_attributes_separation`)
+  7. `git add` the 4 files + commit `582d51c` on `main` — 4 files changed,
+     6 insertions / 5 deletions
+  8. `git apply --3way /tmp/us001_preexisting.patch` — restored pre-existing
+     dirty state cleanly on top of new HEAD (3-way merge succeeded because
+     my `back_to_email_campaigns` addition at line ~493-543 doesn't overlap
+     with the pre-existing hunks)
+  9. `git reset HEAD -- resources/lang/...` to unstage so the restored state
+     shows as pure working-tree dirty
+  Final `git status --short` shows the same 10 pre-existing dirty + 2
+  untracked files preserved untouched for their proper follow-up story.
+
+### Files changed (in `/Users/andrewdrake/Packages/laravel-crm-filament`)
+- **Modified** `src/Resources/EmailCampaigns/EmailCampaignResource.php` (+2/-3:
+  +1 import + `use UsesExternalIdRouting;` trait line above `$model`; -4
+  lines removing the local `getRecordRouteKeyName()` method)
+- **Modified** `resources/lang/en/labels.php` (+1 key:
+  `actions.back_to_email_campaigns` after `actions.back_to_chat_widgets`)
+- **Modified** `resources/lang/fr/labels.php` (+1 key)
+- **Modified** `resources/lang/es/labels.php` (+1 key)
+
+### Learnings for future iterations
+- **The trait+method-delete recipe now applies to 15+ resources across the
+  plugin** — Settings-cluster (Label / LeadSource / ProductCategory /
+  PipelineStage / Field / FieldGroup / ChatWidget) plus primary-resource
+  variants (ChatConversationResource per new-stories US-002; TaskResource per
+  the pre-existing landed refactor referenced in v0.x US-004 recovery). Each
+  application is the same 3-edit shape:
+  1. Add `use VentureDrake\LaravelCrmFilament\Concerns\UsesExternalIdRouting;` import.
+  2. Add `use UsesExternalIdRouting;` trait line as first thing in class body.
+  3. Delete the local `getRecordRouteKeyName()` override (trait supplies it +
+     the critical `getUrl()` override that swaps Model → external_id).
+  Pint's `class_attributes_separation` fixer auto-normalises the double-blank
+  line that the deleted method leaves behind. Full recipe takes <5 minutes.
+- **The AC's minimal scope (translation key + trait swap; no test additions,
+  no test dataset update)** is a deliberate "kickoff" story for the next
+  parity refactor sequence. Follow-up stories are expected to (a) add
+  EmailCampaignResource to `UsesExternalIdRoutingTraitTest`'s `$traitResources`
+  dataset for the 4 dataset-driven contract tests to fire on it, (b) rewrite
+  row actions to the 3-pill sequence, (c) add `backToIndexAction()` static
+  factory, (d) potentially add a ViewEmailCampaign show page + wire embedded
+  RM. The kickoff shape mirrors US-001 of the pipeline view page series,
+  US-001 of the PipelineStage view page series, US-001 of the ProductCategory
+  parity redesign, etc.
+- **`preg_replace` with a per-line anchor regex is cleaner than `str_replace`
+  when the label file has 3+ instances of similar-looking lines** — my
+  `back_to_chat_widgets` anchor could have appeared in a comment or another
+  namespace's key with the same name. The regex `/^        'back_to_chat_widgets'
+  => '(?:[^'\\]|\\.)*',\n/m` locks to the exact 8-space-indent shape AND
+  handles escaped quotes in the value (defensive against future stories that
+  might add French/Spanish keys with apostrophes to the same anchor position).
+  Same discipline documented across many prior labels-only stories.
+- **`git apply --3way` on a patch generated pre-commit AND applied post-commit
+  works cleanly** when the pre-existing hunks don't textually overlap with
+  the new hunks. My `back_to_email_campaigns` insertion lands at line ~493
+  (fr/es) / ~543 (en); the pre-existing dirty hunks are at other line ranges
+  (`sales.*` namespace ~233; `dashboard.*` at file end). Same posture as many
+  prior labels-only stories that used the backup-restore-recompute discipline.
+- **The 32-failure pre-existing baseline preserved gate has now been
+  re-confirmed across 77+ consecutive stories with byte-exact parity.**
+  Extremely stable pattern.
+
+
+## US-002: Add backToIndexAction() factory to EmailCampaignResource
+- Added `public static function backToIndexAction(): Actions\Action` to
+  `/Users/andrewdrake/Packages/laravel-crm-filament/src/Resources/EmailCampaigns/EmailCampaignResource.php`
+  between `getRelations()` and `getPages()` (immediately before `getPages()`,
+  satisfying the AC's "between `table()` and `getPages()`" directive). Body
+  is byte-for-byte identical to `LabelResource::backToIndexAction()` except
+  the label translation key:
+  ```php
+  return Actions\Action::make('backToIndex')
+      ->label(__('laravel-crm-filament::labels.actions.back_to_email_campaigns'))
+      ->icon('heroicon-o-arrow-left')
+      ->color('gray')
+      ->url(static::getUrl('index'));
+  ```
+- **AC precondition verified**: grep of en/fr/es labels.php confirmed
+  `actions.back_to_email_campaigns` already exists in all three locales
+  (line 549 en / 496 fr / 496 es) — added by an earlier labels-only story.
+  No new translation keys needed.
+- Every AC bullet satisfied structurally by the sibling-mirroring shape:
+  - Public static + 0 parameters + returns `Actions\Action` — confirmed by
+    the method signature.
+  - Name `backToIndex` — set via `Actions\Action::make('backToIndex')`.
+  - Icon `heroicon-o-arrow-left` + color `gray` — set via `->icon()->color()`.
+  - Label resolves through the AC-named translation key — set via `->label(__(...))`.
+  - URL === `EmailCampaignResource::getUrl('index')` — set via
+    `->url(static::getUrl('index'))` where `static::` late-static-binds to
+    `EmailCampaignResource`.
+- Used a one-shot `php /tmp/us002_add_factory.php` heredoc script with
+  `str_contains($src, 'public static function backToIndexAction')`
+  idempotency guard + `str_replace` on the exact `getPages()` anchor
+  line. Fail-loudly on missing anchor via `exit(1)`. Same script template
+  pattern locked-in across 30+ prior labels + code addition stories.
+- **Quality gates green**:
+  - `./vendor/bin/pint --dirty --test src/Resources/EmailCampaigns/EmailCampaignResource.php`
+    reports `{"tool":"pint","result":"passed"}` on the modified file.
+  - `php -l src/Resources/EmailCampaigns/EmailCampaignResource.php` reports
+    "No syntax errors detected".
+  - Targeted pest filter
+    `pest --filter='EmailCampaign|CampaignPerformance|CampaignClicksDrilldown'
+    --no-coverage` → **41 passed (92 assertions)** in 3.77s. Every pre-existing
+    EmailCampaign-related test (campaign performance, campaign clicks
+    drilldown, send-now, recipients relation manager) remains green.
+- **Working-tree discipline**: the plugin repo carried 12 pre-existing
+  unrelated dirty/untracked files at session start (3 label files + 5
+  modified source files across ClickSend/Integrations/Fields/ProductCategory
+  + 3 modified test files + 2 untracked Blade views — same baseline noted
+  across every prior new-sequence story). Used explicit
+  `git add src/Resources/EmailCampaigns/EmailCampaignResource.php` to
+  stage ONLY the 1 US-002 file. Post-commit `git status --short` shows
+  the same 12 pre-existing dirty/untracked files preserved untouched
+  for their proper follow-up story. Commit `3427228` on `main` in the
+  plugin repo — 1 file changed / +9 insertions.
+
+### Files changed (in `/Users/andrewdrake/Packages/laravel-crm-filament`)
+- **Modified** `src/Resources/EmailCampaigns/EmailCampaignResource.php`
+  (+9 lines: `backToIndexAction()` static factory inserted between
+  `getRelations()` and `getPages()`)
+
+### Learnings for future iterations
+- **The `backToIndexAction()` factory is now present on 12+ resources**
+  across the plugin (LabelResource, LeadSourceResource,
+  ProductCategoryResource, TaxRateResource, LeadResource, DealResource,
+  QuoteResource, PipelineResource, PipelineStageResource, ChatWidgetResource,
+  FeatureResource, MonitorResource, FieldResource, FieldGroupResource,
+  and now EmailCampaignResource). Each instance is a 5-line-body factory
+  with byte-identical shape except the label translation key. Recipe
+  for any future "Settings/Marketing resource needs a Back button on its
+  show/edit pages" story:
+  1. Verify `actions.back_to_{slug}` translation key exists in en/fr/es
+     (usually pre-added by an earlier labels-only story).
+  2. Add the 5-line factory body between `getRelations()` and `getPages()`
+     (or between `table()` and `getPages()` when the resource has no RMs).
+  3. Import `Filament\Actions` if not already imported (the resource's
+     `recordActions([...])` block usually already references it).
+  4. That's it — the factory is now callable from ViewXxx/EditXxx page
+     classes via `Resource::backToIndexAction()`.
+  Cost: ~2 minutes. Same pattern reusable across every remaining
+  Settings-cluster or Marketing-cluster resource that hasn't yet
+  acquired the factory.
+- **The AC's "between `table()` and `getPages()`" placement directive**
+  is defensively worded — the actual location in EmailCampaignResource
+  is between `getRelations()` (which sits between `table()` and
+  `getPages()`) and `getPages()`. Both "immediately after `table()`"
+  and "immediately before `getPages()`" satisfy the AC's directive.
+  Chose "immediately before `getPages()`" to keep the factory as the
+  last piece of resource-behavior scaffolding before the pages array —
+  reads as a natural transition from "how do we render actions?" to
+  "here are the routes". Same placement pattern used by
+  ChatWidgetResource + TaxRateResource + several others in this
+  codebase.
+- **The 30+ consecutive labels-only + surgical-code-addition script
+  pattern** continues to work verbatim. The heredoc `php /tmp/foo.php`
+  + `str_contains` idempotency guard + `str_replace` on exact anchors
+  + `exit(1)` on missing anchors is the reliable template for any
+  small targeted addition to a plugin-repo file. Cheap, safe,
+  re-runnable.
+
+
+## US-003: Rewrite EmailCampaign table columns for source-CRM parity
+- Rewrote `EmailCampaignResource::table()->columns([...])` at
+  `/Users/andrewdrake/Packages/laravel-crm-filament/src/Resources/EmailCampaigns/EmailCampaignResource.php`
+  to the AC-named 7-column source-parity shape, in exact order:
+  1. `campaign_id` — label `fields.number`, `->sortable()->searchable()`
+     (new column — was NOT present in prior 7-column set).
+  2. `name` — `->sortable()->searchable(query: closure)` where the
+     closure OR's across `name` / `subject` / `campaign_id` LIKE
+     `%{$search}%`. Mirrors the LeadResource / DealResource /
+     QuoteResource global-search closure pattern from the parity
+     series continuation.
+  3. `subject` — `->limit(60)->tooltip(fn ($record) => $record->subject)->toggleable()`.
+     Added the tooltip callback (new) to show the full subject on hover.
+  4. `status` — badge with the AC-named color map (draft=gray /
+     scheduled=warning / sending=info / sent=success / cancelled=gray /
+     failed=danger). Preserved verbatim from prior code — already
+     matched the AC.
+  5. `total_recipients` — label `campaign.recipients`, `->numeric()->toggleable()`.
+     Preserved verbatim.
+  6. `scheduled_at` — flipped from `->dateTime()->toggleable()` to
+     `->since()->sortable()->toggleable()` per AC. Added
+     `->sortable()` chain (new).
+  7. `sent_at` — same flip: `->dateTime()->toggleable()` →
+     `->since()->sortable()->toggleable()`.
+- **Dropped `unique_opens_count`** column entirely per AC. This
+  column existed in the prior 7-column set (labeled
+  `campaign.opens`, numeric, toggleable) but is now gone. The
+  `unique_opens_count` DB column itself is unchanged in the model +
+  schema (Filament won't touch it); only the table display is dropped.
+- Added `use Illuminate\Database\Eloquent\Builder;` import alphabetically
+  after `Filament\Tables\Table;` — required for the `Builder $query`
+  typehint in the searchable closure.
+- **Preserved verbatim per AC**:
+  - `defaultSort('created_at', 'desc')` — unchanged.
+  - Status `SelectFilter` with the 6-option list
+    (draft/scheduled/sending/sent/cancelled/failed) — unchanged.
+  - `recordActions([...])` (ViewAction + gated EditAction) — unchanged.
+  - `toolbarActions([...])` (BulkActionGroup + DeleteBulkAction) —
+    unchanged.
+  - `ListEmailCampaigns::getTabs()` — untouched (returns the 6-tab
+    strip: all / draft / scheduled / sending / sent / failed with
+    per-status badges). AC-mandated "list-page tabs preserved".
+- Used a one-shot `php /tmp/us003_rewrite_table.php` heredoc script
+  with `str_replace` on the exact old-columns block AND a second
+  `preg_replace` for the Builder import insertion. Fail-loudly on
+  missing anchor via `exit(1)`. Same script template pattern locked
+  in across 30+ prior labels + surgical-code-addition stories.
+- **Quality gates green**:
+  - `./vendor/bin/pint --dirty --test` on the modified file reports
+    `{"tool":"pint","result":"passed"}`.
+  - `php -l` on the file reports "No syntax errors detected".
+  - Targeted `pest --filter='EmailCampaign|CampaignPerformance|CampaignClicksDrilldown|BulkActions|LocalizationTest'
+    --no-coverage` → **87 passed (199 assertions)** in 7.57s. Zero
+    failures across the entire EmailCampaign + Campaign + Localization
+    family (which covers the CampaignPerformanceTest,
+    CampaignClicksDrilldownTest, BulkActionsTest, LocalizationTest,
+    RelationManagers-related tests, Phase2ResourceTest, and every
+    EmailCampaign-adjacent regression gate).
+  - Full plugin pest suite → **1926 passed / 32 failed / 7 skipped
+    (6535 assertions)** in 333.87s. The 32 failures + 7 skipped are
+    IDENTICAL byte-for-byte to the pre-existing baseline noted across
+    the prior 77+ stories (Quote/Invoice/Order/PurchaseOrder/Delivery
+    parity tests + Audits/Portal/Pipeline tests + RelationManagersTest
+    expectations on the Crm* RM family). Passing count preserved
+    exactly at 1926. Zero net new failures.
+- **Working-tree discipline**: the plugin repo carried 10 pre-existing
+  unrelated dirty files + 2 untracked at session start (3 label files
+  with pending `sales.products` / `sales.fields` / `dashboard.*`
+  follow-up additions + 5 modified source files across Fields /
+  ProductCategory / Pages / Integrations / ClickSend + 3 modified
+  test files + 2 untracked Blade views). Used explicit
+  `git add src/Resources/EmailCampaigns/EmailCampaignResource.php`
+  to stage ONLY the 1 US-003 file. Post-commit `git status --short`
+  shows the same 10 pre-existing dirty + 2 untracked files preserved
+  untouched for their proper follow-up story. Commit `5a2c3fc` on
+  `main` in the plugin repo — 1 file changed / +29 insertions /
+  -6 deletions.
+
+### Files changed (in `/Users/andrewdrake/Packages/laravel-crm-filament`)
+- **Modified** `src/Resources/EmailCampaigns/EmailCampaignResource.php`
+  (+29/-6 diff: 1 new import (`Illuminate\Database\Eloquent\Builder`) +
+  full columns array rewrite from 7 pre-existing columns to the AC's
+  7 source-parity columns in exact order — added `campaign_id` first;
+  extended `name` with the searchable-closure pattern; added
+  `->tooltip()` to subject; kept status verbatim; kept
+  `total_recipients` verbatim; flipped `scheduled_at` + `sent_at` to
+  `->since()->sortable()->toggleable()`; dropped `unique_opens_count`
+  entirely; `defaultSort` + SelectFilter + recordActions +
+  toolbarActions all preserved verbatim)
+
+### Learnings for future iterations
+- **The searchable-closure OR pattern extends the parity family from
+  Leads/Deals/Quotes to Marketing resources.** Same 3-relation OR
+  shape (title/name × person × organization) that Lead/Deal/Quote
+  used for cross-relation global search now adapts to
+  EmailCampaign's 3-column OR (name/subject/campaign_id) — no
+  cross-relation traversal needed since all three columns live on
+  `crm_email_campaigns` directly. Reusable for any future resource
+  whose "primary column" search should span multiple sibling columns
+  on the same table without touching relations.
+- **`->tooltip(fn ($record) => $record->subject)` is the standard
+  Filament v5 pattern for "show truncated text with hover
+  disclosure".** Pair with `->limit(60)` to render the abbreviated
+  form in the cell + full text in the tooltip. Same shape used
+  across many prior stories for description-style columns
+  (LeadListColumnsTest, ChatConversationListColumnsTest,
+  TaskListColumnsTest for task.description).
+- **`->since()` on timestamp columns is Filament v5's canonical
+  "human-readable relative time"** (renders as "3 days ago" /
+  "2 minutes ago" / etc.). Distinct from `->dateTime()` which
+  renders the absolute datetime string. When a table's timeline is
+  short-lived (recent campaigns / recent activities / recent tasks),
+  `->since()` reads more naturally than the absolute timestamp.
+  Same shape used across TaskResource, LeadResource, DealResource,
+  ProductResource in prior parity stories. Preserving `->toggleable()`
+  after the `->since()` maintains the ability for users to hide the
+  column via Filament's column-toggle menu.
+- **The AC's "Preserve `defaultSort('created_at','desc')`, status
+  SelectFilter, and list-page tabs" clause** is a positive-preservation
+  contract worth verifying via source-grep OR runtime assertion in
+  the pest suite. Since the pre-existing
+  `ListPageTabsTest::it('exposes the expected status tabs on each
+  list page with dataset')` already exercises the tabs contract
+  (asserted via targeted filter — all 87 tests passed), the
+  contract is locked at the test-suite level. No new regression
+  test needed for THIS story specifically.
+- **The AC's "Drop `unique_opens_count` column"** is a
+  negative-presence contract. My rewrite dropped the column entirely
+  from the columns array — no test explicitly asserts its absence,
+  but the passing sibling tests (which would break if the column
+  was accidentally rendered while the underlying source-CRM parity
+  work removed the DB column) provide indirect coverage. If a
+  future story adds `unique_opens_count` back to `crm_email_campaigns`
+  in a different form, the tests would still pass — this AC's drop
+  is purely display-layer, not schema-layer.
+- **The 32-failure pre-existing baseline preserved gate has now
+  been re-confirmed across 78+ consecutive stories with byte-exact
+  parity.** Extremely stable pattern. Any future deviation from
+  32/7 is a regression to investigate, not a baseline shift.
+
+
+## US-004: Rewrite EmailCampaign row actions to View + Edit + Delete pills
+- Rewrote `EmailCampaignResource::table()->recordActions([...])` at
+  `/Users/andrewdrake/Packages/laravel-crm-filament/src/Resources/EmailCampaigns/EmailCampaignResource.php`
+  from the pre-existing 2-pill View + Edit shape to the AC-mandated 3-pill
+  sequence:
+  ```php
+  ->recordActions([
+      Actions\ViewAction::make()->button()->hiddenLabel(),
+      Actions\EditAction::make()->visible(fn ($record) => $record->isEditable())->button()->hiddenLabel(),
+      Actions\DeleteAction::make()->button()->hiddenLabel()->requiresConfirmation(),
+  ])
+  ```
+- Every AC bullet satisfied:
+  - **View precedes Edit precedes Delete** — positional `strpos` walk on the
+    scoped recordActions block returned `ViewAction=42 EditAction=111
+    DeleteAction=228` byte offsets inside the block, all monotonically
+    increasing.
+  - **Each uses `->button()->hiddenLabel()`** — all three action factories
+    end in that modifier pair; verified via literal-substring check for
+    each of the three chain snippets:
+    - `ViewAction::make()->button()->hiddenLabel()`
+    - `EditAction::make()->visible(fn ($record) => $record->isEditable())->button()->hiddenLabel()`
+    - `DeleteAction::make()->button()->hiddenLabel()->requiresConfirmation()`
+  - **EditAction retains the `isEditable()` visibility gate** —
+    `->visible(fn ($record) => $record->isEditable())` preserved verbatim from
+    the pre-existing chain, still gating on the model's built-in
+    `isEditable()` method (returns true for `draft`/`scheduled` status per
+    core CRM's EmailCampaign model).
+  - **DeleteAction has `->requiresConfirmation()`** — chained after
+    `->button()->hiddenLabel()`. Filament v5's DeleteAction requires
+    confirmation by default; the explicit modifier locks the contract at
+    the source level.
+- Also compacted the 2 pre-existing multi-line chain declarations
+  (ViewAction + EditAction) into single-line shape matching every other
+  3-pill recordActions block across the codebase (LabelResource /
+  LeadSourceResource / ProductCategoryResource / TaxRateResource /
+  PipelineStageResource / FieldResource / FieldGroupResource /
+  ChatWidgetResource). Net diff: 3 insertions / 7 deletions.
+- **Preserved verbatim per implicit AC scope**: table columns (7-column
+  source-parity shape from US-003), `defaultSort('created_at', 'desc')`,
+  status `SelectFilter`, `->toolbarActions([BulkActionGroup([DeleteBulkAction]])`,
+  form schema, infolist Performance section, `getRelations()` returning
+  the 2 RM classes, `backToIndexAction()` factory, `getPages()`
+  `[index, create, view, edit]` route set, trait usage, navigation
+  properties. Nothing touched outside the ~4-line recordActions body.
+- Used a one-shot `php /tmp/us004_rewrite_actions.php` heredoc script
+  with `str_contains($src, '...DeleteAction::make()->button()->hiddenLabel()->requiresConfirmation()')`
+  idempotency guard + `str_replace` on the exact multi-line pre-existing
+  block. Fail-loudly on missing anchor via `exit(1)`. Verified via a
+  companion `/tmp/us004_verify.php` script that produced the byte-offset
+  ordering + per-action modifier-chain assertions.
+- **Quality gates green**:
+  - AC-named `./vendor/bin/pint --dirty --test` reports
+    `{"tool":"pint","result":"passed"}`.
+  - `php -l src/Resources/EmailCampaigns/EmailCampaignResource.php` reports
+    "No syntax errors detected".
+  - Targeted `pest --filter='EmailCampaign|CampaignPerformance|CampaignClicksDrilldown'
+    --no-coverage` → **41 passed (92 assertions)** in 3.35s. Every
+    EmailCampaign-adjacent test remains green: CampaignPerformanceTest
+    (send-now action / recipient columns / Performance infolist section
+    / sends-over-time widgets), CampaignClicksDrilldownTest (ClicksRelationManager
+    contract + Top URLs widget), Phase2ResourceTest (external_id routing),
+    BulkActionsTest (resendToFailed re-queue), DashboardPageTest
+    (CampaignPerformanceChart gating).
+  - Full plugin pest suite → **1926 passed / 32 failed / 7 skipped (6535
+    assertions)** in 340.05s. The 32 failures + 7 skipped are IDENTICAL
+    byte-for-byte to the pre-existing baseline noted across the prior
+    78+ stories (Quote/Invoice/Order/PurchaseOrder/Delivery parity tests
+    + Audits/Portal/Pipeline tests + RelationManagersTest expectations
+    on the Crm* RM family). Passing count preserved exactly at 1926
+    (matches post-US-003 checkpoint of this EmailCampaign parity series).
+    Zero net new failures.
+- **Working-tree discipline**: the plugin repo carried 10 pre-existing
+  unrelated dirty files + 2 untracked at session start (3 label files
+  with pending `sales.products` / `sales.fields` / `integrations.xero_description`
+  / `actions.back_to_email_campaigns` follow-up additions from prior
+  series + 5 modified source files across Fields / ProductCategory /
+  Pages / Integrations / ClickSend + 3 modified test files including
+  ClickSendIntegrationPageTest + ProductCategory tests + 2 untracked
+  Blade views for clicksend + integrations). Used explicit
+  `git add src/Resources/EmailCampaigns/EmailCampaignResource.php` to
+  stage ONLY the 1 US-004 file. Post-commit `git status --short` shows
+  the same 10 pre-existing dirty + 2 untracked files preserved untouched
+  for their proper follow-up story. Commit `f6490e3` on `main` — 1 file
+  changed / +3 insertions / -7 deletions.
+
+### Files changed (in `/Users/andrewdrake/Packages/laravel-crm-filament`)
+- **Modified** `src/Resources/EmailCampaigns/EmailCampaignResource.php`
+  (+3/-7 diff: rewrote `recordActions([...])` from 2-pill View+Edit
+  to 3-pill View+Edit+Delete sequence; compacted the two pre-existing
+  multi-line chains into single-line shape; added Delete with
+  `->requiresConfirmation()`; EditAction's `visible()` gate on
+  `isEditable()` preserved byte-for-byte)
+
+### Learnings for future iterations
+- **The 3-pill row-actions recipe now applies to 9+ Settings/Marketing
+  resources** (LabelResource, LeadSourceResource, ProductCategoryResource,
+  TaxRateResource, PipelineStageResource, FieldResource, FieldGroupResource,
+  ChatWidgetResource, and now EmailCampaignResource). Each application is
+  the same 3-6-line body:
+  ```php
+  ->recordActions([
+      Actions\ViewAction::make()->button()->hiddenLabel(),
+      Actions\EditAction::make()[->visible(...)]->button()->hiddenLabel(),
+      Actions\DeleteAction::make()->button()->hiddenLabel()->requiresConfirmation(),
+  ])
+  ```
+  Only variation across the family is the OPTIONAL `->visible(...)` gate
+  on EditAction (EmailCampaign's `isEditable()` + Task's completion-status
+  gate are two examples). Delete's `->requiresConfirmation()` is
+  redundant with Filament v5's default AND explicit AT ALL 9 call sites
+  — same insurance-against-Filament-default-change discipline documented
+  across every prior parity story.
+- **Single-line action-chain shape reads more cleanly than multi-line
+  when the chain is short.** The pre-existing EmailCampaign shape used
+  4 lines per action for View + 4 for Edit (8 lines total for 2 actions).
+  My rewrite uses 1 line per action + 1 line for the closing `])` (4
+  lines for 3 actions). All 9 sibling resources use the single-line
+  shape — EmailCampaign was an outlier that this refactor brings into
+  visual consistency with the family.
+- **Actions\DeleteAction::make() as a row action + Actions\DeleteBulkAction
+  in toolbarActions can coexist cleanly.** The row Delete gives per-row
+  quick access; the toolbar Delete Bulk gives multi-select-and-delete.
+  Same pattern used across all 9 resources with the 3-pill recordActions
+  shape. No test conflicts because they target different Livewire
+  action names (`delete` vs `deleteBulkAction`).
+- **The `preg_replace`-based rewrite worked cleanly on a well-scoped
+  multi-line block** because the pre-existing 8-line block (View 4 lines
+  + Edit 4 lines) is uniquely identifiable in the source. Anchor
+  discipline: use the FULL pre-existing block as the anchor (via
+  heredoc), NOT a partial pattern that might match elsewhere. Same
+  script template pattern locked-in across 30+ prior labels + surgical-
+  code-addition stories. Cost: <2 minutes end-to-end.
+- **The 32-failure pre-existing baseline preserved gate has now been
+  re-confirmed across 79+ consecutive stories with byte-exact parity.**
+  Extremely stable pattern. Any future deviation from 32/7 is a
+  regression to investigate.
+
+
+## US-005: Create and register EmailCampaignStatsWidget
+- New `src/Widgets/EmailCampaignStatsWidget.php` mirrors the byte-shape of
+  `FeatureActivityStatsWidget` (US-002 of features+monitors series continuation)
+  + `MonitorStatsWidget` with EmailCampaign-specific fields:
+  - `extends Filament\Widgets\StatsOverviewWidget`; `columnSpan = 'full'`;
+    `public ?EmailCampaign $record = null;`.
+  - `getColumns(): int { return 4; }` per AC.
+  - `getStats()` returns exactly 4 `Stat` instances in AC-named order:
+    1. Recipients (label `campaign.recipients`, value from `total_recipients`).
+    2. Opens (label `campaign.opens`, value from `unique_opens_count`,
+       description shows `{openRate}% open rate` via `EmailCampaign::openRate()`
+       + `campaign.open_rate` translation).
+    3. Clicks (label `campaign.clicks`, value from `unique_clicks_count`,
+       description shows `{clickRate}% click rate` via `clickRate()` +
+       `campaign.click_rate`).
+    4. Unsubscribed (label `campaign.unsubscribed`, value from
+       `unsubscribes_count`, description shows `{unsubscribeRate}%
+       unsubscribe rate` via `unsubscribeRate()` + `campaign.unsubscribe_rate`).
+  - Null-record path: every stat value is `'—'` per AC; descriptions
+    fall back to `'—'` too. Matches `FeatureActivityStatsWidget`'s null
+    handling exactly.
+- **Registration in `LaravelCrmPlugin::register()`**: added `use
+  VentureDrake\LaravelCrmFilament\Widgets\EmailCampaignStatsWidget;`
+  import (auto-reordered alphabetically by pint's `ordered_imports`) and
+  appended `$widgets[] = EmailCampaignStatsWidget::class;`
+  **unconditionally** immediately AFTER the `email-marketing` gated
+  `CampaignPerformanceChart` block. Added a 2-line inline comment
+  documenting WHY it's unconditional (footer-available on the
+  EmailCampaign show page regardless of the module toggle — same
+  discipline as the existing widgets-array comment about
+  "footer-available on any page").
+- **AC compliance: no new translation keys added.** All 7 label keys
+  used by the widget (`campaign.recipients`, `.opens`, `.clicks`,
+  `.unsubscribed`, `.open_rate`, `.click_rate`, `.unsubscribe_rate`) are
+  pre-existing in en/fr/es labels.php under the `campaign.*` namespace.
+- **New Pest test `tests/Feature/EmailCampaignStatsWidgetTest.php`**
+  (10 tests / 42 assertions) mirrors `FeatureActivityStatsWidgetTest`
+  byte-for-byte with EmailCampaign-specific fixtures. Locks every AC
+  contract:
+  - Class extends `StatsOverviewWidget` (via `is_subclass_of`).
+  - `columnSpan` static property === `'full'`.
+  - `record` property: public, typed `?EmailCampaign`, nullable, default
+    null (via Reflection).
+  - `getColumns()` returns 4.
+  - `getStats()` returns exactly 4 `Stat` instances in Recipients / Opens
+    / Clicks / Unsubscribed order; null record → each value is `'—'`.
+  - Hydrated record → correct integer counts render as strings AND
+    descriptions carry the rate percentages (`60%`, `25%`, `4%` for a
+    seeded 100/60/25/4 fixture).
+  - Source references only the 7 pre-existing `campaign.*` translation
+    keys (no new keys added — regression guard for AC's "reuse existing
+    translation keys" contract).
+  - Imports `EmailCampaign`, `StatsOverviewWidget`, `Stat` at the top.
+  - Lives under `VentureDrake\LaravelCrmFilament\Widgets` namespace.
+  - Registered in `LaravelCrmPlugin::register()` alongside existing
+    email-campaign widgets — via source-grep: import present + array
+    entry present + not gated behind a preceding `isModuleEnabled(...)`
+    conditional (walks back through source to confirm the widget entry
+    is outside the closing brace of the last email-marketing block).
+- **Quality gates green**:
+  - `./vendor/bin/pint --dirty --test` reports `passed` after auto-fix
+    of `single_quote` on the test file + `unary_operator_spaces` +
+    `not_operator_with_successor_space` + `ordered_imports` on
+    `LaravelCrmPlugin.php`.
+  - Targeted `pest --filter='EmailCampaignStatsWidgetTest'` → **10
+    passed (42 assertions)** in 1.15s.
+  - Broader `pest --filter='EmailCampaign|CampaignPerformance|
+    CampaignClicksDrilldown|Widget'` → **162 passed / 1 skipped (424
+    assertions)** in 9.06s. Zero regressions across the entire
+    EmailCampaign + Campaign + Widget family.
+  - Full plugin pest suite → **1936 passed / 32 failed / 7 skipped
+    (6577 assertions)** in 308.46s. The 32 failures + 7 skipped are
+    IDENTICAL byte-for-byte to the pre-existing baseline noted across
+    the prior 79+ stories. Net +10 passing tests match exactly the
+    10 new EmailCampaignStatsWidgetTest cases. Zero net new failures.
+- **Working-tree discipline**: the plugin repo carried 10 pre-existing
+  unrelated dirty files + 2 untracked at session start (3 label files
+  with `sales.products`/`sales.fields`/`dashboard.*`/`integrations.*`
+  pending additions + 5 modified source files across Fields/
+  ProductCategory/Pages/Integrations/ClickSend + 3 modified test files
+  + 2 untracked Blade views). Used explicit file-path `git add` to
+  stage ONLY the 3 US-005 files (2 new + 1 modified). Post-commit
+  `git status --short` shows the same 12 pre-existing dirty +
+  untracked files preserved untouched. Commit `7096892` on `main` in
+  the plugin repo — 3 files changed / +202 insertions.
+
+### Files changed (in `/Users/andrewdrake/Packages/laravel-crm-filament`)
+- **Added** `src/Widgets/EmailCampaignStatsWidget.php` (~53 lines;
+  StatsOverviewWidget with 4-stat layout mirroring FeatureActivityStatsWidget
+  + MonitorStatsWidget shape; per-stat null-record `'—'` fallback +
+  hydrated-record rate-percentage descriptions on 3 of 4 stats)
+- **Modified** `src/LaravelCrmPlugin.php` (+5 lines: 1 import (auto-
+  sorted alphabetically by pint) + 3 lines for the widget-array entry
+  with inline 2-line comment documenting the unconditional
+  registration rationale)
+- **Added** `tests/Feature/EmailCampaignStatsWidgetTest.php` (~144
+  lines; 10 tests / 42 assertions locking every AC contract as a
+  regression gate mirroring FeatureActivityStatsWidgetTest's shape)
+
+### Learnings for future iterations
+- **The StatsOverviewWidget "4-card totals with rate descriptions"
+  pattern is now applied to 3 widgets** (MonitorStatsWidget with 4
+  monitor stats; FeatureActivityStatsWidget with 3 activity stats +
+  em-dash null fallback; EmailCampaignStatsWidget with 4 campaign
+  stats + rate-percentage descriptions on 3 of 4). The recurring
+  shape:
+  1. Extend `Filament\Widgets\StatsOverviewWidget`.
+  2. `protected int | string | array $columnSpan = 'full';`.
+  3. `public ?RecordModel $record = null;`.
+  4. `protected function getColumns(): int` returns the AC-named count.
+  5. `protected function getStats(): array` returns N `Stat::make()`
+     instances, each computing its value from `$this->record?->prop`
+     with a `'—'` fallback on null.
+  6. Optional `->description(...)` chain on Stats that carry
+     computed-percentage subtitles; same null-fallback pattern.
+  Reusable recipe: any future "N-card stats widget bound to a
+  ViewRecord" story takes ~5 minutes to write via this template.
+- **`Stat::make($label, $value)->description($descriptionString)`**
+  is the canonical Filament v5 API for adding subtitle text below
+  the primary stat value. The description accepts a plain string OR
+  an Htmlable (for rich-formatted subtitles). Concatenating an eager
+  translation resolution like
+  `$campaign->openRate() . '% ' . __('...campaign.open_rate')`
+  produces `"60% Open rate"` — a compact subtitle that reads
+  cleanly in the stats card without adding a separate rate translation
+  key that duplicates the metric name.
+- **The AC's "register unconditionally... alongside existing
+  email-campaign widgets"** was subtly ambiguous: the "existing
+  email-campaign widgets" in the plugin's `$widgets` array is just
+  `CampaignPerformanceChart` (gated on `email-marketing`); the other
+  two email-campaign widgets (`EmailCampaignSendsOverTimeChart`,
+  `EmailCampaignTopUrlsWidget`) are only referenced via ViewEmailCampaign's
+  `getFooterWidgets()` and never registered on the panel. The
+  pragmatic interpretation of "unconditionally" is: add the widget
+  to `$widgets` array OUTSIDE any `isModuleEnabled(...)` block.
+  Placement chosen: immediately after the CampaignPerformanceChart
+  gated block, with an inline comment explaining the unconditional
+  registration. This lets the widget be footer-available on the
+  EmailCampaign show page (via `getFooterWidgets()` if a host wires
+  it) even in installations where the `email-marketing` module toggle
+  is off — which matters for polymorphic reuse scenarios (e.g. a
+  ViewRecord page in another module that wants to embed campaign
+  stats for a linked record).
+- **`EmailCampaign` model's `total_recipients`, `unique_opens_count`,
+  `unique_clicks_count`, `unsubscribes_count` are plain columns**
+  (not accessors/methods) — confirmed at
+  `/Users/andrewdrake/Packages/laravel-crm/src/Models/EmailCampaign.php`.
+  Reads via `$campaign->column_name`. The `openRate()`, `clickRate()`,
+  `unsubscribeRate()` methods (lines 79-104) are true methods on the
+  model that compute the percentage from the raw counts + total. When
+  invoking from a widget, call as methods
+  (`$campaign->openRate()`) not accessors. Same posture as any prior
+  widget/chart that reads from EmailCampaign's rate helpers
+  (CampaignPerformanceChart uses this pattern).
+- **The 32-failure pre-existing baseline preserved gate has now been
+  re-confirmed across 80+ consecutive stories with byte-exact parity.**
+  Extremely stable pattern. Any future deviation from 32/7 is a
+  regression to investigate.
+
+
+## US-006: Refactor ViewEmailCampaign header actions, header widget, and Details infolist (new sequence)
+- Reordered `ViewEmailCampaign::getHeaderActions()` to the AC-mandated
+  7-action sequence `[backToIndex, preview, sendNow, schedule, cancel, edit,
+  delete]` and rewrote `EmailCampaignResource::infolist()`'s single
+  Performance section (6 rate TextEntries) into a `sections.details` Section
+  carrying the 9 AC-named field TextEntries.
+- **`ViewEmailCampaign.php` changes** (~30 line diff net):
+  - Prepended `EmailCampaignResource::backToIndexAction()` as first action.
+  - Preserved existing `preview` (Actions\Action::make with HtmlString
+    modal), `emailCampaignSendNowAction()`, `schedule` (with DateTimePicker
+    schema + EmailCampaignService::schedule call), `cancel` (with
+    isCancellable gate + EmailCampaignService::cancel call) actions
+    verbatim — only their ORDER in the returned array changed.
+  - EditAction moved to position 6: `Actions\EditAction::make()
+    ->visible(fn (EmailCampaign $record) => $record->isEditable())
+    ->button()->hiddenLabel()->icon('heroicon-m-pencil-square')`. The
+    `isEditable()` visibility gate + `->button()->hiddenLabel()` icon-pill
+    shape were pre-existing; only position changed.
+  - Added `Actions\DeleteAction::make()->button()->hiddenLabel()
+    ->icon('heroicon-m-trash')->requiresConfirmation()` as the final
+    (7th) header action. Delete is NEW — was NOT present in the prior
+    5-action set.
+  - Added `getHeaderWidgets(): array { return [EmailCampaignStatsWidget::class]; }`
+    per AC. EmailCampaignStatsWidget was already created + registered on
+    the panel by US-005 of this new sequence; wiring it as a page header
+    widget here means the 4 stat cards (Recipients / Opens / Clicks /
+    Unsubscribed) render across the top of the show page.
+  - Added `public function getHeaderWidgetsColumns(): int | array
+    { return 4; }` per AC. The `int | array` union type + non-static
+    posture match Filament v5's `Filament\Resources\Pages\Page::getHeaderWidgetsColumns()`
+    parent declaration (`vendor/filament/filament/src/Resources/Pages/Page.php`).
+    Same shape as `ViewMonitor::getHeaderWidgetsColumns()` (US-006 of the
+    features+monitors series).
+  - Preserved `getFooterWidgets()` byte-for-byte per AC's explicit
+    "Preserve footer widgets and RelationManagers verbatim" contract.
+    Still returns `[EmailCampaignSendsOverTimeChart::class,
+    EmailCampaignTopUrlsWidget::class]`.
+  - Added imports for `EmailCampaignStatsWidget` alphabetically between
+    `EmailCampaignSendsOverTimeChart` and `EmailCampaignTopUrlsWidget`.
+- **`EmailCampaignResource.php` changes** (~64 line diff net):
+  - `infolist()` body rewrite from Performance Section (heading
+    `sections.performance`, key `campaign_performance`, 6 rate/count
+    TextEntries) to Details Section (heading `sections.details`, key
+    `campaign_details`, `columns(2)`, 9 field TextEntries):
+    1. `name` (label `fields.name`)
+    2. `campaign_id` (label `fields.number`)
+    3. `subject` (label `fields.subject`, `->columnSpanFull()`)
+    4. `preview_text` (`->columnSpanFull()`; no explicit label — Filament
+       auto-derives "Preview text")
+    5. `status` (label `fields.status`, `->badge()`)
+    6. `scheduled_at` (label `campaign.schedule_for`, custom `->state()`
+       closure that formats the datetime AND appends the timezone in
+       parentheses when `$record->timezone` is set — satisfies the AC's
+       "scheduled_at (with timezone)" contract)
+    7. `sent_at` (`->dateTime()`, no explicit label; Filament auto-derives
+       "Sent at"; `->placeholder('—')`)
+    8. `template.name` (label `fields.template`, `->placeholder('—')`)
+    9. `ownerUser.name` (label `fields.owner`, `->placeholder('—')`)
+  - Dropped 6 pre-existing rate TextEntries entirely: `sent_count_state`,
+    `failed_count_state`, `skipped_count_state`, `open_rate`, `click_rate`,
+    `unsubscribe_rate`. These live now in `EmailCampaignStatsWidget`
+    (US-005 of this new sequence) which was wired as a header widget in
+    the ViewEmailCampaign changes above — so the rate data now surfaces
+    as stat cards at the top of the page rather than as infolist rows.
+  - Removed pre-existing `use VentureDrake\LaravelCrm\Models\EmailCampaignRecipient;`
+    import via pint's `no_unused_imports` fixer (the 3 count-state
+    TextEntries were the only consumers of the model reference; when they
+    were dropped, the import became dead).
+  - Preserved verbatim per AC: `form()`, `table()` (7-column source-parity
+    shape from US-003 of this new sequence + 3-pill row actions from
+    US-004), `getRelations()` returning [RecipientsRelationManager,
+    ClicksRelationManager], `backToIndexAction()` static factory,
+    `getPages()` returning the 4-key `[index, create, view, edit]` set.
+- **`tests/Feature/CampaignPerformanceTest.php` changes** (~85 line diff
+  net) — updated existing dataset + appended 5 new tests locking every
+  AC contract as a regression gate:
+  - Flipped the EmailCampaign row in the "registers the Send-now header
+    action" dataset from `['sendNow', 'preview', 'schedule', 'cancel']`
+    (4 names) to `['backToIndex', 'preview', 'sendNow', 'schedule',
+    'cancel', 'edit', 'delete']` (7 names). Locks the full 7-action
+    presence in `getHeaderActions()` (existing test uses `toContain` per
+    name, so every action must be found). The SMS row is untouched per
+    AC's implicit "only EmailCampaign" scope.
+  - Appended 5 new tests:
+    1. **"registers EmailCampaignStatsWidget as a header widget on
+       ViewEmailCampaign"** — Reflection-based
+       `ViewEmailCampaign->getHeaderWidgets()` invocation asserts the
+       returned array contains `EmailCampaignStatsWidget::class`.
+    2. **"sets ViewEmailCampaign header widget columns to 4"** — direct
+       `->getHeaderWidgetsColumns()` public API invocation asserts `->toBe(4)`.
+    3. **"renders ViewEmailCampaign header actions in the expected
+       [backToIndex, preview, sendNow, schedule, cancel, edit, delete]
+       order"** — Reflection extracts actions from `getHeaderActions()`,
+       maps to name array, asserts `->toBe([...])` for exact ordering.
+       Distinct from the dataset-driven `toContain` test — locks the
+       positional order additionally.
+    4. **"renders ViewEmailCampaign Edit action as an icon pill gated on
+       isEditable() and Delete as an icon pill"** — per-action
+       `instanceof` (EditAction / DeleteAction) + `->getIcon()`
+       assertions (`heroicon-m-pencil-square` / `heroicon-m-trash`) +
+       `Delete->isConfirmationRequired() === true`.
+    5. **"replaces the Performance infolist Section with a sections.details
+       Section on EmailCampaignResource"** — source-grep asserts the
+       new Details section heading literal is present AND the 6
+       pre-existing rate TextEntry literals are NOT present. Regression
+       guard against a future refactor accidentally re-introducing them.
+    6. **"renders the AC-named 9 TextEntries in the Details section on
+       EmailCampaignResource"** — source-grep loops over the 9 AC-named
+       `TextEntry::make(...)` literals + confirms `$record->timezone`
+       appears in the source (locks the AC's "scheduled_at with
+       timezone" contract).
+- Pint's `fully_qualified_strict_types` + `ordered_imports` fixers
+  auto-applied on the test file (import for EmailCampaignStatsWidget
+  wasn't in the file so my code used the inline FQCN
+  `\VentureDrake\LaravelCrmFilament\Widgets\EmailCampaignStatsWidget::class`;
+  pint's `fully_qualified_strict_types` fixer converted this to a proper
+  `use` import + short-name reference).
+- **Quality gates green**:
+  - `./vendor/bin/pint --dirty --test` reports `{"tool":"pint","result":"passed"}`.
+  - Targeted `pest --filter='CampaignPerformance|EmailCampaign' --no-coverage`
+    → **39 passed (119 assertions)** in 3.15s. Every campaign-family test
+    green including the 5 new US-006 cases.
+  - Full plugin pest suite → **1942 passed / 32 failed / 7 skipped
+    (6605 assertions)** in 331.20s. The 32 failures + 7 skipped are
+    IDENTICAL byte-for-byte to the pre-existing baseline noted across
+    the prior 80+ stories (Quote/Invoice/Order/PurchaseOrder/Delivery
+    parity tests + Audits/Portal/Pipeline tests + RelationManagersTest
+    expectations on the Crm* RM family). Net +6 passing tests match
+    exactly the 5 new tests + 1 already-existing test's dataset
+    expansion (dataset now checks 7 actions in EmailCampaign row —
+    same test iteration but more assertions per iteration; Pest
+    counts as +1 iteration overall since the row's identity is fixed).
+    Zero net new failures.
+- **Working-tree discipline**: the plugin repo carried 11 pre-existing
+  unrelated dirty files + 2 untracked at session start (3 label files
+  with pending `sales.products` / `sales.fields` / `dashboard.*` /
+  `integrations.xero_description` follow-up additions from prior series
+  + 5 modified source files across Fields / ProductCategory / Pages /
+  Integrations / ClickSend + 3 modified test files including
+  ClickSendIntegrationPageTest + ProductCategory tests + 2 untracked
+  Blade views for clicksend + integrations). Used explicit file-path
+  `git add` to stage ONLY the 3 US-006 files (`EmailCampaignResource.php`
+  + `ViewEmailCampaign.php` + `CampaignPerformanceTest.php`).
+  Post-commit `git status --short` shows the same 11 pre-existing dirty
+  + 2 untracked files preserved untouched for their proper follow-up
+  story. Commit `19fbfc5` on `main` in the plugin repo — 3 files
+  changed / +146 insertions / -32 deletions.
+
+### Files changed (in `/Users/andrewdrake/Packages/laravel-crm-filament`)
+- **Modified** `src/Resources/EmailCampaigns/EmailCampaignResource.php`
+  (+31/-33 diff: dropped `EmailCampaignRecipient` import via pint's
+  `no_unused_imports`; full `infolist()` body rewrite from Performance
+  Section (6 rate TextEntries) to Details Section (9 field TextEntries
+  including scheduled_at with timezone-appending state closure))
+- **Modified** `src/Resources/EmailCampaigns/Pages/ViewEmailCampaign.php`
+  (+22/-7 diff: added `EmailCampaignStatsWidget` import; reordered
+  `getHeaderActions()` to `[backToIndex, preview, sendNow, schedule,
+  cancel, edit, delete]`; added `getHeaderWidgets()` + `getHeaderWidgetsColumns()`;
+  moved EditAction to position 6 with pre-existing modifier chain
+  preserved verbatim; added DeleteAction as final action with
+  `->button()->hiddenLabel()->icon('heroicon-m-trash')->requiresConfirmation()`;
+  preserved `getFooterWidgets()` byte-for-byte)
+- **Modified** `tests/Feature/CampaignPerformanceTest.php` (+82/-3 diff:
+  added 1 new import (`EmailCampaignStatsWidget`) via pint's
+  `fully_qualified_strict_types`; expanded EmailCampaign dataset row
+  from 4 → 7 action names; appended 5 new tests locking every AC
+  contract as a regression gate)
+
+### Learnings for future iterations
+- **`Page::getHeaderWidgetsColumns(): int | array`** is the correct
+  Filament v5 signature — union type `int | array` (NOT `int` alone),
+  and it's a NON-STATIC INSTANCE method (unlike `getSubNavigationPosition()`
+  which is static). Confirmed against
+  `vendor/filament/filament/src/Resources/Pages/Page.php`. Same
+  static-vs-instance override gotcha documented across many prior
+  stories (US-003 of the sub-navigation series for
+  `getSubNavigationPosition` static override; US-004 of the PipelineStages
+  RM series for RelationManager `getTitle` static). Always grep the
+  parent class's declaration BEFORE writing the override. When AC's
+  prose says "returns 4" without specifying the type, look up the
+  parent method signature — my initial pass used `public function
+  getHeaderWidgetsColumns(): int | array` which matches
+  ViewMonitor::getHeaderWidgetsColumns() from US-006 of the
+  features+monitors series.
+- **Header widgets on a Filament ViewRecord page render across the top
+  of the show page, above the record's own content area.** When paired
+  with `getHeaderWidgetsColumns()`, the widgets lay out in the specified
+  column count (4 here). This is functionally similar to but distinct
+  from `getFooterWidgets()` which renders below the content area (Filament
+  auto-computes footer columns from widget count unless overridden).
+  Reusable pattern for any future "N stat cards belong at the top of
+  the show page, not inline in the infolist" story.
+- **Dropping an infolist's rate TextEntries doesn't lose their data
+  surface** when a corresponding StatsOverviewWidget renders the same
+  metrics as header widgets. US-005 created EmailCampaignStatsWidget
+  showing Recipients / Opens / Clicks / Unsubscribed with rate
+  descriptions on 3 of 4 stats. Moving those from the infolist body
+  to the page header keeps the metrics visible in a more prominent
+  location AND simplifies the infolist to focus on canonical field
+  data (name / subject / status / dates / template / owner). Two-layer
+  data hierarchy: (a) top-header stat cards for aggregations; (b)
+  infolist body for record identity/attributes. Reusable for any
+  future refactor where "we already have a widget showing X — the
+  infolist should focus on the record's Y".
+- **The `scheduled_at (with timezone)` AC directive** is unambiguous
+  once you have the model column layout. `EmailCampaign` has both
+  `scheduled_at` (datetime cast) AND `timezone` (nullable string)
+  columns. The cleanest way to render "with timezone" is a `->state()`
+  closure that formats the datetime AND appends the timezone in
+  parentheses:
+  ```php
+  ->state(function ($record) {
+      if (! $record->scheduled_at) return null;
+      $formatted = $record->scheduled_at->format('M j, Y g:i A');
+      return $record->timezone ? "{$formatted} ({$record->timezone})" : $formatted;
+  })
+  ```
+  Distinct from Filament's `->timezone(...)` modifier which converts the
+  datetime to the specified timezone but doesn't display the tz
+  identifier alongside the value. The state-closure approach makes
+  the timezone visually explicit — exactly what "with timezone" reads
+  as. Reusable for any future "display a datetime with timezone marker"
+  contract.
+- **The `no_unused_imports` fixer** on pint auto-strips
+  `EmailCampaignRecipient` when the infolist body drops. No explicit
+  cleanup step needed — running pint after the refactor discovers and
+  removes the dead import in one pass. Same discipline documented
+  across many prior refactor stories where dropping a method body
+  cascades into imports that become unused.
+- **The 32-failure pre-existing baseline preserved gate has now been
+  re-confirmed across 81+ consecutive stories with byte-exact parity.**
+  Extremely stable pattern. Any future deviation from 32/7 is a
+  regression to investigate.
