@@ -25198,3 +25198,1430 @@ production schema or the real browser rendering layer.
   series continuation added `dealMarkWonAction()` / `dealMarkLostAction()`
   / `dealReopenAction()` which all write to these two columns). Any
   future Deal widget / query / filter should follow this convention.
+
+---
+
+## [US-002] Extract HasChartRangeFilter trait and refactor 3 existing period-filterable charts — 2026-07-15
+
+**Story:** Consolidate the ~70-line per-widget period-filter scaffolding into a
+reusable trait so future period-filterable charts don't duplicate it.
+
+**Delivered:**
+- **NEW** `src/Concerns/HasChartRangeFilter.php` — trait exposing:
+  - `defaultFilter(): string` returning `'last_30_days'` (overridable)
+  - `getFilters(): ?array` returning the 13 `sales.*`-translated period keys
+    (`today`, `yesterday`, `last_7_days`, `last_30_days`, `last_90_days`,
+    `last_365_days`, `this_month`, `last_month`, `this_quarter`, `last_quarter`,
+    `this_year`, `last_year`, `all_time`)
+  - `chartRange(): array` — resolves `$this->filter ?? $this->defaultFilter()`
+    into `[$start, $end, $bucket, $format]` (bucket ∈ `hour|day|week|month`)
+  - `advanceCursor(CarbonInterface, string): CarbonInterface`
+  - `bucketKey(CarbonInterface, CarbonInterface, string): ?int`
+  - `allTimeStart(CarbonInterface $now): CarbonInterface` — fallback returns
+    `$now->copy()->subMonth()`; subclasses override to hit their model's
+    earliest row.
+- Refactored `src/Widgets/FeatureVotesChart.php` — `use HasChartRangeFilter`,
+  keeps entity-specific `getData()` + `allTimeStart(CarbonInterface $now)`
+  overriding to `FeatureVote::query()->where('feature_id', $feature->id)->min('created_at')`.
+  Keeps `public ?string $filter = 'last_30_days';` at class level.
+- Refactored `src/Widgets/FeatureViewsChart.php` — same shape, `allTimeStart()`
+  queries `->min('viewed_at')` on `FeatureView`.
+- Refactored `src/Widgets/MonitorResponseTimeChart.php` — `use HasChartRangeFilter`,
+  overrides both `public ?string $filter = 'last_7_days';` AND
+  `defaultFilter(): string { return 'last_7_days'; }`, `allTimeStart()` queries
+  `MonitorCheck` filtered by `type = 'uptime'` on `checked_at`. Retains its
+  perf-threshold dashed-line dataset.
+
+**Net line-count impact (plugin repo):**
+`4 files changed, 121 insertions(+), 234 deletions(-)` — trait consolidation
+netted a ~113-line reduction across the three widgets.
+
+**Tests:** All 26 pre-existing FeatureVotesAndViewsChartsTest cases still pass
+(2 skipped due to Feature model absent from vendor lock 2.1.1, unchanged).
+MonitorResourceTest (25 cases) still passes. Full baseline preserved:
+**32 failed, 7 skipped, 1845 passed** — identical pre-story counts. Pint
+`--dirty --test` passes.
+
+**Commit:** `37ac7c5` on `main` (plugin repo)
+`feat: [US-002] - Extract HasChartRangeFilter trait and refactor 3 existing period-filterable charts`
+
+### Design decisions worth remembering
+
+- **`$filter` property is NOT declared in the trait.** Filament's parent
+  `ChartWidget` declares `public ?string $filter = null;`. A trait redeclaring
+  it with a non-null default triggers PHP's "incompatible trait property"
+  fatal error against the parent. Each subclass declares its own `$filter`
+  with the appropriate default value — this also satisfies the
+  `newInstanceWithoutConstructor()` reflection tests that assert the default.
+- **`defaultFilter(): string` lives on the trait as the runtime source of
+  truth** — used inside `chartRange()` as `$this->filter ?? $this->defaultFilter()`.
+  Subclasses override this when their default differs from `last_30_days`. The
+  duplication (property + method) is the price of matching both Filament's
+  runtime UI needs AND the story's literal wording ("MonitorResponseTimeChart
+  overrides defaultFilter() to last_7_days").
+- **`chartRange()` and `allTimeStart()` take no `$record` param.** Original
+  per-widget methods took `Feature $feature` / `Monitor $monitor` args.
+  Trait methods use `$this->record` internally so signatures are generic.
+  Subclasses' `allTimeStart(CarbonInterface $now)` override signature matches
+  the trait exactly. The trait's fallback returns `$now->copy()->subMonth()`
+  when `$this->record` is null (defensive; getData() short-circuits on null
+  record before ever reaching chartRange, but the guard costs nothing).
+- **The `this_month` filter key does NOT have an explicit match arm in
+  `chartRange()`** — it was already missing from all three pre-refactor
+  widgets and falls through to the `default` arm (`startOfMonth() → now`,
+  `day` bucket, `M j` format). Preserved as-is to keep behavior identical
+  and stay within story scope. Future story could add explicit `this_month`
+  arm if the fall-through behavior becomes visible.
+- **The `FeatureVotesAndViewsChartsTest` at line 121-132 asserts
+  `->min('$column')` appears within 400 chars of `function allTimeStart` in
+  the widget source.** This drove the decision to keep `allTimeStart()`
+  overrides *inline in the widget file* rather than pushing the entire
+  implementation into the trait — the widget must contain the literal
+  method signature + `->min('col')` string for the reflection-based assertion
+  to pass.
+
+### Reusable pattern for future period-filterable charts
+
+Any new `ChartWidget` that wants the standard 13-period dropdown now needs
+only:
+
+```php
+class MyChart extends ChartWidget
+{
+    use HasChartRangeFilter;
+
+    public ?MyRecord $record = null;
+    public ?string $filter = 'last_30_days';  // or override defaultFilter() if different
+
+    protected function getType(): string { return 'bar'; }
+    protected function getData(): array {
+        if (! $this->record) return ['datasets' => [], 'labels' => []];
+        [$start, $end, $bucket, $format] = $this->chartRange();
+        // ...bucket rows via advanceCursor + bucketKey...
+    }
+    protected function allTimeStart(CarbonInterface $now): CarbonInterface {
+        // query model earliest timestamp column
+    }
+}
+```
+
+Saves ~70 lines per widget compared to the pre-refactor pattern.
+
+
+## US-003: Add dashboard translation keys under `dashboard.*` root (new sequence)
+- Added a new top-level `dashboard` namespace containing 30 keys across all three
+  locales at `/Users/andrewdrake/Packages/laravel-crm-filament/resources/lang/{en,fr,es}/labels.php`.
+  Inserted between the pre-existing `notifications` namespace and the final
+  closing `];` of the return array via a `strrpos("\n];\n")` anchor.
+- **AC math**: story header says "~25 keys" but the AC's explicit enumeration
+  sums to 8 stat labels + 6 stat subtitles + 6 chart titles + 3 doughnut slice
+  labels + 3 task list keys + 3 widget headings + 1 period suffix = **30 keys**.
+  Delivered all 30 per the enumeration authoritatively (recurring "AC math is
+  loose; enumeration is authoritative" pattern documented across many prior
+  labels-only stories).
+- **Placeholder syntax** matches Laravel translation conventions:
+  - `:rate` in `convert_rate` (e.g. `':rate% convert rate'` / `'Taux de conversion de :rate %'`)
+  - `:count` in `open_deals_count`, `won_count`, `unpaid_count`, `paid_count`,
+    `overdue_n`
+  - `:people` + `:organizations` in `people_orgs_breakdown`
+  - `:period` in `heading_period_suffix`
+- **NO duplication with existing `sales.*` period keys** per AC — the 13
+  period-filter dropdown options (today, yesterday, last_7_days, ...,
+  all_time) live at `sales.*` from US-001 of the ViewFeature redesign
+  series and prior labels stories. My additions are strictly under
+  `dashboard.*` and don't touch `sales.*`.
+- Used the established **backup-restore-recompute** discipline (from
+  US-005/US-007 of the new sequence and prior labels stories) to isolate
+  my clean 34-line-per-locale insertion from 7 pre-existing unrelated
+  dirty files (`sales.products`, `sales.fields`, various ClickSend +
+  integrations page work + ProductCategory follow-up polish):
+  1. `cp resources/lang/{en,fr,es}/labels.php /tmp/us003_bak_*.php`
+  2. `git diff resources/lang/{en,fr,es}/labels.php > /tmp/us003_preexisting.patch`
+     — 120 lines of pre-existing diff saved as a portable 3-way patch.
+  3. `git checkout HEAD -- resources/lang/{en,fr,es}/labels.php` to
+     restore clean HEAD state.
+  4. Ran the insertion script (idempotent via `str_contains("'dashboard' => [")`
+     guard; second run reported "SKIP: already has dashboard namespace" for
+     all three locales with zero file modifications).
+  5. `git add` the 3 label files + commit `2343492` on `main` (3 files
+     changed, 102 insertions — 34 lines × 3 locales).
+  6. `git apply --3way /tmp/us003_preexisting.patch` restored the
+     pre-existing dirty state cleanly on top of my new commit (3-way merge
+     succeeded because my `dashboard` block sits at end-of-file far from
+     the pre-existing hunks at lines ~233/~361/~421/~452).
+  7. `git reset HEAD -- resources/lang/{en,fr,es}/labels.php` unstaged
+     the restored dirty state so `git status --short` shows them as
+     working-tree dirty (unstaged), matching the AC's "pre-existing
+     working-tree dirty" contract.
+- **Quality gates green**:
+  - AC-named `./vendor/bin/pint --dirty --test` reports
+    `{"tool":"pint","result":"passed"}` (on the clean-HEAD state before
+    the pre-existing restore).
+  - AC-named `pest --filter='LocalizationTest' --no-coverage` → **7
+    passed (27 assertions)** in 1.31s (post-commit, clean HEAD) AND
+    again in 0.91s (post-restore, dirty working tree). Both runs
+    verified: (a) the `sections` documented set still passes (my new
+    top-level `dashboard` namespace is NOT in the required list, so
+    it doesn't affect that assertion); (b) en↔fr↔es structural parity
+    preserved across all 30 new key/locale = 90 additions; (c) runtime
+    `__('laravel-crm-filament::labels.*')` resolution still works.
+- Post-story `git status --short` shows the same 11 pre-existing
+  dirty/untracked files as at session start (10 modified + 3
+  untracked, minus the 3 label files that flipped from dirty→dirty
+  after the restore) preserved untouched for their proper follow-up
+  story.
+
+### Files changed (in `/Users/andrewdrake/Packages/laravel-crm-filament`)
+- **Modified** `resources/lang/en/labels.php` (+34 lines: new top-level
+  `dashboard` namespace inserted before end-of-array closing `];`)
+- **Modified** `resources/lang/fr/labels.php` (+34 lines)
+- **Modified** `resources/lang/es/labels.php` (+34 lines)
+
+### Learnings for future iterations
+- **A new top-level namespace is EASIER than inserting into an existing
+  one.** No regex anchor into a specific namespace block needed; just
+  `strrpos("\n];\n")` finds the file-end array closer, and the new
+  block gets inserted immediately before it. This is significantly
+  simpler than the 28+ prior stories' regex-anchored-into-existing-
+  namespace pattern. Reusable pattern for any future "add a new
+  top-level namespace with N keys" story: strrpos on the final `];`,
+  splice in the block, done.
+- **`LocalizationTest`'s "documented sections" check hardcodes the
+  required namespace list** (`fields, contact, sales, money, campaign,
+  chat, file, sections, actions, import, misc`). Adding a NEW top-level
+  namespace (like `dashboard`) doesn't affect this test because the
+  test only asserts these named sections EXIST — it doesn't assert
+  the full list is exhaustive. Reusable insight: new top-level
+  namespaces can be added freely without touching LocalizationTest;
+  only new documented sections would require a test update.
+- **Placeholder syntax `:name` (single leading colon, no braces)** is
+  the correct Laravel translation convention. Distinct from Blade's
+  `{{ }}` and Vue's `{}` styles. When a translation value contains a
+  placeholder like `:rate%`, the `%` is literal (rendered as-is);
+  Laravel's translator substitutes `:rate` with the value passed via
+  `trans_choice()` or `__(...)`'s second array argument. My `convert_rate`
+  key uses `':rate% convert rate'` — the `%` is a literal % sign
+  displayed after the rate value.
+- **French translations for placeholder strings need extra care with
+  apostrophes.** My `deal_status_distribution` French value is
+  `'Répartition des statuts d\'affaire'` — the escaped apostrophe is
+  standard PHP single-quoted-string syntax. Pint's `--test` and my
+  script's `str_contains` check both pass cleanly through the escaped
+  apostrophe. Same pattern applies to any future French key with
+  possessives ("d'affaire", "l'utilisateur", "aujourd'hui", etc.).
+- **`git apply --3way` succeeds on non-overlapping hunks even when the
+  base commit differs from the current HEAD.** My new dashboard block
+  lives at the file's END (line ~580+ in each locale); the pre-existing
+  dirty hunks live at lines ~233 / ~361 / ~421 / ~452 in en (and
+  equivalents in fr/es) — hundreds of lines away. The 3-way merge
+  handled the base-vs-HEAD reconciliation automatically because the
+  hunk contexts don't overlap. Same reliability pattern documented in
+  US-001 of the integrations sub-nav series (which introduced the
+  `git apply --3way` pattern to this codebase).
+
+
+## US-004: Extend stat widgets to dashboard parity — CrmStatsOverview + DealsValueStat + new ContactsStatsOverview (new sequence)
+- Rewrote `src/Widgets/CrmStatsOverview.php` from 3 pipeline-overview stats (Open
+  leads / Open deals / Tasks due today) to the AC-named 3 Sales stats:
+  1. **New leads** (created within `last_30_days` window on `crm_leads.created_at`)
+     — description shows `':rate% convert rate'` computed as `round(converted / newLeads * 100)`.
+     Module-gated on `leads`.
+  2. **Pipeline value** (cumulative sum of `crm_deals.amount` where `closed_at IS NULL`)
+     — description shows `':count open deals'`. Module-gated on `deals`.
+  3. **Deals won** (count of deals with `closed_status='won'` AND `closed_at` in
+     last 30 days) — description shows money total of won deals in the window.
+     Module-gated on `deals`.
+  - `getColumns() = 3`. `getHeading()` returns
+    `dashboard.heading_sales · dashboard.heading_period_suffix{period=last_30_days}`
+    per AC bullet 5.
+- Rewrote `src/Widgets/DealsValueStat.php` from 3 financial stats (Open deals
+  value / Invoiced this month / Outstanding receivables) to the AC-named 4
+  Finance stats:
+  1. **Outstanding invoices** (cumulative sum of `amount_due` where
+     `fully_paid_at IS NULL`) — description shows `':count unpaid'`. Module-gated
+     on `invoices`.
+  2. **Invoices paid** (sum of `total` where `fully_paid_at` within last 30 days)
+     — description shows `':count paid'`. Module-gated on `invoices`.
+  3. **Quotes created** (count of quotes created within last 30 days). Module-gated
+     on `quotes`.
+  4. **Orders created** (count of orders created within last 30 days). Module-gated
+     on `orders`.
+  - `getColumns() = 4` per AC bullet 2. `getHeading()` mirrors the CrmStatsOverview
+    pattern with `dashboard.heading_finance` + period suffix.
+- New `src/Widgets/ContactsStatsOverview.php` extends `StatsOverviewWidget` with
+  a single stat:
+  - **New contacts** — count = `Person.created_at BETWEEN start,end` + same on
+    `Organization`. Description resolves the
+    `dashboard.people_orgs_breakdown` translation with `:people` +
+    `:organizations` placeholders substituted with the two per-model counts.
+  - `getColumns() = 1`. `getHeading()` = `dashboard.heading_contacts` + period
+    suffix.
+- **Module-gating helper**: private `moduleEnabled(string $module): bool` on
+  each of CrmStatsOverview + DealsValueStat wraps `LaravelCrmPlugin::get()
+  ->isModuleEnabled($module)` in a `try/catch(\Throwable)` and falls back to
+  `in_array($module, config('laravel-crm.modules', []), true)` — same shape as
+  the existing `Dashboard::getWidgets()` fallback logic. Ensures tests (which
+  don't always attach the plugin to a current panel) can still exercise
+  module-gating via `config(['laravel-crm.modules' => [...]])` mutation.
+- **Money formatter** (`formatMoney(int $cents): string`) on both widgets uses
+  a try/catch shape that falls back to `number_format` when `money()` throws.
+  Without this, tests without ISO currency data (cknow/laravel-money's
+  test-environment gap) crash the widget's `getStats()` call. Production
+  behavior unchanged when the money helper works.
+- Updated `tests/Feature/WidgetsTest.php`'s "stats widgets declare a non-empty
+  heading" test to call `$instance->getHeading()` instead of reading the
+  protected `$heading` property via Reflection. The property is now nullable
+  (widgets compute the heading dynamically); reading via `getHeading()` is the
+  correct public API.
+- New Pest test `tests/Feature/DashboardStatsWidgetsTest.php` (+13 tests / 36
+  assertions) locks every AC contract as a single-file regression gate:
+  - Extension: each of 3 widgets extends `StatsOverviewWidget`; each returns
+    the AC-named column count (3 / 4 / 1) via Reflection on protected
+    `getColumns()`.
+  - Heading: each widget's `getHeading()` returns a non-empty string containing
+    the `·` delimiter (proves the period suffix key is applied).
+  - Stats set: `CrmStatsOverview::getStats()` returns exactly 3 stats keyed on
+    `new_leads / pipeline_value / deals_won` when both modules enabled;
+    2 stats when only deals enabled; 1 stat when only leads enabled.
+  - Same 3-scenario coverage for `DealsValueStat` (4 stats when all 3 modules on;
+    2 stats when only invoices on).
+  - `ContactsStatsOverview::getStats()` returns 1 Stat whose label + description
+    match the AC's `new_contacts` + `people_orgs_breakdown` translations.
+  - Each widget's `getStats()` renders without errors on an empty DB (zero
+    Deals / Invoices / Leads / Products / Persons / Organizations exist).
+- Full plugin pest suite → **1858 passed / 32 failed / 7 skipped (6403
+  assertions)** in 336.72s. The 32 failures + 7 skipped are IDENTICAL byte-for-byte
+  to the pre-existing baseline noted across the prior 73+ stories in the parity
+  series + features+monitors series + product list series + prices RM series +
+  ViewFeature redesign series + Settings cluster evacuation series + activity
+  feed series + new stories series + chat list rewrite series + calendar
+  refactor series + pipeline view page series + PipelineStage view page series
+  + new sequence (ProductCategory parity + LeadSource redesign + LabelResource
+  arc + TaxRate + Field/FieldGroup + chat widget parity + integrations sub-nav
+  + dashboard parity US-001..US-003). Net +13 passing tests match exactly the
+  13 new DashboardStatsWidgetsTest cases. Zero net new failures.
+- **Working-tree discipline**: the plugin repo carried 12 pre-existing unrelated
+  dirty files at session start (3 label files + 5 modified source files + 2
+  modified test files + 2 untracked views). Used explicit file-path `git add`
+  to stage ONLY the 5 US-004 files. Post-commit `git status --short` shows
+  those 10 pre-existing dirty + 2 untracked files preserved untouched for
+  their proper follow-up story. Commit `b98233f` on `main` in the plugin repo —
+  5 files changed / +388 insertions / -51 deletions.
+
+### Files changed (in `/Users/andrewdrake/Packages/laravel-crm-filament`)
+- **Modified** `src/Widgets/CrmStatsOverview.php` (rewrote from 3 pipeline-overview
+  stats to 3 module-gated Sales parity stats; added `moduleEnabled()` helper +
+  `formatMoney()` with try/catch fallback + `getHeading()` returning
+  translation-key-driven heading with period suffix)
+- **Modified** `src/Widgets/DealsValueStat.php` (rewrote from 3 financial
+  stats to 4 module-gated Finance parity stats; same helper shape; `getColumns()
+  = 4` per AC)
+- **Added** `src/Widgets/ContactsStatsOverview.php` (~55 lines; new
+  StatsOverviewWidget with 1 stat + people/organizations breakdown subtitle
+  + last_30_days window)
+- **Modified** `tests/Feature/WidgetsTest.php` (flip "stats widgets declare
+  a non-empty heading" test from `Reflection::getProperty('heading')`
+  to `->getHeading()` public API call)
+- **Added** `tests/Feature/DashboardStatsWidgetsTest.php` (13 tests / 36
+  assertions locking every AC contract as a regression gate; ~156 lines)
+
+### Learnings for future iterations
+- **`LaravelCrmPlugin::get()` in a widget's `getStats()` fails when no plugin
+  is attached to the current panel.** Symptom: `LogicException: Plugin
+  [laravel-crm] is not registered for panel [X]`. Same gotcha as v0.x US-011
+  (Dashboard registration) + US-002 of the activity feed series. The clean
+  fix: wrap the call in `try/catch(\Throwable)` and fall back to
+  `in_array($module, config('laravel-crm.modules', []), true)`. Same pattern
+  the existing `Dashboard::getWidgets()` from US-011 uses. Enables both:
+  (a) tests that mutate `config(['laravel-crm.modules' => ...])` directly
+  without booting a full panel + plugin, AND (b) production runs where the
+  plugin IS attached.
+- **`cknow/laravel-money` throws `RuntimeException: Failed to load currency
+  ISO codes` in test environments without full data files.** This crashes
+  `getStats()` immediately when the widget's money formatter reaches
+  `money($amount, $currency)`. Fix: wrap the money() call in try/catch and
+  fall back to `number_format($amount, 2) . ' ' . $currency`. Production
+  unchanged; tests now render the stat body without needing the ISO data.
+- **Filament v5's `StatsOverviewWidget::getStats()` and `getColumns()` are
+  BOTH protected.** Direct `$widget->getStats()` calls from tests fail with
+  Livewire's `BadMethodCallException: Method X::getStats does not exist`
+  (Livewire's `__call` proxy specifically blocks non-magic method access).
+  Always use `ReflectionMethod::setAccessible(true)->invoke($widget)` for
+  both methods in tests. Same discipline documented across every widget
+  test file (FeatureActivityStatsWidgetTest, FeatureVotesAndViewsChartsTest).
+- **Deal won/lost semantics use `closed_status='won'` + `closed_at IS NOT NULL`,
+  NOT `won_at`.** Cross-referenced against production migration
+  `create_laravel_crm_tables.php.stub:191-192` (enum + datetime), Deal model's
+  `$casts` array (only `closed_at` is cast, no won_at accessor), and
+  TestSchema.php:236-237. Any future widget/query filtering "deals won" MUST
+  use `->where('closed_status', 'won')->whereBetween('closed_at', [$start,
+  $end])` — same convention locked in by US-002 of the parity series
+  continuation's `dealMarkWonAction()` factory and confirmed by US-001 of this
+  new sequence (dashboard-widgets discovery story).
+- **Nullable `protected ?string $heading = null;` + `getHeading()` override
+  is the pattern for "compute heading dynamically at render time".** The
+  parent Filament `StatsOverviewWidget` declares `$heading` as a property;
+  overriding it as static/scalar prevents dynamic i18n resolution. Setting
+  it to null AND overriding `getHeading()` lets the widget compute the
+  heading string per-render via `__('...')` calls that resolve at runtime.
+  Same shape works for any widget whose heading needs translation or
+  runtime computation.
+
+
+## US-005: Rewrite MonthlyRevenueChart into period-filterable dual-series Revenue Trend line chart (new sequence)
+- Rewrote `src/Widgets/MonthlyRevenueChart.php` from the pre-existing 6-month
+  static line chart (single dataset off `Invoice.issue_date` + `total`) to the
+  AC-named period-filterable dual-series chart:
+  - `use HasChartRangeFilter;` — pulls the 13-period dropdown + `chartRange()`
+    + `advanceCursor()` + `bucketKey()` from the shared trait (US-002 of the
+    new sequence).
+  - `protected int | string | array $columnSpan = 'full';` per AC.
+  - `public ?string $filter = 'last_30_days';` — default filter matching the
+    trait's `defaultFilter()`. Same shape as FeatureVotesChart/FeatureViewsChart:
+    the property CANNOT live in the trait because Filament's parent
+    `ChartWidget::$filter` is declared `public ?string = null` and PHP's strict
+    trait-vs-parent property compatibility check would fatal at autoload.
+  - `getType(): string => 'line'` per AC.
+  - `getHeading(): ?string` returns
+    `__('laravel-crm-filament::labels.dashboard.revenue_trend')` — pre-existing
+    key from US-003 of the new sequence (dashboard translation keys).
+  - `getData(): array` returns two datasets in AC order:
+    1. **Paid invoices** — labeled `dashboard.paid_invoices` (pre-existing
+       from US-003), primary color `#05b3a9`, translucent primary background,
+       `fill: false`, `tension: 0.3`. Queries
+       `Invoice::whereNotNull('fully_paid_at')->whereBetween('fully_paid_at', [$start, $end])`
+       and buckets `$invoice->total` (stored cents ÷ 100) into the bucketed
+       time-series.
+    2. **Orders** — labeled `dashboard.orders` (pre-existing from US-003),
+       secondary color `#6505B3`, translucent secondary background,
+       `fill: false`, `tension: 0.3`. Queries
+       `Order::whereBetween('created_at', [$start, $end])` and buckets
+       `$order->total` (stored cents ÷ 100) the same way.
+  - `allTimeStart(CarbonInterface $now): CarbonInterface` — overrides the
+    trait's fallback with an entity-specific earliest computation. Reads
+    the earliest of `Invoice::whereNotNull('fully_paid_at')->min('fully_paid_at')`
+    AND `Order::min('created_at')`; falls back to `$now->copy()->subMonth()`
+    when no rows exist. Same pattern locked-in across FeatureVotesChart /
+    FeatureViewsChart / MonitorResponseTimeChart.
+- **Money conversion**: both `crm_invoices.total` and `crm_orders.total`
+  store integers (cents ×100). The model setters
+  (`Invoice::setTotalAttribute`/`Order::setTotalAttribute`) multiply raw
+  dollar inputs by 100. To render the chart in dollar units, the getData()
+  bucket accumulators divide `((int) $model->total) / 100`. Matches the
+  pre-refactor chart's `$cents / 100` conversion — no behavior change on
+  the money-unit contract; the AC's "orders summed by `created_at`" was
+  ambiguous about which money column since production `crm_orders` has
+  `subtotal`/`total`/etc. but no `amount`. Chose `total` for both datasets
+  (matches Invoice's total column AND matches the pre-existing chart's
+  Invoice-total behavior; consistent with the finance-widget parity from
+  US-004 of the new sequence which uses `total` for invoiced-this-month
+  aggregation).
+- **Widget FQCN unchanged** per AC — `VentureDrake\LaravelCrmFilament\Widgets\MonthlyRevenueChart`.
+  All 6+7 pre-existing WidgetsTest + DashboardPageTest assertions
+  (`is_subclass_of MonthlyRevenueChart, ChartWidget` + presence in
+  `Dashboard::getWidgets()` array) pass unchanged. Verified via targeted
+  filter (38 tests / 85 assertions, all green).
+- New Pest test `tests/Feature/MonthlyRevenueChartTest.php` (+9 tests /
+  ~24 assertions) locks every AC contract:
+  1. Class extends `ChartWidget` AND uses `HasChartRangeFilter`.
+  2. `columnSpan === 'full'`.
+  3. `getType()` returns `'line'`.
+  4. `$filter` default is `'last_30_days'`.
+  5. `getFilters()` returns the shared 13-key period list from the trait
+     (asserted via `array_keys()` matching the exact expected list).
+  6. `getHeading()` resolves the `dashboard.revenue_trend` translation.
+  7. `getData()` produces exactly 2 datasets labeled `dashboard.paid_invoices`
+     and `dashboard.orders` in order.
+  8. **End-to-end**: seeds paid invoices (some in window, some
+     null `fully_paid_at`) AND orders (some in window, some out), invokes
+     `getData()` via Reflection, asserts the invoice dataset sums to
+     matching in-window total AND the order dataset sums to matching
+     in-window total. Locks both the money conversion (cents÷100) AND
+     the whereNotNull filter for invoices AND the whereBetween window
+     scoping end-to-end.
+  9. Invoices whose `fully_paid_at` falls OUTSIDE the window are
+     excluded — regression guard against a future refactor that
+     accidentally broadens the query.
+- **Quality gates green**:
+  - `./vendor/bin/pint --dirty --test` reports `passed`.
+  - Targeted `pest --filter='MonthlyRevenueChart|WidgetsTest|DashboardPageTest'
+    --no-coverage` → **38 passed (85 assertions)** in 4.46s.
+  - Full plugin pest suite → **1867 passed / 32 failed / 7 skipped
+    (6417 assertions)** in 340.80s. Net +9 passing tests match exactly
+    the 9 new MonthlyRevenueChartTest cases. The 32 failures + 7 skipped
+    are IDENTICAL byte-for-byte to the pre-existing baseline noted
+    across the prior 73+ stories. Zero net new failures.
+- **Working-tree discipline**: the plugin repo carried 10 pre-existing
+  unrelated dirty files at session start (3 label files + 5 modified
+  source/test files across Fields/ProductCategory + 2 modified
+  ClickSend/Integrations pages + 2 untracked Blade views). Used
+  explicit file-path `git add src/Widgets/MonthlyRevenueChart.php
+  tests/Feature/MonthlyRevenueChartTest.php` to stage ONLY the 2 US-005
+  files. Post-commit `git status --short` shows the same 10 pre-existing
+  dirty/untracked files preserved untouched for their proper follow-up
+  story. Commit `6d1bd0e` on `main` — 2 files changed / +204 / -18.
+
+### Files changed (in `/Users/andrewdrake/Packages/laravel-crm-filament`)
+- **Modified** `src/Widgets/MonthlyRevenueChart.php` (+42 / -32 diff:
+  full rewrite from 6-month static chart to period-filterable dual-series
+  chart with HasChartRangeFilter trait + `getData()` bucketing both
+  paid invoices and orders + `allTimeStart()` computing earliest of
+  Invoice.fully_paid_at + Order.created_at)
+- **Added** `tests/Feature/MonthlyRevenueChartTest.php` (9 tests / 24
+  assertions locking every AC contract as a regression gate; ~120 lines)
+
+### Learnings for future iterations
+- **The pre-refactor MonthlyRevenueChart is the fifth widget to adopt
+  HasChartRangeFilter** (after FeatureVotesChart + FeatureViewsChart +
+  MonitorResponseTimeChart from US-002 of the new sequence). The trait
+  now serves 4 widgets across chart types (bar × 2 for votes/views;
+  line × 2 for response-time and now revenue-trend). Reusable recipe
+  for any future period-filterable chart widget:
+  1. `use HasChartRangeFilter;` at the class body.
+  2. Declare `public ?string $filter = 'last_30_days';` (or entity-
+     appropriate default matching `defaultFilter()` override).
+  3. `getType()` returns the chart type string.
+  4. `getData()` — calls `$this->chartRange()` to get
+     `[$start, $end, $bucket, $format]`, walks a `while ($cursor->lte($end))`
+     loop building bucket accumulators, queries data with
+     `whereBetween($column, [$start, $end])`, distributes rows into
+     buckets via `$this->bucketKey(...)` and `$this->advanceCursor(...)`.
+  5. `allTimeStart(CarbonInterface $now)` — overrides the trait's
+     `subMonth()` fallback with entity-specific `min($column)` query.
+  6. `getHeading()` returns the appropriate translation key.
+- **When an AC's "orders summed by X" is ambiguous about which money
+  column** (production has `subtotal`, `discount`, `tax`, `adjustments`,
+  `total` on `crm_orders`), default to `total` unless the AC specifies
+  otherwise. Reasoning: `total` is the customer-facing "how much did
+  this order cost" figure; the other columns are breakdown components.
+  Matches Invoice's total-based aggregation from the pre-refactor
+  chart and the finance widgets from US-004. Same posture applies to
+  any future revenue-adjacent chart on the Order/Invoice family.
+- **The "widget FQCN unchanged" AC clause** is trivially satisfied by
+  rewriting the file in-place (same namespace + class name); the
+  existing test assertions
+  (`is_subclass_of MonthlyRevenueChart, ChartWidget`,
+  `Dashboard::getWidgets() contains MonthlyRevenueChart::class`)
+  continue to pass because they reference the FQCN by string constant.
+  When the AC explicitly promises a rewrite preserves the FQCN, no
+  test-file updates are needed for those pre-existing assertions —
+  they lock the FQCN itself, not the class body.
+- **The `is_subclass_of` + `class_uses_recursive` two-sided check** is
+  the cleanest pattern for "extends X AND uses trait Y" contracts.
+  Both are core PHP functions returning bool; no Reflection required.
+  Reusable for any future widget that must satisfy both an inheritance
+  AND a trait application contract.
+
+
+## US-006: Add DealsPipelineValueChart, LeadsVsDealsChart, and DealStatusDoughnutChart (new sequence)
+- Delivered the 3 remaining source-parity chart widgets per AC, using
+  the shape idioms established by MonthlyRevenueChart + LeadsByStageChart
+  + CampaignPerformanceChart siblings. All three read from
+  `dashboard.*` translation keys that were pre-added by US-003 of this
+  new sequence.
+- **New `src/Widgets/DealsPipelineValueChart.php`** (~65 lines):
+  - `extends ChartWidget`, `columnSpan = 'full'`, `getType() = 'bar'`.
+  - **`getFilters(): ?array => null`** per AC (timeless — no period
+    dropdown).
+  - `getData()` iterates
+    `PipelineStage::query()->orderBy('order')->get()`, per stage sums
+    `Deal::query()->where('pipeline_stage_id', $s->id)->whereNull('closed_status')->sum('amount')`
+    and divides by 100 to convert model-stored cents back to dollars.
+    Returns single dataset labelled `dashboard.pipeline_value` +
+    stage-name labels array.
+  - `getHeading()` resolves `dashboard.pipeline_by_stage_deals`.
+  - `getOptions()` returns `['indexAxis' => 'y']` for horizontal
+    orientation per AC ("horizontal bar").
+- **New `src/Widgets/LeadsVsDealsChart.php`** (~95 lines):
+  - `extends ChartWidget`, `use HasChartRangeFilter`,
+    `columnSpan = 'full'`, `getType() = 'bar'`,
+    `public ?string $filter = 'last_30_days'` default per AC.
+  - `getData()` follows the MonthlyRevenueChart bucketed-time-series
+    pattern: build `$buckets = []` via `chartRange()` + `advanceCursor()`,
+    then two loops (Lead by `created_at`, Deal by `created_at`) with
+    `bucketKey()` for placement. Returns 2-dataset payload labelled
+    `dashboard.new_leads` + `sales.deals` with distinct
+    `backgroundColor` values (teal + purple, matching the plugin's
+    two-brand-color palette used across LeadsByStageChart +
+    MonthlyRevenueChart).
+  - `allTimeStart()` queries `min('created_at')` across BOTH Lead and
+    Deal tables, sorts, returns the earlier of the two (or
+    `now->subMonth()` fallback when both empty). Same shape as
+    MonthlyRevenueChart's dual-table `min` composite.
+  - `getHeading()` resolves `dashboard.leads_vs_deals`.
+- **New `src/Widgets/DealStatusDoughnutChart.php`** (~75 lines):
+  - `extends ChartWidget`, `use HasChartRangeFilter`,
+    **`columnSpan = ['default' => 1, 'md' => 1, 'xl' => 1]`** per AC
+    (compact tile at every breakpoint — narrower than the other two
+    widgets which span 'full'), `getType() = 'doughnut'`,
+    `public ?string $filter = 'last_30_days'` default.
+  - `getData()` runs 3 count queries against `Deal` using the
+    won/lost column semantics locked by US-001 of this new sequence:
+    - **Open**: `whereBetween('created_at', [$start, $end])->whereNull('closed_status')`.
+    - **Won**: `->where('closed_status', 'won')->whereBetween('closed_at', [$start, $end])`.
+    - **Lost**: `->where('closed_status', 'lost')->whereBetween('closed_at', [$start, $end])`.
+    Returns single 3-slice dataset with `backgroundColor` triple
+    (teal for open, green for won, red for lost) + 3 slice labels
+    from `dashboard.status_open` / `.status_won` / `.status_lost`.
+  - `allTimeStart()` queries `min('created_at')` on Deal.
+  - `getHeading()` resolves `dashboard.deal_status_distribution`.
+- **NOT YET wired into `Dashboard::getWidgets()`** — the 3 widgets are
+  built here so a future story can register them alongside the existing
+  6 core widgets. Build-now-wire-later pattern established across many
+  prior stories (US-005 lead show-page series, US-002 of PipelineStage
+  view page, US-003 of new sequence for ViewProductCategory, US-004 of
+  new sequence for FieldResource, etc.).
+- **New Pest test `tests/Feature/DealsChartsWidgetsTest.php`** (17
+  tests / 34 assertions) locks every AC contract:
+  - DealsPipelineValueChart: extends ChartWidget; `columnSpan === 'full'`
+    + `getType() === 'bar'` + `getOptions() === ['indexAxis' => 'y']`;
+    `getFilters() === null` (timeless regression guard);
+    `getHeading()` resolves the AC-named translation key; end-to-end
+    getData() seeds 2 pipelines/stages + 4 deals (2 open on Prospect,
+    1 closed on Prospect, 1 open on Qualified) and asserts per-stage
+    sums come back as dollars (5000+2500 for Prospect, 1000 for
+    Qualified, closed deal excluded).
+  - LeadsVsDealsChart: extends ChartWidget + uses HasChartRangeFilter;
+    default filter is 'last_30_days'; getType 'bar'; getHeading
+    resolves; 2 datasets labelled `new_leads` + `deals`; end-to-end
+    getData() seeds 3 leads (2 in window, 1 out of window) + 2 deals
+    (both in window) and asserts window bucketing (2/2).
+  - DealStatusDoughnutChart: extends ChartWidget + uses HasChartRangeFilter;
+    getType 'doughnut'; default filter 'last_30_days'; columnSpan
+    exactly matches AC-named array `['default' => 1, 'md' => 1, 'xl' => 1]`;
+    getHeading resolves; getData returns 3 slices with the AC-named 3
+    slice labels; end-to-end seeds 2 open + 1 won + 2 lost + 1 old-won
+    (out of window) and asserts slice counts come back as [2, 1, 2].
+- Quality gates green:
+  - `./vendor/bin/pint --dirty --test` on 4 US-006 files reports
+    `{"tool":"pint","result":"passed"}`.
+  - Targeted `pest --filter='DealsChartsWidgetsTest' --no-coverage`
+    → **17 passed (34 assertions)** in 1.73s.
+  - Full plugin pest suite → **1884 passed / 32 failed / 7 skipped
+    (6451 assertions)** in 324.21s. The 32 failures + 7 skipped are
+    IDENTICAL byte-for-byte to the pre-existing baseline noted across
+    the prior 73+ stories. Zero net new failures.
+- **Working-tree discipline**: the plugin repo carried 10 pre-existing
+  unrelated dirty files + 2 untracked at session start (3 label files
+  + 5 modified source files + 2 test files + 2 untracked views). Used
+  explicit file-path `git add` to stage ONLY the 4 US-006 files (3
+  new widgets + 1 new test file). Post-commit `git status --short`
+  shows the 10 pre-existing dirty + 2 untracked files preserved
+  untouched for their proper follow-up story. Commit `9e4c86d` on
+  `main` in the plugin repo — 4 files changed / +446 insertions.
+
+### Files changed (in `/Users/andrewdrake/Packages/laravel-crm-filament`)
+- **Added** `src/Widgets/DealsPipelineValueChart.php` (~65 lines;
+  timeless horizontal bar chart with `getFilters() = null` +
+  `indexAxis => 'y'` in `getOptions()`)
+- **Added** `src/Widgets/LeadsVsDealsChart.php` (~95 lines; grouped
+  bar chart via HasChartRangeFilter + dual dataset for Lead/Deal
+  counts by created_at bucket)
+- **Added** `src/Widgets/DealStatusDoughnutChart.php` (~75 lines;
+  3-slice doughnut with period filter + AC-named
+  columnSpan-per-breakpoint array + open/won/lost via closed_status
+  column semantics)
+- **Added** `tests/Feature/DealsChartsWidgetsTest.php` (17 tests /
+  34 assertions covering every AC contract; includes 3 end-to-end
+  seeded-fixture tests exercising the actual query paths)
+
+### Learnings for future iterations
+- **`getFilters(): ?array` returning `null` is Filament v5's canonical
+  "no dropdown" contract for ChartWidget.** Distinct from returning
+  an empty array `[]` (which would render an empty dropdown UI).
+  Return null when the widget is truly timeless (as in the AC's
+  "Timeless (no filter)" directive for DealsPipelineValueChart) so
+  Filament omits the filter select entirely from the widget header.
+  Reusable for any future timeless chart widget.
+- **`getOptions()` on ChartWidget returns a `chartjs`-shaped options
+  array** that gets merged into the underlying Chart.js instance
+  config. `['indexAxis' => 'y']` on a bar chart is the Chart.js v3+
+  way to render horizontal bars (Chart.js v2 used `type: 'horizontalBar'`
+  which was deprecated). Same pattern reusable for any future
+  "horizontal bar variant" chart widget.
+- **Deal won/lost column semantics use `closed_status` + `closed_at`
+  in tandem**, verified against production migration + Deal model
+  during US-001 of this new sequence:
+  - Open deals: `whereNull('closed_status')` OR `whereNull('closed_at')`
+    (both indicate not-yet-closed; using `closed_status` is more
+    explicit).
+  - Won: `where('closed_status', 'won')->whereBetween('closed_at', ...)`.
+  - Lost: `where('closed_status', 'lost')->whereBetween('closed_at', ...)`.
+  Same convention locked in by US-002 of the parity series continuation
+  (dealMarkWonAction/dealMarkLostAction) and CrmStatsOverview
+  (US-004 of this new sequence).
+- **The `sales.deals` translation key was reused** for LeadsVsDealsChart's
+  second dataset label rather than creating a new `dashboard.deals` key.
+  Same "reuse existing sibling namespace value verbatim" discipline
+  applied by US-002 of the new sequence for `fields.attached_to`
+  reusing `sales.attached_to` values. Cheaper than adding N more
+  duplicate keys just to keep everything under one namespace.
+- **The bucketed-time-series pattern** (via `HasChartRangeFilter` +
+  cursor-walk over `chartRange()` + `bucketKey()` per row) is now
+  established across 4 widgets: MonthlyRevenueChart, FeatureVotesChart,
+  FeatureViewsChart, MonitorResponseTimeChart, and now LeadsVsDealsChart
+  makes 5. Copy-and-swap-model-plus-column recipe takes ~5 minutes
+  per new time-series widget. Alternative shape locks: single dataset
+  (Feature votes/views), dual dataset (Leads vs Deals; Paid invoices
+  vs Orders in MonthlyRevenueChart), perf-threshold dashed-line dataset
+  (MonitorResponseTimeChart's variant).
+
+
+## US-007: Rewrite TasksDueTodayList into an Upcoming Tasks list (new sequence)
+- Rewrote `src/Widgets/TasksDueTodayList.php` (FQCN preserved) to switch
+  from a "tasks due today" filter to the AC-named "next 5 incomplete tasks
+  ordered by `due_at` asc" contract:
+  - **Query** flipped from
+    `->whereNull('completed_at')->whereDate('due_at', today())->orderBy('due_at')`
+    to `Task::query()->whereNull('completed_at')->orderBy('due_at')->limit(5)`.
+    The `->limit(5)` cap is set at the query level so the paginator can
+    be disabled cleanly (`->paginated(false)`).
+  - **Heading**: `protected static ?string $heading = null;` + new
+    `public function getHeading(): ?string` returning
+    `__('laravel-crm-filament::labels.dashboard.upcoming_tasks')`. The
+    null static + dynamic-getter pattern mirrors the CrmStatsOverview /
+    DealsValueStat / ContactsStatsOverview widgets from US-004 of the
+    new sequence.
+  - **Subtitle**: Table `->description(...)` set to
+    `__('laravel-crm-filament::labels.dashboard.overdue_n', ['count' => static::overdueCount()])`.
+    `overdueCount()` is a new protected static that queries
+    `Task::whereNull('completed_at')->where('due_at', '<', now())->count()`
+    — computes the overdue-count independently of the visible 5-row
+    window so the subtitle reflects total overdue debt across all users,
+    not just the top 5.
+  - **Empty state**: `->emptyStateHeading(...)` flipped from the
+    literal `'No tasks due today'` to
+    `__('laravel-crm-filament::labels.dashboard.no_upcoming_tasks')`
+    per AC.
+  - **`due_at` column display**: swapped `->time()` for `->dateTime()`
+    since the widget now shows tasks across MANY days (not just today's).
+    Time-only rendering would confuse rows whose due_at is next week.
+  - **Column labels + label references preserved verbatim**: `name`
+    (limit 60, wrap), `due_at` (label `money.due`), `assignedToUser.name`
+    (label `fields.assignee`, placeholder `'Unassigned'`),
+    `taskable_type` (label `fields.linked_to`, formatted via
+    `class_basename`).
+  - `columnSpan = 'full'` unchanged.
+- Updated `tests/Feature/WidgetsTest.php` per AC's "Update the
+  TasksDueTodayList heading assertion" directive. The pre-existing
+  test `it('table widgets declare a heading static property', ...)`
+  read `$reflection->getStaticPropertyValue('heading')` on BOTH
+  TasksDueTodayList AND RecentActivityList — but the new
+  TasksDueTodayList's static `$heading` is now null (heading comes
+  from `getHeading()`). Flipped to
+  `it('table widgets declare a non-empty heading', ...)` which:
+  1. Reads RecentActivityList's static `$heading` (unchanged
+     behavior — still has a scalar default).
+  2. Reads TasksDueTodayList's `getHeading()` via public API and
+     asserts `->toBe(__('...dashboard.upcoming_tasks'))`. Locks the
+     AC's "heading reads `Upcoming tasks` via translation key"
+     contract precisely — no reflection into the (now-null) static
+     property.
+- **Quality gates green**:
+  - `./vendor/bin/pint --dirty --test` on both changed files reports
+    `{"tool":"pint","result":"passed"}`.
+  - AC-named targeted `pest --filter='WidgetsTest|DashboardPageTest' --no-coverage`
+    → **46 passed (105 assertions)** in 4.35s. All 6 pre-existing
+    DashboardPageTest cases + 5 WidgetsTest cases + 35 sibling
+    Dashboard/DealsCharts tests remain green.
+  - Full plugin pest suite → **1884 passed / 32 failed / 7 skipped
+    (6451 assertions)** in 356.07s. The 32 failures + 7 skipped are
+    IDENTICAL byte-for-byte to the pre-existing baseline noted
+    across the prior 73+ stories. Zero net new failures. Passing
+    count preserved exactly at 1884 (matches post-US-006 baseline)
+    — my rewrite added no new tests; the WidgetsTest heading test
+    was flipped in place (1 test → 1 test with different body).
+- **Working-tree discipline**: the plugin repo carried 10
+  pre-existing unrelated dirty files + 2 untracked at session start
+  (3 label files with pre-existing `sales.products` / `sales.fields`
+  / dashboard-namespace-adjacent additions from prior series + 5
+  modified source/test files across Fields/ProductCategory/Pages/
+  Integrations/ClickSend + 2 untracked Blade views). Used explicit
+  `git add src/Widgets/TasksDueTodayList.php tests/Feature/WidgetsTest.php`
+  to stage ONLY the 2 US-007 files. Commit `279f501` on `main` —
+  2 files changed, 32 insertions / 13 deletions. Post-commit
+  `git status --short` shows the same 10 pre-existing dirty + 2
+  untracked files preserved untouched for their proper follow-up
+  story.
+
+### Files changed (in `/Users/andrewdrake/Packages/laravel-crm-filament`)
+- **Modified** `src/Widgets/TasksDueTodayList.php` (+22/-6 diff:
+  static `$heading` → null; new `getHeading()` returning
+  `dashboard.upcoming_tasks`; query rewritten to next-5-incomplete
+  ordered by due_at asc; new `overdueCount()` protected static;
+  Table `->description(...)` for overdue subtitle;
+  `->emptyStateHeading(dashboard.no_upcoming_tasks)`;
+  `->paginated(false)`; due_at column switched from `->time()` to
+  `->dateTime()`)
+- **Modified** `tests/Feature/WidgetsTest.php` (+10/-7 diff: flipped
+  the "table widgets declare a heading static property" test to
+  "table widgets declare a non-empty heading" — RecentActivityList
+  still checked via static property Reflection; TasksDueTodayList
+  now checked via `getHeading()` public API asserting the resolved
+  `dashboard.upcoming_tasks` translation)
+
+### Learnings for future iterations
+- **The `nullable protected static ?string $heading = null;` +
+  `public function getHeading(): ?string` override pattern** is
+  the right shape whenever a widget's heading needs runtime
+  translation (via `__()`) or dynamic computation. Filament's
+  parent `TableWidget` (via `HasHeading` concern) reads the static
+  property first AND falls through to the `getHeading()` method,
+  so the override chain works cleanly. Same pattern locked-in by
+  CrmStatsOverview / DealsValueStat / ContactsStatsOverview from
+  US-004 of the new sequence. Any future widget that needs
+  i18n-driven headings should use this shape, NOT a static string
+  literal (which would produce untranslated English in non-en
+  locales).
+- **Filament's `Table::description(string | Htmlable | Closure | null)`**
+  is the right hook for a widget subtitle (text below the heading
+  in the table's card header). Distinct from column-level
+  `description()` (which adds per-row hint text). For dynamic
+  subtitles that depend on a separate query (e.g. total overdue
+  count, distinct from the visible-row-window's count), pass a
+  Closure to defer the query to render time — OR pass a pre-computed
+  string when the subtitle is stable within the render pass. This
+  story uses a pre-computed string via `overdueCount()` because
+  the query is cheap and the render doesn't need lazy evaluation.
+- **The overdue count is a query INDEPENDENT of the visible 5-row
+  window**. The AC says "next 5 incomplete tasks... subtitle shows
+  overdue count" — the overdue-count subtitle reflects ALL overdue
+  tasks (which the user needs to be aware of even when the top-5
+  visible tasks are all future-due), not just those within the
+  paginated window. Recipe: when a widget's subtitle summarizes
+  a broader state than the widget's own visible rows, factor the
+  subtitle's query into a separate method — don't reuse the
+  widget's own `query()` builder.
+- **The 32-failure pre-existing baseline preserved gate has now
+  been re-confirmed across 74+ consecutive stories with byte-exact
+  parity.** The failure pattern is extremely stable; any future
+  deviation from 32/7 is a regression to investigate, not a
+  baseline shift.
+
+
+## US-008: Wire widgets into Dashboard and LaravelCrmPlugin with per-module gating (new sequence)
+- Rewrote `src/Pages/Dashboard.php` to satisfy the AC:
+  - Added generic `protected static function moduleEnabled(string $module): bool`
+    that generalizes the pre-existing `campaignsModuleEnabled()`. Same 3-tier
+    resolution: (1) ask plugin bound to current panel via
+    `$panel->getPlugin('laravel-crm')`; (2) on `Throwable`, fall through
+    to (3) config check via
+    `in_array($module, config('laravel-crm.modules', []), true)`.
+  - Kept `campaignsModuleEnabled(): bool` as a `@deprecated` thin wrapper
+    that delegates to `moduleEnabled('email-marketing')` so any host
+    subclass overriding it doesn't break.
+  - Rewrote `getWidgets(): array` to emit widgets in the AC-named 11-widget
+    layout order with per-module gating:
+    1. `CrmStatsOverview` — gated on `moduleEnabled('leads') || moduleEnabled('deals')`.
+    2. `DealsValueStat` — gated on `invoices || quotes || orders`.
+    3. `ContactsStatsOverview` — **ungated** (always present).
+    4. `MonthlyRevenueChart` — gated on `invoices || orders`.
+    5. `DealsPipelineValueChart` — gated on `deals`.
+    6. `LeadsVsDealsChart` — gated on `leads || deals`.
+    7. `DealStatusDoughnutChart` — gated on `deals`.
+    8. `LeadsByStageChart` — gated on `leads`.
+    9. `TasksDueTodayList` — **ungated**.
+    10. `RecentActivityList` — **ungated**.
+    11. `CampaignPerformanceChart` — gated on `email-marketing` (moved from
+        pre-existing `campaignsModuleEnabled()` helper to the generic
+        `moduleEnabled()` path; same behavior).
+- Extended `LaravelCrmPlugin::register()`'s `$panel->widgets([...])` array
+  from 6 → 10 widgets (+CampaignPerformanceChart when email-marketing on):
+  added the 4 new widget FQCNs (`ContactsStatsOverview`,
+  `LeadsVsDealsChart`, `DealsPipelineValueChart`, `DealStatusDoughnutChart`)
+  UNCONDITIONALLY per AC's "so they're footer-available on other pages"
+  contract. Added 4 corresponding `use` imports alphabetically. Pint's
+  `ordered_imports` fixer reordered the imports after insertion. Added a
+  2-line comment above the `$widgets` array explaining the split between
+  panel-level "footer-available" registration and Dashboard-page-level
+  per-module gating.
+- Rewrote `tests/Feature/DashboardPageTest.php` from 8 tests → 16 tests
+  (net +8) locking every AC contract as a regression gate:
+  - Preserved 6 pre-existing tests (Dashboard class extends BaseDashboard,
+    Dashboard registers on fresh panel, host-registered Dashboard
+    inhibits ours (2 variants), withDashboard(false) opt-out,
+    CampaignPerformanceChart omission).
+  - **New file-local test helper `us008WithPanel(array $modules, callable $fn)`**
+    builds a fresh Panel + LaravelCrmPlugin, calls **both**
+    `$panel->plugin($plugin)` AND `$plugin->register($panel)`, sets the
+    current panel via `Filament::setCurrentPanel($panel)`, invokes the
+    callback, then tears down via `Filament::setCurrentPanel(null)` in a
+    `try/finally`. The double-registration is critical: `$plugin->register($panel)`
+    populates resources/pages/widgets, but `$panel->getPlugin('laravel-crm')`
+    only resolves the plugin instance after `$panel->plugin($plugin)`
+    has added it to the panel's plugin registry. Same discipline noted
+    in v0.x US-011 (Dashboard registration) + US-002 of the activity
+    feed series.
+  - 10 new tests:
+    1. Full 11-widget AC-order layout when every gated module is enabled.
+    2. Ungated-only layout when every module is disabled — asserts exactly
+       `[ContactsStatsOverview, TasksDueTodayList, RecentActivityList]`.
+    3. Leads-gate drop: `LeadsByStageChart` absent when leads=false.
+       Confirms `CrmStatsOverview` + `LeadsVsDealsChart` STAY because
+       their OR gate is satisfied by deals=true.
+    4. Deals-gate drop: `DealsPipelineValueChart` + `DealStatusDoughnutChart`
+       both absent when deals=false. Same OR-satisfaction check for
+       `CrmStatsOverview` + `LeadsVsDealsChart` staying via leads=true.
+    5. Revenue Trend drops when BOTH invoices AND orders disabled.
+    6. Finance stats OR-gate dual-case: only quotes on → widget present;
+       none on → absent.
+    7. Ungated 3-widget triple always present across both fully-enabled
+       AND fully-disabled scenarios.
+    8. Plugin `register()` adds the 4 new widget FQCNs to
+       `$panel->getWidgets()` unconditionally.
+    9. CampaignPerformanceChart last-position + inclusion when
+       email-marketing on.
+    10. Reflection contract on `moduleEnabled()`: protected + static +
+       1 required parameter + returns true when plugin says so AND
+       false when module is off.
+- **Quality gates green**:
+  - `./vendor/bin/pint --dirty --test` on all 3 changed files reports
+    `{"tool":"pint","result":"passed"}` after auto-fix of
+    `ordered_imports` on Dashboard.php + `unary_operator_spaces` +
+    `not_operator_with_successor_space` + `ordered_imports` on
+    LaravelCrmPlugin.php + `braces_position` + `single_line_empty_body`
+    + `ordered_imports` on the new test file.
+  - Targeted `pest --filter='DashboardPageTest' --no-coverage` →
+    **16 passed (36 assertions)** in 2.56s. Every one of the 8 pre-existing
+    scenarios + 8 new US-008 contracts green.
+  - Full plugin pest suite → **1892 passed / 32 failed / 7 skipped (6477
+    assertions)** in 360.83s. The 32 failures + 7 skipped are IDENTICAL
+    byte-for-byte to the pre-existing baseline noted across the prior
+    73+ stories in the parity series + features+monitors series + product
+    list series + prices RM series + ViewFeature redesign series + Settings
+    cluster evacuation series + activity feed series + new stories series
+    + chat list rewrite series + calendar refactor series + pipeline view
+    page series + PipelineStage view page series + new sequence
+    (ProductCategory parity + LeadSource redesign + LabelResource arc +
+    TaxRate + Field/FieldGroup + chat widget parity + integrations sub-nav
+    + dashboard parity US-001..US-007). Net +8 passing tests match exactly
+    the +8 net delta (16 new tests replaced 8 pre-existing tests in
+    DashboardPageTest). Zero net new failures.
+- **Working-tree discipline**: the plugin repo carried 11 pre-existing
+  unrelated dirty files + 2 untracked at session start (3 label files +
+  6 modified source/test files across Fields/ProductCategory/Pages/
+  Integrations/ClickSend + 2 modified pre-existing ProductCategory test
+  files + 2 untracked Blade views). Used explicit file-path `git add` to
+  stage ONLY the 3 US-008 files. Post-commit `git status --short` shows
+  the same 11 pre-existing dirty/untracked files preserved untouched for
+  their proper follow-up story. Commit `4ebe3ff` on `main` — 3 files
+  changed / +259 insertions / -55 deletions.
+
+### Files changed (in `/Users/andrewdrake/Packages/laravel-crm-filament`)
+- **Modified** `src/Pages/Dashboard.php` (+98/-33 diff: generalize
+  `campaignsModuleEnabled()` to `moduleEnabled(string): bool`; rewrite
+  `getWidgets()` with 11-widget AC-order + per-module gating; keep
+  `campaignsModuleEnabled()` as @deprecated thin wrapper)
+- **Modified** `src/LaravelCrmPlugin.php` (+12/-0 diff: 4 new widget
+  imports (Contacts/DealsPipelineValue/LeadsVsDeals/DealStatusDoughnut)
+  alphabetically placed + 4 new entries appended to `$widgets` array in
+  register(); explanatory 2-line comment)
+- **Modified** `tests/Feature/DashboardPageTest.php` (+204/-55 diff:
+  full rewrite from 8 tests to 16 tests; added `us008WithPanel()`
+  file-local helper with double-registration pattern; 10 new tests
+  covering full-layout ordering + per-module gate drops + ungated-widget
+  presence + plugin-widget-list registration + moduleEnabled reflection
+  contract)
+
+### Learnings for future iterations
+- **The double-registration pattern (`$panel->plugin($plugin)` AND
+  `$plugin->register($panel)`) is required for
+  `LaravelCrmPlugin::isModuleEnabled()`-driven runtime resolution in
+  tests.** Without `$panel->plugin($plugin)`, the panel's internal
+  `$plugins` map stays empty and `$panel->getPlugin('laravel-crm')`
+  throws `LogicException: Plugin [laravel-crm] is not registered
+  for panel [X]`. This is a recurring test-setup gotcha across
+  Dashboard-widget / module-gating / plugin-hook scenarios in this
+  codebase — same posture as v0.x US-011 (Dashboard registration)
+  and US-002 of the activity feed series. Reusable rule: **any
+  test that exercises `LaravelCrmPlugin::get()->isModuleEnabled()`
+  or `moduleEnabled(...)` in production code MUST call both
+  `$panel->plugin($plugin)` AND `$plugin->register($panel)` in
+  setup.** The plugin instance produced by `LaravelCrmPlugin::make()`
+  is fresh each time (no singleton), so the `->modules([...])`
+  fluent setter's state carries through the whole chain — you set
+  the modules once at construction, attach to the panel, register
+  on the panel, set as current panel, and the module resolution
+  works end-to-end.
+- **The generic `moduleEnabled(string): bool` helper's fallback
+  chain follows the exact shape of the pre-existing
+  `campaignsModuleEnabled()`.** Three tiers:
+  1. Ask the plugin bound to the current panel (production path
+     when Filament boots normally).
+  2. `try/catch(\Throwable)` on step 1 — panel exists but plugin
+     isn't attached; original helper additionally checked
+     `in_array($widgetClass, $panel->getWidgets(), true)` as a
+     "did register() decide to include this widget" proxy. For a
+     generic module check (not tied to a specific widget class),
+     this proxy doesn't apply — fall directly through to config.
+  3. `in_array($module, (array) config('laravel-crm.modules', []), true)`
+     — the ultimate fallback matches how core CRM stores the flat
+     array of enabled module slugs.
+  When a helper generalizes N specific `xxxModuleEnabled()` methods,
+  the widget-list-inspection fallback (step 2 in the original) has
+  no clean generic equivalent — dropping it and going straight
+  from "plugin throws" → config is the correct simplification.
+- **Keeping `campaignsModuleEnabled()` as a `@deprecated` thin
+  wrapper** preserves backwards compatibility with any host that
+  overrode the method in a subclass. The wrapper delegates:
+  `return static::moduleEnabled('email-marketing');`. Same
+  discipline pattern documented across many "extract helper +
+  keep original as thin wrapper" refactors. The `@deprecated`
+  docblock signals intent — host subclasses can migrate at their
+  own pace.
+- **The AC's "toggling a module off via
+  `LaravelCrmPlugin::make()->withLeads(false)`" clause references
+  a fluent setter that doesn't exist** on the plugin (`withLeads`
+  isn't a method — the plugin has `withChat`, `withEmailMarketing`,
+  `withSmsMarketing`, `withXero`, `withCustomers`, `withFeatures`,
+  `withMonitoring`, `withDashboard` but no per-primary-module
+  setter). Read literally, the AC wants: "toggling the leads
+  module off removes leads-gated widgets from `getWidgets()`
+  output". The test satisfies this via the generic `modules([...])`
+  fluent setter (`->modules(['leads' => false])`), which is the
+  supported way to toggle any module. Same "AC's prose references
+  a non-existent method but the intent is clear" gotcha noted
+  across many prior stories — read the AC's intent, use the
+  supported API to satisfy it.
+- **The 32-failure pre-existing baseline preserved gate has now
+  been re-confirmed across 74+ consecutive stories with byte-exact
+  parity.** Extremely stable pattern.
+
+
+## US-009: Add DashboardParityWidgetsTest and DashboardParityModuleGatingTest (new sequence)
+- Delivered 2 new comprehensive regression-gate test files + extended
+  `WidgetsTest`'s dataset to cover the 4 new dashboard-parity widgets
+  from US-006 (ContactsStatsOverview, LeadsVsDealsChart,
+  DealsPipelineValueChart, DealStatusDoughnutChart). All widget-level
+  structural + module-gating contracts now locked in single-file
+  regression gates matching the shape of `FeatureVotesAndViewsChartsTest`
+  and `FeatureMonitorPluginWiringTest` respectively.
+- **New `tests/Feature/DashboardParityWidgetsTest.php`** (~15 tests /
+  ~45 assertions). Structured in three blocks:
+  - **Period-filterable charts** (LeadsVsDealsChart +
+    DealStatusDoughnutChart via `dashboard_parity_period_charts` dataset,
+    2 rows × 5 dataset-driven `it(...)` cases = 10 tests): extends
+    ChartWidget; uses HasChartRangeFilter trait; `$filter` defaults to
+    `'last_30_days'`; `getFilters()` returns exactly the 13 period keys
+    from the shared trait in order (today...all_time); `getData()`
+    returns `datasets` + `labels` keyed array shape.
+  - **DealsPipelineValueChart** (timeless, 3 standalone tests):
+    extends ChartWidget; `getFilters() === null` (regression guard for
+    AC-mandated "no period dropdown"); `getData()` iterates seeded
+    `PipelineStage` rows ordered by `order` ASC — seeds 3 stages
+    (Prospect / Qualified / Won) and asserts labels come back in that
+    exact order + dataset count matches stage count.
+  - **ContactsStatsOverview** (2 standalone tests): extends
+    StatsOverviewWidget; `getStats()` returns exactly 1 `Stat` instance
+    on empty DB.
+- **New `tests/Feature/DashboardParityModuleGatingTest.php`** (~15 tests
+  / ~30 assertions). Mirrors `FeatureMonitorPluginWiringTest`'s
+  double-registration `parityGatingWithPanel()` helper. Test structure:
+  - **Parametric per-module dataset `parity_module_gates`**: 3 rows
+    (leads / deals / email-marketing) × 2 dataset-driven tests
+    (module-off drops widgets; module-on includes widgets). Covers
+    strictly single-module-gated widgets: LeadsByStageChart (leads);
+    DealsPipelineValueChart + DealStatusDoughnutChart (deals);
+    CampaignPerformanceChart (email-marketing).
+  - **OR-gate coverage** (6 standalone tests): CrmStatsOverview drops
+    only when BOTH leads AND deals disabled + stays present when
+    either leads OR deals enabled; same shape for LeadsVsDealsChart;
+    DealsValueStat drops only when quotes AND orders AND invoices
+    ALL disabled + stays when any of the three enabled; MonthlyRevenueChart
+    drops only when BOTH invoices AND orders disabled + stays when
+    either enabled.
+  - **Ungated triple regression guard** (1 test): asserts
+    ContactsStatsOverview, TasksDueTodayList, RecentActivityList all
+    present regardless of module state.
+- **Extended `tests/Feature/WidgetsTest.php`** to include all 4 new
+  widget FQCNs in the `widgets` dataset (was 6 entries → now 10). Added
+  `use` imports for the 4 new classes. Also extended the "stats widgets
+  declare a non-empty heading" loop to include `ContactsStatsOverview`
+  alongside `CrmStatsOverview` + `DealsValueStat`. Net +4 dataset-driven
+  test iterations from the widget count change alone.
+- **AC's "widget list assertion updated to the new grid order" for
+  DashboardPageTest** was ALREADY satisfied by US-008 of the new
+  sequence (commit `4ebe3ff` added
+  `it('returns the full 11-widget layout in AC order when every gated
+  module is enabled')` locking the exact 11-widget order via
+  `->toBe([CrmStatsOverview, DealsValueStat, ContactsStatsOverview,
+  MonthlyRevenueChart, DealsPipelineValueChart, LeadsVsDealsChart,
+  DealStatusDoughnutChart, LeadsByStageChart, TasksDueTodayList,
+  RecentActivityList, CampaignPerformanceChart])`). No changes needed
+  to `DashboardPageTest` for this story. Documented in this progress
+  entry so a future reader understands the coverage is complete.
+- **Quality gates green**:
+  - `./vendor/bin/pint --dirty --test` reports
+    `{"tool":"pint","result":"passed"}` on the 3 US-009 files.
+  - Targeted `pest --filter='DashboardParityWidgets|DashboardParityModuleGating|WidgetsTest'
+    --no-coverage` → **72 passed (153 assertions)** in 5.47s. All 15
+    DashboardParityWidgetsTest cases + 15 DashboardParityModuleGatingTest
+    cases + 12 WidgetsTest cases (now 10 dataset iterations + 2 non-
+    dataset tests) + 30 pre-existing DealsChartsWidgetsTest cases (which
+    the filter matches) green.
+  - Full plugin pest suite → **1926 passed / 32 failed / 7 skipped
+    (6535 assertions)** in 308.30s. The 32 failures + 7 skipped are
+    IDENTICAL byte-for-byte to the pre-existing baseline noted across
+    the prior 74+ stories in the parity series + features+monitors
+    series + product list series + prices RM series + ViewFeature
+    redesign series + Settings cluster evacuation series + activity feed
+    series + new stories series + chat list rewrite series + calendar
+    refactor series + pipeline view page series + PipelineStage view
+    page series + new sequence (ProductCategory parity + LeadSource
+    redesign + LabelResource arc + TaxRate + Field/FieldGroup + chat
+    widget parity + integrations sub-nav + dashboard parity US-001..US-008).
+    Net +34 passing tests vs the post-US-008 baseline of 1892:
+    - DashboardParityWidgetsTest: +15 tests
+    - DashboardParityModuleGatingTest: +15 tests
+    - WidgetsTest: +4 dataset iterations (6 → 10 widget entries × 1
+      dataset test = +4).
+    Comfortably above the AC-named "grows by ~20–30" target. Zero net
+    new failures.
+- **Working-tree discipline**: the plugin repo carried 11 pre-existing
+  unrelated dirty files + 2 untracked at session start (3 label files
+  + 5 modified source files across Fields/ProductCategory/Pages/
+  Integrations/ClickSend + 3 modified test files including
+  ClickSendIntegrationPageTest + ProductCategory tests + 2 untracked
+  Blade views). Used explicit file-path `git add` to stage ONLY the 3
+  US-009 files. Post-commit `git status --short` shows the same 11
+  pre-existing dirty + 2 untracked files preserved untouched for their
+  proper follow-up story. Commit `775bcc1` on `main` — 3 files changed
+  / +330 insertions / -1 deletion.
+
+### Files changed (in `/Users/andrewdrake/Packages/laravel-crm-filament`)
+- **Added** `tests/Feature/DashboardParityWidgetsTest.php` (~123 lines;
+  15 tests / 45 assertions locking the widget-level structural
+  contracts for the 4 new widgets — mirrors
+  `FeatureVotesAndViewsChartsTest` shape with entity-specific dataset
+  + timeless-chart branch + non-chart-widget branch)
+- **Added** `tests/Feature/DashboardParityModuleGatingTest.php` (~198
+  lines; 15 tests / 30 assertions locking Dashboard::getWidgets()
+  per-module gating with a `parityGatingWithPanel()` helper mirroring
+  the US-008 `us008WithPanel()` shape; per-module dataset covers
+  single-module-gated widgets, OR-gate coverage for multi-condition
+  widgets, ungated-triple regression guard)
+- **Modified** `tests/Feature/WidgetsTest.php` (+10/-1 diff: 4 new
+  widget imports; 4 new dataset entries in `widgets`; extended
+  "stats widgets declare a non-empty heading" loop to include
+  `ContactsStatsOverview`)
+
+### Learnings for future iterations
+- **The AC's "extend `DashboardPageTest` expected widget-list
+  assertion updated to the new grid order" clause** was already
+  satisfied by US-008 of the new sequence (commit `4ebe3ff` locked
+  the full 11-widget AC-order assertion via
+  `it('returns the full 11-widget layout in AC order when every gated
+  module is enabled')`). When an AC bullet references pre-existing
+  work, the correct response is verify-and-noop for that bullet AND
+  document the pre-existing coverage in the progress entry so future
+  readers understand no additional edits were needed. Same pattern
+  as many prior "already-satisfied" ACs across the conversation
+  series.
+- **The parametric per-module dataset in DashboardParityModuleGatingTest**
+  intentionally covers only STRICTLY single-module-gated widgets
+  (LeadsByStageChart / DealsPipelineValueChart+DealStatusDoughnutChart /
+  CampaignPerformanceChart). OR-gated widgets (CrmStatsOverview:
+  leads||deals; LeadsVsDealsChart: leads||deals; DealsValueStat:
+  quotes||orders||invoices; MonthlyRevenueChart: invoices||orders)
+  need standalone tests because toggling ONE module of the OR-pair
+  isn't sufficient to drop the widget — the OTHER half of the OR
+  still satisfies the gate. Standard idiom: for a widget with an
+  OR-gate over N modules, write two focused tests (a) all N off →
+  widget drops; (b) any 1 of N on → widget stays. Reusable for any
+  future OR-gated widget verification.
+- **The DashboardParityWidgetsTest structure with three blocks**
+  (period-filterable via dataset + timeless standalone + non-chart
+  standalone) is the right shape when a "cover N widgets" AC has
+  widgets with different superclass hierarchies AND different filter
+  contracts. ContactsStatsOverview can't share the ChartWidget
+  dataset because it extends StatsOverviewWidget (no `getFilters`,
+  no `getData` in the same shape). DealsPipelineValueChart can't
+  share the period-filterable dataset because its `getFilters()`
+  returns null (whereas the others return the 13-key array). The
+  three-block structure keeps each contract tightly scoped without
+  forcing awkward conditionals inside dataset-driven tests.
+- **The `parityGatingWithPanel()` helper's double-registration
+  pattern** (`$panel->plugin($plugin)` AND `$plugin->register($panel)`)
+  is critical for `Dashboard::moduleEnabled()`-driven tests to see
+  the `->modules([...])` state. Without `$panel->plugin($plugin)`,
+  the panel's internal `$plugins` map stays empty and
+  `$panel->getPlugin('laravel-crm')` throws `LogicException: Plugin
+  [laravel-crm] is not registered for panel [X]`. Same discipline
+  locked in by US-008's `us008WithPanel()` helper and US-002 of the
+  activity feed series and v0.x US-011 of the Dashboard registration
+  series. Reusable template for any future "test exercises plugin's
+  isModuleEnabled at runtime" story.
+- **The 32-failure pre-existing baseline preserved gate has now
+  been re-confirmed across 75+ consecutive stories with byte-exact
+  parity.** The failure pattern is extremely stable; any future
+  deviation from 32/7 is a regression to investigate.
+
+
+## US-010: Manual browser walkthrough and cross-check against source `/crm/dashboard` (new sequence — dashboard parity wrap)
+- Verification-only story wrapping the dashboard parity redesign arc
+  (US-001..US-009 of the new sequence: schema patch discovery →
+  HasChartRangeFilter trait → dashboard.* translation keys → stat
+  widgets rewrite → MonthlyRevenueChart rewrite → 3 new Deals charts →
+  TasksDueTodayList rewrite → wire into Dashboard + LaravelCrmPlugin →
+  regression test files). No production code changes. Three automated
+  proxy gates all satisfied against the plugin tree at
+  `/Users/andrewdrake/Packages/laravel-crm-filament`:
+  - **Gate 1 — `./vendor/bin/pint --dirty --test`** →
+    `{"tool":"pint","result":"passed"}`. Working tree at session start
+    carried 10 pre-existing unrelated dirty files + 2 untracked (3 label
+    files with pre-existing `sales.products` / `sales.fields` /
+    `integrations.xero_description` additions from prior series + 5
+    modified source files across Fields / ProductCategory / Pages /
+    Integrations / ClickSend + 3 modified test files + 2 untracked Blade
+    views for clicksend + integrations). None staged; discipline
+    preserved for their proper follow-up story.
+  - **Gate 2 — targeted `pest --filter='Dashboard|Widget|Localization'
+    --no-coverage`** → **151 passed / 1 skipped (381 assertions)** in
+    13.35s, fully green. Covers every dashboard-family test file:
+    DashboardPageTest (16), DashboardStatsWidgetsTest (13),
+    DashboardParityWidgetsTest (15), DashboardParityModuleGatingTest (15),
+    MonthlyRevenueChartTest (9), DealsChartsWidgetsTest (17),
+    WidgetsTest (12 with the 4 new widget dataset entries from US-009),
+    FeatureActivityStatsWidgetTest (8), FeatureVotesAndViewsChartsTest
+    (26 + 2 skipped), MonitorResourceTest (2 header widget cases),
+    LocalizationTest (7 key-parity cases), plus siblings that filter
+    matches through UsesExternalIdRoutingTraitTest + MonitorResourceTest
+    + SettingsNavGroupTest.
+  - **Gate 3 — full `pest --no-coverage`** → **1926 passed / 32 failed /
+    7 skipped (6535 assertions)** in 310.01s. The 32 failures + 7
+    skipped are IDENTICAL byte-for-byte to the pre-existing baseline
+    noted across the prior 75+ stories (Quote/Invoice/Order/PurchaseOrder/
+    Delivery parity tests + Audits/Portal/Pipeline tests +
+    RelationManagersTest expectations on the Crm* RM family). Passing
+    count preserved at 1926 (matches post-US-009 baseline exactly).
+    Zero net new failures. The CRITICAL contract — **32 failures + 7
+    skipped IDENTICAL to the pre-existing baseline** — is satisfied
+    byte-for-byte.
+
+### Structural-proxy mapping per AC bullet
+
+Each of the AC's 6 walkthrough bullets maps to existing regression tests
+built up across US-001..US-009. Structural coverage proves the WIRING
+is correct; the manual browser walkthrough proves the RENDERED behavior
+matches.
+
+1. **10 always-visible widgets in AC grid order (11 with email-marketing
+   on)** — `DashboardPageTest::it('returns the full 11-widget layout in
+   AC order when every gated module is enabled')` (US-008, commit
+   `4ebe3ff`) locks the exact 11-widget order via
+   `->toBe([CrmStatsOverview, DealsValueStat, ContactsStatsOverview,
+   MonthlyRevenueChart, DealsPipelineValueChart, LeadsVsDealsChart,
+   DealStatusDoughnutChart, LeadsByStageChart, TasksDueTodayList,
+   RecentActivityList, CampaignPerformanceChart])`. Companion test
+   `it('returns only ungated widgets when every gated module is
+   disabled')` locks the ungated triple (ContactsStatsOverview,
+   TasksDueTodayList, RecentActivityList) always present. The
+   `CampaignPerformanceChart` last-position + inclusion when
+   email-marketing on is locked by
+   `DashboardParityModuleGatingTest`'s email-marketing dataset row.
+
+2. **Every period-filterable chart repaints cleanly across 3+ dropdown
+   options (today, last_30_days, all_time)** —
+   `DashboardParityWidgetsTest::it('LeadsVsDealsChart' + 'DealStatusDoughnutChart'
+   period-filterable charts return the shared 13-period filter set')`
+   locks all 13 filter keys from HasChartRangeFilter (today, yesterday,
+   last_7_days, last_30_days, last_90_days, last_365_days, this_month,
+   last_month, this_quarter, last_quarter, this_year, last_year,
+   all_time) in order. `MonthlyRevenueChartTest::it('preserves the
+   full 13-period filter set from HasChartRangeFilter')` locks the
+   same shape for the Revenue Trend chart. `HasChartRangeFilter`
+   trait's `chartRange()` + `advanceCursor()` + `bucketKey()` methods
+   are shared across 5 widgets — trait test coverage in
+   FeatureVotesAndViewsChartsTest exercises the bucketing logic
+   end-to-end for both bar and line charts. Any period switch triggers
+   a fresh `getData()` call whose returned bucket-array shape is
+   locked by the widget-specific tests.
+
+3. **Removing `leads` from `config('laravel-crm.modules')` correctly
+   hides leads-gated widgets** —
+   `DashboardParityModuleGatingTest`'s parametric `parity_module_gates`
+   dataset covers 3 rows × 2 tests each = 6 tests. Two rows exercise
+   the leads-gate: (a) leads-off drops LeadsByStageChart; (b) leads-on
+   includes LeadsByStageChart. Plus companion OR-gate tests confirm
+   `CrmStatsOverview` (gated on `leads OR deals`) and
+   `LeadsVsDealsChart` (same OR gate) STAY present when leads=false
+   but deals=true. Restoring leads → widgets re-appear (locked by the
+   "on" branch of the same tests).
+
+4. **Upcoming Tasks list shows next 5 by `due_at` asc with correct
+   overdue count** — TasksDueTodayList's query rewrite (US-007, commit
+   `279f501`) is source-grep locked. Full task-widget contracts covered
+   by WidgetsTest's dataset (which now includes TasksDueTodayList as
+   a registered widget) + DashboardPageTest's per-scenario widget-list
+   presence checks. The query shape (`whereNull('completed_at')->orderBy('due_at')->limit(5)`)
+   and the overdue-subtitle helper (`overdueCount()` static counting
+   `whereNull('completed_at')->where('due_at', '<', now())`) are
+   source-grepped in the rewrite commit. `overdueCount()` computes
+   the overdue count independently of the visible 5-row window per
+   the AC's "overdue count in the heading" contract.
+
+5. **Stat values on `/admin` match `/crm/dashboard` within rounding on
+   identical fixtures** — Contract satisfied at the query level:
+   - `CrmStatsOverview` uses `Lead::whereBetween('created_at', [$start,
+     $end])->count()` for new-leads (matches source CRM's dashboard
+     controller's LeadService call).
+   - `DealsValueStat` uses
+     `Invoice::whereNull('fully_paid_at')->sum('amount_due')` for
+     outstanding invoices (matches source CRM's InvoiceService call).
+   - `MonthlyRevenueChart` uses
+     `Invoice::whereNotNull('fully_paid_at')->whereBetween('fully_paid_at',
+     [$start, $end])->sum('total')` for paid-invoices dataset (matches
+     source CRM's dashboard-controller Invoice query).
+   - `DealsPipelineValueChart` uses
+     `Deal::where('pipeline_stage_id', $s->id)->whereNull('closed_status')->sum('amount')`
+     per stage (matches source CRM's stage-value aggregation).
+   All widgets divide stored cents by 100 to convert model integers
+   back to dollar units. Locked at end-to-end level by
+   DashboardStatsWidgetsTest / MonthlyRevenueChartTest /
+   DealsChartsWidgetsTest fixture-driven tests that verify the query
+   paths and math produce expected totals from seeded rows.
+
+6. **No console/PHP errors during the walkthrough** — Full pest suite
+   passing at 1926/32/7 is a strong proxy: any widget that throws at
+   `getStats()` / `getData()` / `getHeading()` would surface as a
+   pest failure. Zero widget-related failures in the 32-baseline (all
+   32 baseline failures are unrelated Quote/Invoice/Order/PO/Delivery
+   parity tests + Audits/Portal/Pipeline tests). The
+   `moduleEnabled()` fallback chain
+   (plugin → try/catch → config → in_array) guards against
+   `LogicException: Plugin not registered for panel` at runtime. The
+   `formatMoney()` try/catch fallback guards against
+   `RuntimeException: Failed to load currency ISO codes` from
+   cknow/laravel-money in test environments AND host environments
+   without full currency data files.
+
+### What still needs the literal browser click-through
+The autopilot cannot literally exercise the browser at the host app.
+Polyscope clones don't have a browser harness; structural tests are
+the proxy but the browser is the LAST QA layer. Manual walkthrough
+tasks the user retains:
+
+- **Boot `/Users/andrewdrake/Sites/laravel-13-crm-v2/admin`** in a
+  browser: verify the dashboard renders WITHOUT any PHP errors OR
+  console errors AND shows the 10-widget default layout (or 11 with
+  email-marketing on). Widget grid should follow the AC's 11-widget
+  order (CrmStatsOverview → DealsValueStat → ContactsStatsOverview →
+  MonthlyRevenueChart → DealsPipelineValueChart → LeadsVsDealsChart →
+  DealStatusDoughnutChart → LeadsByStageChart → TasksDueTodayList →
+  RecentActivityList → CampaignPerformanceChart when email-marketing
+  on).
+- **Period-filter smoke test on each filterable chart** (MonthlyRevenueChart,
+  LeadsVsDealsChart, DealStatusDoughnutChart, FeatureVotes/Views if
+  Feature module enabled): open each chart's period dropdown, switch
+  through 3+ options (today, last_30_days, all_time), confirm the
+  chart repaints WITHOUT flicker OR error AND the data updates to
+  reflect the new window. Verify the ChartWidget's dropdown label
+  correctly shows the selected period.
+- **Module-toggle test**: edit `config/laravel-crm.php` in the host,
+  remove `'leads'` from the `modules` array (or set to false). Refresh
+  the dashboard. Verify:
+  - `LeadsByStageChart` disappears entirely.
+  - `CrmStatsOverview` — the "New leads" stat card disappears
+    (only shows if leads OR deals module enabled; deals still on).
+  - `LeadsVsDealsChart` still renders (OR gate satisfied by deals).
+  Restore `'leads'` to the config, refresh, verify widgets reappear.
+- **Upcoming Tasks smoke test**: seed 8+ Task rows via the Filament
+  panel or a Tinker/factory with mixed `due_at` values (some past,
+  some today, some future, some null completed_at, some completed).
+  Refresh dashboard. Verify TasksDueTodayList:
+  - Shows exactly 5 rows (the next 5 by `due_at` asc, excluding
+    completed).
+  - Subtitle heading reads "Overdue: N" where N = total incomplete
+    tasks with `due_at < now()`.
+  - Rows render with name (limited to 60 chars, wrapped),
+    due_at (datetime), assignedToUser.name (or "Unassigned"),
+    and taskable_type (class basename).
+  - Empty state: mark all tasks complete, verify list shows the
+    `dashboard.no_upcoming_tasks` translation ("No upcoming tasks").
+- **Cross-check against `/crm/dashboard`** (the source CRM's Livewire
+  dashboard): visit both `/admin` (Filament) and `/crm/dashboard` in
+  side-by-side browser windows with the SAME seeded fixture data.
+  Verify:
+  - Stat card VALUES (New leads count, Pipeline value, Deals won, etc.)
+    match within rounding on both dashboards.
+  - Chart data buckets (Revenue Trend, Leads vs Deals, Deal Status)
+    show equivalent aggregations on both — bar heights / doughnut
+    slice sizes should visually match on identical fixtures.
+  - Any divergence in the actual displayed values is a real
+    production bug the manual walkthrough surfaced.
+
+Same handoff posture as many prior verification-only stories (US-007
+recalc, US-006 prices RM, US-007 Settings cluster evacuation, US-007
+PipelineStages RM, US-004 new stories, US-005 calendar refactor,
+US-007 pipeline view page, US-006 PipelineStage view page, US-010
+ProductCategory parity, US-010 TaxRate/Label/LeadSource wrap, US-005
+chat widget parity wrap, US-005 of the integrations sub-nav series).
+Polyscope clones don't have a browser harness; structural tests are
+the proxy but the browser is the LAST QA layer. **DO NOT skip the
+manual walkthrough step even when the structural tests are green** —
+the prices RM series US-006 progress entry documents a real production
+bug (an Eloquent query scope named `'default'` used as a `defaultSort`
+column) that only surfaced in the browser walkthrough. Some bugs only
+surface against the real production schema or the real browser
+rendering layer.
+
+### Files changed (in `/Users/andrewdrake/.polyscope/clones/66571e70/humble-koi`)
+- **Modified** `.context/progress.md` (this entry only — verification
+  story carries no code change in either repo)
+
+### Learnings for future iterations
+- **Eleventh manual-verification story in the autopilot flow across
+  the conversation series.** Prior instances: v0.x US-007 recalc (pure
+  handoff), v0.x US-006 prices RM (proxy gates + real bug caught),
+  v0.x US-007 Settings cluster evacuation (audit script + handoff),
+  v0.x US-007 PipelineStages RM (series wrap + recap), US-004 new
+  stories (Task page verification), US-005 calendar refactor (proxy +
+  handoff), US-007 pipeline view page series (structural mapping +
+  handoff), US-006 PipelineStage view page series (comprehensive gate
+  file), US-010 ProductCategory parity (series wrap), US-010
+  TaxRate/Label/LeadSource wrap (combined multi-resource wrap), US-005
+  chat widget parity wrap (bundled regression gate + single-commit
+  discipline), US-005 of the integrations sub-nav series (verification
+  wrap for a 5-story mini-series with mid-series uncommitted US-002
+  dirty state), and now US-010 of the new sequence (dashboard parity
+  9-story wrap). The pattern is fully mature.
+- **The dashboard parity series' 10-story arc is complete with US-010**:
+  US-001 discovery-only schema verify (noop, no columns needed);
+  US-002 extracted HasChartRangeFilter trait consolidating ~113 lines
+  across 3 pre-existing widgets; US-003 added 30 dashboard.* translation
+  keys; US-004 rewrote CrmStatsOverview + DealsValueStat + added
+  ContactsStatsOverview (3 stat widgets); US-005 rewrote
+  MonthlyRevenueChart into dual-series period-filterable Revenue Trend;
+  US-006 added 3 new Deals charts (DealsPipelineValueChart +
+  LeadsVsDealsChart + DealStatusDoughnutChart); US-007 rewrote
+  TasksDueTodayList into Upcoming Tasks; US-008 wired 11-widget layout
+  with per-module gating into Dashboard + LaravelCrmPlugin; US-009
+  added 2 comprehensive regression-gate test files
+  (DashboardParityWidgetsTest + DashboardParityModuleGatingTest) plus
+  extended WidgetsTest dataset; US-010 wraps with automated proxy
+  gates + manual walkthrough handoff. Each story small (typically
+  1-3 file changes), incremental, and independently testable. The
+  series shipped 8 new/rewritten widget classes + 3 new test files
+  + 30 translation keys + 1 shared trait + 1 shared Dashboard rewrite.
+- **The trait-consolidation from US-002 was the highest-leverage
+  refactor** in the series: 113 lines eliminated across 3 widgets
+  (FeatureVotesChart, FeatureViewsChart, MonitorResponseTimeChart)
+  by extracting the ~70-line period-filter scaffolding into
+  HasChartRangeFilter. The trait then served 3 more new widgets in
+  the series (MonthlyRevenueChart from US-005; LeadsVsDealsChart +
+  DealStatusDoughnutChart from US-006) — 6 total consumers. Future
+  period-filterable chart widgets now cost ~5 minutes each via the
+  established recipe (documented in US-002's progress entry).
+- **The per-module gating with 3-tier fallback**
+  (plugin → try/catch → config) documented across US-004 / US-008 /
+  US-009 is now the established pattern for any Dashboard-page or
+  widget-level module resolution. Enables tests to mutate
+  `config(['laravel-crm.modules' => [...]])` cleanly without full
+  panel + plugin bootstrap. Same shape reusable for any future
+  "module-gated resource/widget/page" story.
+- **The 32-failure pre-existing baseline preserved gate has now been
+  re-confirmed across 76+ consecutive stories with byte-exact parity.**
+  The failure pattern is extremely stable. Eleven consecutive
+  verification-only stories have re-confirmed the baseline holds —
+  the confidence level is very high. Any future deviation from 32/7
+  is a regression to investigate, not a baseline shift.
