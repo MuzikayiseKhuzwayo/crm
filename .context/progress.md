@@ -27819,3 +27819,109 @@ rendering layer.
   been re-confirmed across 83+ consecutive stories with byte-exact
   parity.** Extremely stable pattern. Any future deviation from
   32/7 is a regression to investigate, not a baseline shift.
+
+
+## US-008 (follow-up): Fix `only_full_group_by` MySQL 1055 error on `EmailCampaignTopUrlsWidget` + `SmsCampaignTopUrlsWidget`
+- **Real production bug surfaced by the manual browser walkthrough** at
+  `https://laravel-13-crm-v2.test/admin/email-campaigns/{external_id}` — the
+  Top URLs footer widget threw:
+  > SQLSTATE[42000]: Syntax error or access violation: 1055 Expression #2
+  > of ORDER BY clause is not in GROUP BY clause and contains nonaggregated
+  > column 'laravel_13_crm_v3_dev.crm_email_campaign_clicks.id' ...
+  > incompatible with sql_mode=only_full_group_by
+- **Root cause**: `Filament\Tables\Concerns\CanSortRecords::applyDefaultSortToTableQuery()`
+  (at `vendor/filament/tables/src/Concerns/CanSortRecords.php:140`) appends
+  `->orderBy($qualifiedKeyName, $sortDirection)` — the model's qualified
+  primary key `crm_email_campaign_clicks.id` — as a stable-order tiebreaker
+  after any user-specified sort UNLESS the Table's `hasDefaultKeySort()`
+  returns false. For a GROUP BY aggregate query (like the Top URLs widget's
+  `groupBy('original_url')` + `COUNT(*) as clicks_count` + `COUNT(DISTINCT ...)`
+  as `unique_recipients`), MySQL's strict `only_full_group_by` mode
+  rejects the tiebreaker because `id` is not in the GROUP BY nor
+  aggregated.
+  - SQLite (test environment) is permissive about this so the test suite
+    passed cleanly at 1955/32/7 — exactly the same class of test-vs-
+    production divergence documented across the Codebase Patterns section
+    for TestSchema, and previously surfaced by the manual walkthrough
+    in v0.x US-006 of the prices RM series (`->defaultSort('default', 'desc')`
+    against a non-existent production column).
+- **Fix** (10-line insertion across both widgets): added
+  `->defaultKeySort(false)` to the Table configuration on both
+  `src/Widgets/EmailCampaignTopUrlsWidget.php` (line 46) AND its identical
+  sibling `src/Widgets/SmsCampaignTopUrlsWidget.php`. Chained immediately
+  after the existing `->defaultSort('clicks_count', 'desc')` and before
+  `->paginated([5, 10, 25])`. Preceded by a 4-line inline comment
+  explaining the fix's rationale so a future reader understands why the
+  chain is present:
+  ```php
+  ->defaultSort('clicks_count', 'desc')
+  // The aggregated query groups by original_url; Filament's default
+  // secondary sort on the model primary key (id) breaks under MySQL's
+  // only_full_group_by mode. Disable it here — clicks_count desc is
+  // already deterministic for our purposes.
+  ->defaultKeySort(false)
+  ```
+- **Verification**:
+  - `./vendor/bin/pint --test` on both files → `passed`.
+  - Targeted `pest --filter='CampaignClicksDrilldown|EmailCampaign|CampaignPerformance'
+    --no-coverage` → **70 passed (261 assertions)** in 9.35s. Zero
+    regressions across the entire EmailCampaign / SmsCampaign / clicks
+    drilldown family.
+  - **The user must confirm end-to-end** by revisiting the
+    `/admin/email-campaigns/{external_id}` show page in the host app and
+    verifying the Top URLs footer widget renders (empty state or with
+    data) instead of throwing 1055.
+- **Commit**: `fa3981e` on `main` in the plugin repo — 2 files changed,
+  10 insertions.
+- **Working-tree discipline**: the 10 pre-existing unrelated dirty files +
+  2 untracked at session start (3 label files + 5 modified source files
+  across Fields / ProductCategory / Pages / Integrations / ClickSend + 3
+  modified test files + 2 untracked Blade views) preserved untouched.
+  Explicit `git add src/Widgets/EmailCampaignTopUrlsWidget.php
+  src/Widgets/SmsCampaignTopUrlsWidget.php` staged ONLY the fix files.
+
+### Learnings for future iterations
+- **The `only_full_group_by` MySQL 1055 error surfaces ONLY in
+  production (or CI environments running MySQL with strict mode)** —
+  SQLite permits the missing GROUP BY / ORDER BY column. Any Filament
+  Table whose `->query(...)` closure includes a `->groupBy(...)` clause
+  MUST also disable Filament's stable-order tiebreaker via
+  `->defaultKeySort(false)` OR must include the model's primary key
+  column in the GROUP BY (which usually isn't semantically what the
+  widget wants). Reusable rule: **whenever a TableWidget's query uses
+  `groupBy`, add `->defaultKeySort(false)` to the Table**. Same
+  discipline extends to any custom RelationManager whose table's
+  query builder is aggregated.
+- **Filament v5's `Table::defaultKeySort(bool | Closure)` setter** at
+  `vendor/filament/tables/src/Table/Concerns/CanSortRecords.php:45` is
+  the canonical hook for opting out of the primary-key tiebreaker. The
+  read-side is `hasDefaultKeySort(): bool`. When testing widgets that
+  set it to false, no test-level change is needed — the fix is purely
+  in the query-plan layer AND SQLite (test DB) doesn't enforce
+  `only_full_group_by` so tests remain green pre- and post-fix. Same
+  posture as the v0.x US-006 prices RM series `defaultSort` fix,
+  where SQLite masked the production error.
+- **Test-schema-vs-production divergence surfaces in TWO recurring
+  shapes now**: (a) schema-column divergence (documented across the
+  Codebase Patterns section as "TestSchema has DIVERGED from production
+  migration stubs"); (b) SQLite-vs-MySQL mode divergence (this fix,
+  plus v0.x US-006 prices RM series). Both share the fix pattern:
+  the manual browser walkthrough is the LAST QA layer that catches
+  production-schema-specific bugs the automated test suite can't reach.
+  When a story includes a "manual walkthrough" AC bullet, DO NOT
+  paper it over with "the structural tests are green" — real
+  production bugs recur in this codebase because the test environment
+  is SQLite + auto-migrated test schema, which diverges from
+  MySQL/PostgreSQL production hosts in specific well-documented ways.
+- **The comment-before-chain regression pattern** is worth keeping
+  for any future story where the fix is a single-line addition that
+  wouldn't be self-explanatory to a future reader. The 4-line comment
+  ("The aggregated query groups by original_url; Filament's default
+  secondary sort on the model primary key (id) breaks under MySQL's
+  only_full_group_by mode") documents WHY the `->defaultKeySort(false)`
+  chain is present. Without the comment, a future refactor might
+  strip the chain thinking it's redundant with the `->defaultSort(
+  'clicks_count', 'desc')` call above it, silently re-introducing
+  the 1055 bug. Reusable pattern: **when adding a single-line fix
+  that opts OUT of a framework default, document the reason in an
+  inline comment immediately above the chain**.
