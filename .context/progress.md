@@ -27925,3 +27925,1141 @@ rendering layer.
   the 1055 bug. Reusable pattern: **when adding a single-line fix
   that opts OUT of a framework default, document the reason in an
   inline comment immediately above the chain**.
+
+
+## US-001: Add translation keys for SMS campaign parity (new sequence — SMS campaign parity kickoff)
+- Added 2 net-new keys across all three locales at
+  `/Users/andrewdrake/Packages/laravel-crm-filament/resources/lang/{en,fr,es}/labels.php`:
+  - `campaign.delivered` — Delivered / Livrés / Entregados. Inserted
+    immediately after the pre-existing `campaign.recipients` entry
+    inside the `campaign.*` namespace (line 296 en / 289 fr / 289 es
+    pre-story).
+  - `actions.back_to_sms_campaigns` — Back to SMS campaigns / Retour aux
+    campagnes SMS / Volver a campañas SMS. Inserted immediately after
+    the pre-existing `actions.back_to_email_campaigns` entry (line 549
+    en / 494 fr / 494 es pre-story) added by US-001 of the EmailCampaign
+    parity series.
+- **AC precondition verified**: grep at session start confirmed
+  `back_to_sms_campaigns` was absent everywhere AND `campaign.delivered`
+  was absent from the `campaign.*` namespace in all three locales.
+  A sibling `delivered` key exists at line 283 of en labels (under a
+  sales/misc namespace displayed alongside `items_delivered` +
+  `delivered_on` + `delivery_date` for the Delivery domain) — different
+  path, no collision per the PHP-array-keys-at-different-nesting-levels
+  rule locked in by prior labels stories.
+- Used the established regex-anchored `php /tmp/us001_labels.php`
+  heredoc pattern from the 31+ prior labels-only stories: regex
+  anchored INTO the target namespace block via
+  `('campaign' => \[\s*\n\s*'recipients' => '...')` shape for the
+  campaign entry AND `('back_to_email_campaigns' => '...')` shape for
+  the actions entry (simpler exact-line anchor works since
+  `back_to_email_campaigns` is unique in the file). Per-key
+  idempotency guard via `preg_match('...campaign' \s*=> \[(?:(?!^\s+
+  \],).)*?'delivered' \s*=>...)` for the nested-scope check and
+  `str_contains($src, "'back_to_sms_campaigns' =>")` for the flat
+  actions check. Anchor-value regex `'(?:[^\'\\\\]|\\\\.)*'` handles
+  escaped apostrophes (French `'Retour aux campagnes SMS'` doesn't
+  contain any but the regex is portable). Idempotency confirmed by
+  running the script twice — the second run reported SKIP for all 6
+  target keys (2 keys × 3 locales) with zero file modifications.
+- **AC-mandated backup-restore-recompute discipline applied** to
+  preserve the pre-existing dirty additions in the label files (10
+  lines of `sales.products` / `sales.fields` / `integrations.clicksend_*`
+  / `sections.clicksend` additions across the three locales, added
+  in prior series' uncommitted follow-up work):
+  1. `cp resources/lang/{en,fr,es}/labels.php /tmp/us001_bak_*.php` to
+     backup current dirty state.
+  2. `git diff resources/lang/{en,fr,es}/labels.php >
+     /tmp/us001_preexisting.patch` — saved 120 lines of pre-existing
+     hunks as a portable 3-way patch.
+  3. `git checkout HEAD -- resources/lang/{en,fr,es}/labels.php` to
+     restore clean HEAD state.
+  4. Ran the insertion script on the HEAD-clean files, producing a
+     clean 6-line insertion diff (2 lines per locale × 3 locales).
+  5. `git add` the 3 label files + commit `6b1d3e1` on `main` with the
+     AC-named message.
+  6. `git apply --3way /tmp/us001_preexisting.patch` restored the
+     pre-existing dirty state cleanly on top of my new commit (3-way
+     merge succeeded because my `delivered` addition at line ~296 AND
+     my `back_to_sms_campaigns` addition at line ~549 don't overlap
+     with the pre-existing hunks at lines 233/361/416 in en and
+     equivalents in fr/es).
+  7. `git reset HEAD -- resources/lang/{en,fr,es}/labels.php`
+     unstaged the restored state so `git status --short` shows the
+     3 label files as pure working-tree dirty (unstaged), matching
+     the pre-story state exactly. `git reset` also unstaged 3 test
+     files that had been auto-staged by `git apply --3way` from the
+     patch's un-staged content — restored those to unstaged too.
+- **Quality gates green**:
+  - AC-named `./vendor/bin/pint --dirty --test` on the 3 label files
+    (before restoring pre-existing dirty state) reports
+    `{"tool":"pint","result":"passed"}`.
+  - AC-named `pest --filter='LocalizationTest' --no-coverage` → **7
+    passed (27 assertions)** in 1.23s (post-commit, clean HEAD) AND
+    again in 0.90s (post-restore, dirty working tree). Both runs
+    verified: (a) en↔fr↔es structural parity preserved across all 6
+    new key/locale pairs; (b) documented `sections` check still
+    matches the test's required list (my additions are inside existing
+    `campaign` and `actions` namespaces which are already documented);
+    (c) runtime `__(laravel-crm-filament::labels.*)` resolution still
+    works for the new keys.
+- Post-story `git status --short` shows the same 10 pre-existing
+  dirty files + 2 untracked as at session start:
+  - 3 label files (with pre-existing `sales.products` / `sales.fields`
+    / `integrations.clicksend_*` / `sections.clicksend` additions ONLY;
+    my keys are now in HEAD).
+  - 2 modified pages: `src/Pages/ClickSendIntegration.php` +
+    `src/Pages/Integrations.php` (sub-navigation follow-up work).
+  - 1 modified `src/Resources/Fields/FieldResource.php` (Field parity
+    polish work).
+  - 2 modified ProductCategory source files
+    (`src/Resources/ProductCategories/ProductCategoryResource.php` +
+    `src/Resources/ProductCategories/Pages/ViewProductCategory.php` —
+    Section-wrapper-to-direct-Livewire follow-up polish).
+  - 3 modified test files
+    (`tests/Feature/ClickSendIntegrationPageTest.php` +
+    `tests/Feature/ProductCategoryResourceRedesignTest.php` +
+    `tests/Feature/ViewProductCategoryPageTest.php` — matching
+    test-side updates for the polish work).
+  - 2 untracked Blade views
+    (`resources/views/clicksend.blade.php` +
+    `resources/views/integrations.blade.php` — new integration UI
+    Blade views).
+  All 12 pre-existing files preserved untouched for their proper
+  follow-up story.
+
+### Files changed (in `/Users/andrewdrake/Packages/laravel-crm-filament`)
+- **Modified** `resources/lang/en/labels.php` (+2 keys:
+  `campaign.delivered` after `campaign.recipients`,
+  `actions.back_to_sms_campaigns` after `actions.back_to_email_campaigns`)
+- **Modified** `resources/lang/fr/labels.php` (+2 keys)
+- **Modified** `resources/lang/es/labels.php` (+2 keys)
+
+### Learnings for future iterations
+- **Two anchors, two idempotency guard shapes.** The `campaign.delivered`
+  insertion uses the nested-scope regex guard
+  (`'campaign' \s*=> \[(?:(?!^\s+\],).)*?'delivered' \s*=>`) because
+  a bare `str_contains("'delivered' =>")` would false-positive on
+  the pre-existing `delivered` key at line 283 (in the
+  Delivery-domain namespace). The `actions.back_to_sms_campaigns`
+  insertion uses the flat `str_contains` guard because
+  `back_to_sms_campaigns` is genuinely unique across the file. Choose
+  the guard shape based on whether the target key name could exist at
+  another path in the file — nested-scope regex when yes, flat
+  `str_contains` when no. Recurring pattern documented across many
+  prior labels-only stories.
+- **`git apply --3way` correctly stages patch contents into the
+  index by default** (Git's documented behavior for the `--index`
+  implicit flag when the patch was generated with `git diff`, which
+  produces index-relative patches). Post-apply `git reset HEAD --
+  <files>` unstages everything back to working-tree-only dirty
+  state. If the pre-existing patch happens to include changes to
+  additional files (like the 3 test files in this session's patch),
+  the reset must enumerate those files too — OR use `git reset HEAD`
+  with no arguments to unstage everything at once. Recurring
+  discipline pattern used by US-005/US-007/US-001..US-005 of the
+  new sequence and every labels-with-pre-existing-dirty story.
+- **This is the 32nd consecutive labels-only story to use the
+  regex-anchored heredoc script pattern verbatim.** The template
+  is fully stable: regex anchored INTO the target namespace block,
+  per-key idempotency guard, anchor-value regex handling escaped
+  quotes, optional per-locale loop, "run twice to verify
+  idempotency" smoke test. Pattern is fully mature; adding a new
+  key across en/fr/es takes ~2 minutes end-to-end.
+- **AC's "SMS Campaign parity refactor" preamble** signals this is
+  the kickoff story for a new multi-story series mirroring the
+  EmailCampaign parity series (US-001..US-008 of the prior sequence).
+  Follow-up stories are expected to (a) apply
+  `UsesExternalIdRouting` trait to `SmsCampaignResource`, (b) add
+  `backToIndexAction()` factory referencing `back_to_sms_campaigns`,
+  (c) rewrite table columns to source-parity shape (with
+  `total_recipients` + `delivered_count_state` + others matching the
+  US-003 EmailCampaign column set), (d) rewrite row actions to
+  3-pill sequence, (e) potentially add a
+  `SmsCampaignStatsWidget` mirroring US-005's EmailCampaign
+  StatsWidget (with `campaign.delivered` as one of its 4 stat labels),
+  and so on. The kickoff shape (translation keys only) mirrors
+  US-001 of every prior parity series in this codebase.
+
+
+## US-002: Create SmsCampaignStatsWidget and register it on the panel (new sequence — SmsCampaign parity kickoff)
+- New `src/Widgets/SmsCampaignStatsWidget.php` mirrors `EmailCampaignStatsWidget`
+  byte-shape (US-005 of the EmailCampaign parity series, commit `7096892`) with
+  SMS-native metric set per AC:
+  - `extends Filament\Widgets\StatsOverviewWidget`; `columnSpan = 'full'`;
+    `public ?SmsCampaign $record = null;`; `getColumns(): int => 4;`.
+  - `getStats()` returns exactly 4 `Stat` instances in AC-named order:
+    1. **Recipients** (label `campaign.recipients`, value from `total_recipients`).
+    2. **Delivered** (label `campaign.delivered`, value from `delivered_count`,
+       description shows `{deliveryRate}% delivery rate` via
+       `SmsCampaign::deliveryRate()` + `campaign.delivery_rate`).
+    3. **Clicks** (label `campaign.clicks`, value from `unique_clicks_count`,
+       description shows `{clickRate}% click rate` via `clickRate()` +
+       `campaign.click_rate`).
+    4. **Unsubscribed** (label `campaign.unsubscribed`, value from
+       `unsubscribes_count`, description shows `{unsubscribeRate}%
+       unsubscribe rate` via `unsubscribeRate()` +
+       `campaign.unsubscribe_rate`).
+  - Null-record path: every stat value is `'—'` per AC; descriptions
+    fall back to `'—'` too. Byte-identical null handling to
+    EmailCampaignStatsWidget.
+- **Registration in `LaravelCrmPlugin::register()`**: added `use
+  VentureDrake\LaravelCrmFilament\Widgets\SmsCampaignStatsWidget;`
+  import alphabetically after `RecentActivityList` (S sorts before T,
+  so it lands between RecentActivityList and TasksDueTodayList) and
+  appended `$widgets[] = SmsCampaignStatsWidget::class;`
+  **unconditionally** immediately AFTER the pre-existing
+  `$widgets[] = EmailCampaignStatsWidget::class;` line — inside the
+  same "footer-available" comment block. Not gated by a module check
+  per AC's explicit "unconditional — not gated by module check"
+  directive.
+- **AC compliance: no new translation keys added.** All 7 label keys
+  used by the widget (`campaign.recipients`, `.delivered`, `.clicks`,
+  `.unsubscribed`, `.delivery_rate`, `.click_rate`,
+  `.unsubscribe_rate`) are pre-existing in en/fr/es labels.php under
+  the `campaign.*` namespace. The AC's specific mention of
+  "`campaign.delivered` translation key from US-001" — verified
+  already present at line 158 of en/labels.php (value `'Delivered'`).
+- **New Pest test `tests/Feature/SmsCampaignStatsWidgetTest.php`**
+  (10 tests / 42 assertions) mirrors `EmailCampaignStatsWidgetTest`
+  byte-for-byte with SMS-specific fixtures and metric-name swaps.
+  Locks every AC contract:
+  - Class extends `StatsOverviewWidget` (via `is_subclass_of`).
+  - `columnSpan` static property === `'full'`.
+  - `record` property: public, typed `?SmsCampaign`, nullable, default
+    null (via Reflection).
+  - `getColumns()` returns 4.
+  - `getStats()` returns exactly 4 `Stat` instances in Recipients /
+    Delivered / Clicks / Unsubscribed order; null record → each value
+    is `'—'`.
+  - Hydrated record → correct integer counts render as strings AND
+    descriptions carry the rate percentages (`92%`, `25%`, `4%` for a
+    seeded 100/92/25/4 fixture).
+  - Source references only the 7 pre-existing `campaign.*` translation
+    keys (no new keys added — regression guard for AC's "reuse existing
+    translation keys" contract).
+  - Imports `SmsCampaign`, `StatsOverviewWidget`, `Stat` at the top.
+  - Lives under `VentureDrake\LaravelCrmFilament\Widgets` namespace.
+  - Registered in `LaravelCrmPlugin::register()` alongside existing
+    email-campaign widgets — via source-grep: import present + array
+    entry present + not gated behind a preceding `isModuleEnabled(...)`
+    conditional (walks back through source to confirm the widget entry
+    is outside the closing brace of the last email-marketing block).
+- **Quality gates green**:
+  - `./vendor/bin/pint --dirty --test` reports `passed`.
+  - Targeted `pest --filter='SmsCampaignStatsWidget'` → **10 passed
+    (42 assertions)** in 1.47s.
+  - Broader `pest --filter='SmsCampaign|EmailCampaign|CampaignPerformance|CampaignClicksDrilldown|Widget'`
+    → **194 passed / 1 skipped (597 assertions)** in 24.74s. Zero
+    regressions across the entire SmsCampaign + EmailCampaign +
+    Campaign + Widget family.
+  - Full plugin pest suite → **1965 passed / 32 failed / 7 skipped
+    (6744 assertions)** in 469.84s. The 32 failures + 7 skipped are
+    IDENTICAL byte-for-byte to the pre-existing baseline noted across
+    the prior 83+ stories. Net **+10 passing tests** match exactly the
+    10 new SmsCampaignStatsWidgetTest cases. Zero net new failures.
+- **Working-tree discipline**: the plugin repo carried 10 pre-existing
+  unrelated dirty files + 2 untracked at session start (3 label files
+  with pending `sales.products` / `sales.fields` / `dashboard.*` /
+  `integrations.xero_description` follow-up additions from prior
+  series + 5 modified source files across Fields / ProductCategory /
+  Pages / Integrations / ClickSend + 3 modified test files including
+  ClickSendIntegrationPageTest + ProductCategory tests + 2 untracked
+  Blade views for clicksend + integrations). Used explicit file-path
+  `git add` to stage ONLY the 3 US-002 files. Post-commit `git status
+  --short` shows the same 12 pre-existing dirty + untracked files
+  preserved untouched for their proper follow-up story. Commit
+  `ab4ecb4` on `main` in the plugin repo — 3 files changed / +197
+  insertions.
+
+### Files changed (in `/Users/andrewdrake/Packages/laravel-crm-filament`)
+- **Added** `src/Widgets/SmsCampaignStatsWidget.php` (~53 lines;
+  StatsOverviewWidget with 4-stat SMS layout mirroring
+  EmailCampaignStatsWidget's shape; per-stat null-record `'—'`
+  fallback + hydrated-record rate-percentage descriptions on 3 of 4
+  stats via SmsCampaign's `deliveryRate()` / `clickRate()` /
+  `unsubscribeRate()` methods)
+- **Modified** `src/LaravelCrmPlugin.php` (+2 lines: 1 import
+  (SmsCampaignStatsWidget alphabetically between RecentActivityList
+  and TasksDueTodayList) + 1 line for the widget-array entry
+  immediately after `EmailCampaignStatsWidget::class`)
+- **Added** `tests/Feature/SmsCampaignStatsWidgetTest.php` (~142
+  lines; 10 tests / 42 assertions locking every AC contract as a
+  regression gate mirroring EmailCampaignStatsWidgetTest's shape
+  with SMS-specific fixtures + metric-name swaps)
+
+### Learnings for future iterations
+- **Sibling-widget copy-and-swap is now a well-established recipe** —
+  EmailCampaignStatsWidget (US-005 of EmailCampaign parity series) →
+  SmsCampaignStatsWidget (this story) via mechanical FQCN + metric-
+  name substitution: `EmailCampaign` → `SmsCampaign`, `unique_opens_count`
+  → `delivered_count`, `openRate()` → `deliveryRate()`, and the
+  translation keys `campaign.opens/open_rate` → `campaign.delivered/delivery_rate`.
+  Every other line of the widget body byte-identical. Total delivery
+  time: ~10 minutes end-to-end. Same posture applies to any future
+  "add sibling widget for entity X" story where the sibling entity
+  already exists in the codebase with matching accessor methods.
+- **The AC's "byte-shape mirrors `EmailCampaignStatsWidget`"
+  directive** produces the cleanest possible regression gate when
+  the test file also mirrors byte-for-byte. My test file's 10 tests
+  are one-for-one with EmailCampaignStatsWidgetTest's 10 tests —
+  same reflection contracts, same source-grep patterns, same
+  hydrated-record fixture shape (100/92/25/4 vs 100/60/25/4). This
+  consistency means: (a) a future reader can grok the SMS widget
+  by reading the Email test file and vice-versa, (b) any drift
+  between the two widgets surfaces as parallel test failures on
+  both files, (c) copy-paste refactors take seconds.
+- **SmsCampaign's rate methods `deliveryRate()` / `clickRate()` /
+  `unsubscribeRate()` mirror EmailCampaign's shape** at
+  `/Users/andrewdrake/Packages/laravel-crm/src/Models/SmsCampaign.php:96-102`
+  — same return type (float), same math (`round((column /
+  total_recipients) * 100, 1)`), same zero-guard behavior (return 0
+  when total_recipients == 0). This makes the widget's description
+  rendering identical: `$campaign->{rateMethod}() . '% ' . __('...campaign.{rate_key}')`.
+  When adding a sibling entity + widget in the future, confirm the
+  target model exposes the same rate-method interface before
+  starting the copy-and-swap.
+- **The 32-failure pre-existing baseline preserved gate has now
+  been re-confirmed across 84+ consecutive stories with byte-exact
+  parity.** Extremely stable pattern.
+
+
+## US-003: Refactor SmsCampaignResource — trait, table, actions, backToIndex factory (new sequence — SMS campaign parity)
+- Applied the standard 4-step Settings/Marketing parity refactor recipe to
+  `/Users/andrewdrake/Packages/laravel-crm-filament/src/Resources/SmsCampaigns/SmsCampaignResource.php`
+  mirroring the EmailCampaignResource shape locked-in by US-001..US-007 of the
+  EmailCampaign parity series:
+  1. **Trait swap** — added `use VentureDrake\LaravelCrmFilament\Concerns\UsesExternalIdRouting;`
+     import + `use UsesExternalIdRouting;` as the first line of the class body.
+     Deleted the local `public static function getRecordRouteKeyName(): ?string
+     { return 'external_id'; }` override — trait supplies both the route-key
+     lookup AND the critical `getUrl()` override that swaps the Model
+     parameter for its `external_id` before delegating to `parent::getUrl()`.
+  2. **Table columns rewrite** — replaced the pre-existing 7-column set
+     (name / status / total_recipients / delivered_count / failed_count /
+     scheduled_at / sent_at) with the AC-mandated 7-column source-parity
+     shape in exact order:
+     1. `campaign_id` — label `fields.number`, `->sortable()->searchable()` (new).
+     2. `name` — `->sortable()->searchable(query: closure)` where the closure
+        OR's across `name` / `body` / `campaign_id` LIKE `%{$search}%`
+        (matches the EmailCampaign shape but swaps `subject` → `body` since
+        SMS has no subject column).
+     3. `from` — label `campaign.from`, `->toggleable()` (new).
+     4. `status` — badge with the 6-color map preserved verbatim
+        (draft=gray / scheduled=warning / sending=info / sent=success /
+        cancelled=gray / failed=danger).
+     5. `total_recipients` — label `campaign.recipients`,
+        `->numeric()->toggleable()` (preserved).
+     6. `scheduled_at` — flipped from `->dateTime()->toggleable()` to
+        `->since()->sortable()->toggleable()` per AC.
+     7. `sent_at` — same flip.
+     Dropped `delivered_count` + `failed_count` columns entirely per AC
+     (the underlying DB columns are unchanged; only the table display is
+     dropped — the delivery/failed metric surfaces are covered by the
+     `SmsCampaignStatsWidget` header widget added by US-002 of this new
+     sequence).
+  3. **Row actions rewrite** — swapped `recordActions([...])` from the
+     pre-existing 2-pill View + gated Edit shape to the canonical 3-pill
+     sequence:
+     `[Actions\ViewAction::make()->button()->hiddenLabel(),
+     Actions\EditAction::make()->visible(fn ($record) => $record->isEditable())->button()->hiddenLabel(),
+     Actions\DeleteAction::make()->button()->hiddenLabel()->requiresConfirmation()]`.
+     Delete is NEW; the EditAction's `isEditable()` visibility gate is
+     preserved verbatim from the pre-existing chain.
+  4. **`backToIndexAction()` static factory** — added between `getRelations()`
+     and `getPages()` per AC (matches the placement across all sibling
+     resources). Returns
+     `Actions\Action::make('backToIndex')->label(actions.back_to_sms_campaigns)
+     ->icon('heroicon-o-arrow-left')->color('gray')->url(static::getUrl('index'))`.
+     Byte-for-byte identical to `EmailCampaignResource::backToIndexAction()`
+     except the label translation key (`actions.back_to_sms_campaigns`
+     was added by US-001 of this new sequence).
+  5. **`use Illuminate\Database\Eloquent\Builder;`** import added per AC —
+     required for the `Builder $query` typehint in the name column's
+     searchable closure.
+- **Preserved verbatim per AC**: `form()`, `infolist()` (still shows the
+  Performance section with 6 rate/count TextEntries — will move to
+  header-widget shape in a future story mirroring US-006 of the
+  EmailCampaign parity series), `defaultSort('created_at', 'desc')`,
+  status `SelectFilter` with 6-option list, `toolbarActions`
+  (BulkActionGroup + DeleteBulkAction), `getRelations()` returning
+  [RecipientsRelationManager, ClicksRelationManager], `getPages()`
+  returning the 4-key `[index, create, view, edit]` set with
+  ViewSmsCampaign already registered at `/{record}`, navigation
+  properties, `$model`, `$slug`, `$recordTitleAttribute`,
+  `$navigationIcon`, `$navigationSort`, `getNavigationGroup()`.
+- **28 AC contracts verified via `/tmp/us003_verify.php` structural
+  check** covering: trait presence + method inheritance; backToIndexAction
+  factory contract (name, color, icon, label key, placement between
+  getRelations and getPages); table column presence for all 7 AC-named
+  columns; table column ordering; column-count exactness (exactly 7);
+  dropped `delivered_count` + `failed_count` regression guards;
+  preserved `defaultSort` + `SelectFilter`; 3-pill row actions with
+  correct modifier chains and positional ordering; Builder import
+  presence. All 28 checks pass.
+- **Quality gates green**:
+  - `./vendor/bin/pint --dirty --test` on the modified file reports
+    `passed` after auto-fix of `single_blank_line_at_eof`.
+  - `php -l` on the file reports "No syntax errors detected".
+  - Targeted `pest --filter='SmsCampaign|EmailCampaign|CampaignPerformance|CampaignClicksDrilldown|BulkActions|LocalizationTest|UsesExternalIdRoutingTrait'
+    --no-coverage` → **225 passed (543 assertions)** in 19.86s. Every
+    SmsCampaign + EmailCampaign + Campaign + external-id-routing + label
+    parity + bulk-actions test remains green.
+  - Full plugin pest suite → **1965 passed / 32 failed / 7 skipped
+    (6744 assertions)** in 443.71s. The 32 failures + 7 skipped are
+    IDENTICAL byte-for-byte to the pre-existing baseline noted across
+    the prior 84+ stories (Quote/Invoice/Order/PurchaseOrder/Delivery
+    parity tests + Audits/Portal/Pipeline tests + RelationManagersTest
+    expectations on the Crm* RM family). Passing count preserved exactly
+    at 1965 (matches post-US-002 checkpoint of this SmsCampaign parity
+    series). Zero net new tests + zero net new failures, as expected
+    for a "refactor an existing resource without adding new tests" story
+    scope.
+- **Working-tree discipline**: the plugin repo carried 10 pre-existing
+  unrelated dirty files + 2 untracked at session start (3 label files
+  with pending `sales.products` / `sales.fields` / `dashboard.*` /
+  `integrations.xero_description` follow-up additions from prior series
+  + 5 modified source files across Fields / ProductCategory / Pages /
+  Integrations / ClickSend + 3 modified test files including
+  ClickSendIntegrationPageTest + ProductCategory tests + 2 untracked
+  Blade views for clicksend + integrations). Used explicit
+  `git add src/Resources/SmsCampaigns/SmsCampaignResource.php` to stage
+  ONLY the 1 US-003 file. Post-commit `git status --short` shows the
+  same 10 pre-existing dirty + 2 untracked files preserved untouched
+  for their proper follow-up story. Commit `eae4dcd` on `main` in the
+  plugin repo — 1 file changed / +43 insertions / -17 deletions.
+
+### Files changed (in `/Users/andrewdrake/Packages/laravel-crm-filament`)
+- **Modified** `src/Resources/SmsCampaigns/SmsCampaignResource.php`
+  (+43/-17 diff: 2 new imports (`Illuminate\Database\Eloquent\Builder` +
+  `VentureDrake\LaravelCrmFilament\Concerns\UsesExternalIdRouting`) +
+  `use UsesExternalIdRouting;` trait line above `$model` + deleted local
+  `getRecordRouteKeyName()` method + full columns array rewrite from
+  7 pre-existing columns to the AC-mandated 7 source-parity columns
+  (adds campaign_id + from, drops delivered_count + failed_count,
+  extends name column with the searchable-closure OR pattern across
+  name/body/campaign_id, flips scheduled_at + sent_at to
+  `->since()->sortable()->toggleable()`) + rewrote row actions to
+  3-pill ViewAction+EditAction+DeleteAction sequence with
+  `->button()->hiddenLabel()` on all three AND `->requiresConfirmation()`
+  on Delete + added `backToIndexAction()` static factory between
+  `getRelations()` and `getPages()`)
+
+### Learnings for future iterations
+- **The 5-step trait+table+actions+backToIndex+Builder-import parity
+  recipe now applies to ALL 5 Campaign-family + Settings-family
+  resources** (LabelResource, LeadSourceResource, ProductCategoryResource,
+  TaxRateResource, LeadResource, DealResource, QuoteResource,
+  PipelineResource, PipelineStageResource, ChatWidgetResource,
+  FeatureResource, MonitorResource, FieldResource, FieldGroupResource,
+  EmailCampaignResource, and now SmsCampaignResource — 16+ instances
+  in this codebase). Each application takes ~5 minutes via the
+  copy-and-swap script pattern. The recurring shape is well-documented
+  across many prior progress entries; SmsCampaign is nearly
+  byte-identical to EmailCampaign except:
+  1. **Search closure ORs on `body` instead of `subject`** (SMS has no
+     subject column — the body is the message content).
+  2. **Extra `from` column** (SMS-specific ClickSend sender-ID label
+     that has no email equivalent).
+  3. **Preserved existing Performance infolist section** rather than
+     swapping to Details (a future story in this SmsCampaign parity
+     series will mirror US-006 of the EmailCampaign parity series to
+     swap the infolist section AND wire SmsCampaignStatsWidget as a
+     header widget on ViewSmsCampaign).
+  Same posture applies to any future sibling-resource refactor: read
+  the sibling's source, note the entity-specific column differences,
+  swap FQCNs + column names, done.
+- **The pre-existing SmsCampaignResource had a subtle bug in the
+  delivered_count label**: `->label(__('laravel-crm-filament::labels.money.delivered'))`.
+  There's no `money.delivered` key in the labels file — the `delivered`
+  entry at line 283 of en labels lives under `sales.delivered_on`
+  (Delivery domain, unrelated). This produced a silent-broken label
+  rendering the literal `laravel-crm-filament::labels.money.delivered`
+  string in the UI. My AC-mandated drop of the delivered_count column
+  incidentally fixed this bug — the column is gone, so the wrong-namespace
+  translation key no longer executes. Reusable insight: dropping a
+  column can incidentally close silently-broken translation-key bugs.
+- **The `campaign.from` translation key** was already present in the
+  labels file (used by the pre-existing SmsCampaignResource `form()`'s
+  TextInput('from')->label(...) call). No new translation keys were
+  needed for this story — the `from` column reuses the same key. Same
+  pattern as US-002 of the new sequence's `campaign.delivered` reuse
+  in SmsCampaignStatsWidget.
+- **The AC's "preserve `->defaultSort('created_at', 'desc')` and the
+  status `SelectFilter`" contract** is a positive-preservation directive
+  — my script's `str_replace` on the ENTIRE columns block (leaving the
+  filters + toolbarActions blocks untouched) produced the preservation
+  by construction. No explicit test needed to verify this — the
+  positional check in `/tmp/us003_verify.php` for the exact string
+  literal locks the contract. Reusable pattern: when an AC mandates
+  preservation of specific literal chains alongside a code rewrite, the
+  safest shape is to isolate the rewrite to a specific block (columns,
+  form, etc.) via `str_replace` on the pre-existing block, leaving the
+  surrounding context untouched.
+- **The 32-failure pre-existing baseline preserved gate has now been
+  re-confirmed across 85+ consecutive stories with byte-exact parity.**
+  Extremely stable pattern. Any future deviation from 32/7 is a
+  regression to investigate, not a baseline shift.
+
+
+## US-004: Refactor SmsCampaignResource form and infolist (new sequence — SmsCampaign parity)
+- Rewrote `SmsCampaignResource::form()` and `infolist()` at
+  `/Users/andrewdrake/Packages/laravel-crm-filament/src/Resources/SmsCampaigns/SmsCampaignResource.php`
+  to mirror the EmailCampaign parity shape locked-in by US-006 of the
+  EmailCampaign parity series. Every AC bullet satisfied:
+  - **Form preserved verbatim**: 2-col Grid for `name` + `sms_template_id`,
+    the `from` TextInput.
+  - **Form body wrapped**: swapped `body` Textarea from
+    `->rows(6)` free-standing → wrapped in
+    `Grid::make(['default' => 1, 'lg' => 4])->columnSpanFull()` with the
+    body at `columnSpan(['default' => 1, 'lg' => 3])` (kept
+    `->rows(12)` per AC), preserved `->required()`, `->maxLength(1530)`,
+    `->live(onBlur: true)`, AND the exact segment-count helperText
+    closure body verbatim. Companion `Placeholder::make('available_placeholders')`
+    at `columnSpan(['default' => 1, 'lg' => 1])` renders the 4 SMS
+    tokens (`first_name`, `last_name`, `full_name`, `company_name` — NO
+    `email` per AC) via `new HtmlString(static::placeholdersPanelHtml())`.
+  - **`placeholdersPanelHtml()` helper**: added the AC-mandated static
+    helper mirroring EmailCampaign's byte-shape except the token set
+    drops `email` AND the hint text swaps "subject or body" for "body"
+    since SMS has no subject column. Uses inline `style=""` attributes
+    for maximum standalone rendering.
+  - **Send Section replaces top-level DateTimePicker**: swapped the
+    pre-existing `Forms\Components\DateTimePicker::make('scheduled_at')
+    ->label(...)->helperText(...)` free-standing field →
+    `Section::make('Send')->columnSpanFull()->columns(2)->schema([...])`
+    containing:
+    - `Forms\Components\Radio::make('send_mode')` with `->default('send_now')
+      ->dehydrated(false)->live()`, `afterStateHydrated` setting
+      `schedule_send` when `$record->scheduled_at` is present at
+      hydration time, `afterStateUpdated` clearing `scheduled_at` when
+      user picks `send_now`.
+    - `Forms\Components\DateTimePicker::make('scheduled_at')` with
+      `->visible(fn ($get): bool => $get('send_mode') === 'schedule_send')`
+      AND `->required(fn ($get): bool => $get('send_mode') === 'schedule_send')`.
+  - **No `Forms\Get`/`Forms\Set` typehints in closures** per AC: all
+    reactive closures use bare `$get` / `$set` parameter names without
+    typehints. Confirmed no `use Filament\Forms\Get` or `use
+    Filament\Forms\Set` imports and no `Forms\Get`/`Forms\Set` typehint
+    references anywhere in the file.
+  - **Infolist rewritten**: swapped Performance Section (6 rate/count
+    TextEntries via `SmsCampaignRecipient::where(...)` state closures
+    for `sent_count`/`failed_count_state`/`skipped_count_state`,
+    `delivery_rate`/`click_rate`/`unsubscribe_rate`) → Details Section
+    (`->key('campaign_details')->columnSpanFull()->columns(2)`) with
+    the AC-mandated 8 TextEntries in order: `name`, `campaign_id`,
+    `from`, `body` (columnSpanFull), `status` (badge), `scheduled_at`
+    (with state closure that appends `($record->timezone)` when set —
+    the `crm_sms_campaigns.timezone` column ships in the production
+    migration stub AND on the SmsCampaign model), `sent_at`
+    (dateTime + placeholder('—')), `template.name` (placeholder('—')).
+  - **6 rate/count TextEntries dropped entirely**: `sent_count`,
+    `failed_count_state`, `skipped_count_state`, `delivery_rate`,
+    `click_rate`, `unsubscribe_rate`. Metric surface is now covered by
+    `SmsCampaignStatsWidget` (US-002 of this SmsCampaign parity series)
+    which will be wired as a ViewSmsCampaign header widget in a future
+    story mirroring US-006 of the EmailCampaign parity series.
+- **Imports**: added
+  `use Filament\Forms\Components\Placeholder;` + `use Illuminate\Support\HtmlString;`
+  alphabetically after existing imports. Pint's `no_unused_imports`
+  fixer removed the now-unused `use VentureDrake\LaravelCrm\Models\SmsCampaignRecipient;`
+  import (was only referenced by the dropped infolist rate TextEntries'
+  state closures) — same auto-cleanup pattern noted in the EmailCampaign
+  US-006 progress entry.
+- **Preserved verbatim per implicit AC scope**: `table()` (7-column
+  source-parity shape + 3-pill row actions from US-003 of this new
+  sequence), `defaultSort('created_at', 'desc')`, status
+  `SelectFilter` with 6-option list, `toolbarActions` (BulkActionGroup +
+  DeleteBulkAction), `getRelations()` returning [RecipientsRelationManager,
+  ClicksRelationManager], `backToIndexAction()` static factory,
+  `getPages()` returning the 4-key `[index, create, view, edit]` set,
+  trait usage (`UsesExternalIdRouting`), navigation properties, `$model`,
+  `$slug`, `$recordTitleAttribute`, `$navigationIcon`, `$navigationSort`,
+  `getNavigationGroup()`.
+- Used a one-shot `php /tmp/us004_rewrite.php` heredoc script with
+  `str_contains($src, $needle)` idempotency guards + `str_replace` on
+  exact multi-line pre-existing blocks. Fail-loudly on missing anchors
+  via `exit(1)`. Same script template pattern locked-in across 35+
+  prior refactor stories.
+- **Quality gates green**:
+  - AC-named `./vendor/bin/pint --dirty --test` on the modified file
+    reports `{"tool":"pint","result":"passed"}` after auto-fix of
+    `unary_operator_spaces` + `no_unused_imports` +
+    `not_operator_with_successor_space`.
+  - `php -l` on the file reports "No syntax errors detected".
+  - Targeted `pest --filter='SmsCampaign|CampaignPerformance|CampaignClicksDrilldown|BulkActions|LocalizationTest'
+    --no-coverage` → **103 passed (268 assertions)** in 8.79s. Every
+    SmsCampaign + EmailCampaign + Campaign + BulkActions + Localization
+    test remains green. Notably `CampaignPerformanceTest::it('overrides
+    the infolist method on both campaign resources')` still passes
+    (validates the resource-level `infolist(...)` override is declared
+    on both Email + SMS resource classes — my rewrite kept the method
+    signature intact).
+  - Full plugin pest suite → **1965 passed / 32 failed / 7 skipped
+    (6744 assertions)** in 361.79s. The 32 failures + 7 skipped are
+    IDENTICAL byte-for-byte to the pre-existing baseline noted across
+    the prior 85+ stories (Quote/Invoice/Order/PurchaseOrder/Delivery
+    parity tests + Audits/Portal/Pipeline tests + RelationManagersTest
+    expectations on the Crm* RM family). Passing count preserved
+    exactly at 1965 (matches post-US-003 checkpoint of this SmsCampaign
+    parity series). Zero net new failures, zero net new tests — as
+    expected for a "refactor form + infolist without adding tests"
+    story scope.
+- **Working-tree discipline**: the plugin repo carried 10 pre-existing
+  unrelated dirty files + 2 untracked at session start (3 label files
+  with pending `sales.products` / `sales.fields` / `dashboard.*` /
+  `integrations.xero_description` follow-up additions from prior
+  series + 5 modified source files across Fields / ProductCategory /
+  Pages / Integrations / ClickSend + 3 modified test files including
+  ClickSendIntegrationPageTest + ProductCategory tests + 2 untracked
+  Blade views for clicksend + integrations). Used explicit
+  `git add src/Resources/SmsCampaigns/SmsCampaignResource.php` to
+  stage ONLY the 1 US-004 file. Post-commit `git status --short`
+  shows the same 10 pre-existing dirty + 2 untracked files preserved
+  untouched for their proper follow-up story. Commit `172793b` on
+  `main` — 1 file changed / +116 insertions / -41 deletions.
+
+### Files changed (in `/Users/andrewdrake/Packages/laravel-crm-filament`)
+- **Modified** `src/Resources/SmsCampaigns/SmsCampaignResource.php`
+  (+116/-41 diff: 2 new imports (`Filament\Forms\Components\Placeholder`
+  + `Illuminate\Support\HtmlString`) + auto-removed unused
+  `SmsCampaignRecipient` import via pint; full `form()` body rewrite
+  wrapping body Textarea in 4-col Grid with placeholders panel AND
+  swapping top-level DateTimePicker for a Send Section with
+  Radio + conditional DateTimePicker; full `infolist()` body rewrite
+  from Performance Section (6 rate/count TextEntries) to Details
+  Section (8 field TextEntries including scheduled_at with
+  timezone-appending state closure); added `placeholdersPanelHtml()`
+  static helper mirroring EmailCampaign's byte-shape but with 4
+  tokens instead of 5 (no `email`))
+
+### Learnings for future iterations
+- **The Email-to-SMS parity form refactor pattern** is now applied
+  across both campaign resources (US-006 of the EmailCampaign parity
+  series → US-004 of this SmsCampaign parity series). Sibling-widget
+  copy-and-swap discipline: read the EmailCampaign form body, note
+  the SMS-specific differences (body Textarea instead of RichEditor,
+  no subject/preview_text fields, 4 tokens instead of 5), swap FQCNs
+  + column names + helper text, done. Total delivery time <10 minutes
+  end-to-end via the script template. Same posture as any future
+  "extend a well-established sibling parity pattern to a new entity"
+  story.
+- **The `Placeholder` component name-clash with `->placeholder(...)` on
+  TextEntry** is a subtle gotcha to watch when authoring/reading a
+  file that uses both. `Placeholder::make('available_placeholders')`
+  is a Filament form component that renders arbitrary HTML/text as a
+  form field; `->placeholder('—')` on a TextEntry sets the fallback
+  text when the entry's state is null. Distinct APIs sharing a similar
+  name. Both used together in this refactor (Placeholder in the form,
+  ->placeholder chain on 3 infolist TextEntries) — read carefully.
+- **The `crm_sms_campaigns.timezone` column exists on the production
+  migration stub** (verified via grep of
+  `/Users/andrewdrake/Packages/laravel-crm/database/migrations/create_laravel_crm_sms_campaigns_table.php.stub`)
+  but is NOT cast on the SmsCampaign model. Same posture as
+  EmailCampaign's `timezone` column: reads from the DB as a raw
+  nullable string, no accessor/mutator, no cast. My infolist state
+  closure uses `$record->timezone` directly — Laravel returns the
+  raw column value (or null). Same shape as the EmailCampaign
+  scheduled_at state closure from US-006 of the EmailCampaign parity
+  series.
+- **The AC's "No `Forms\Get`/`Forms\Set` typehints in closures"
+  directive** is a stylistic constraint that Filament v5 allows both
+  shapes — typed and untyped closure params work identically at
+  runtime (Filament's evaluate() resolves the callable's params by
+  name via reflection). The typed shape (`fn (Get $get) => ...`)
+  reads more explicitly; the untyped shape (`fn ($get) => ...`) is
+  more portable across Filament version bumps that might rename the
+  Get/Set interfaces. Same discipline extends to any future story
+  that mandates untyped closure params.
+- **The 32-failure pre-existing baseline preserved gate has now
+  been re-confirmed across 86+ consecutive stories with byte-exact
+  parity.** Extremely stable pattern.
+
+
+## US-005 (verify-and-noop): Update SmsCampaign View/Edit/Create pages for parity — already delivered
+- Story prompt was re-issued but the work was already committed in
+  `5e23765` on `main` in the plugin repo. All three page files verified
+  against every AC bullet:
+  - **`ViewSmsCampaign::getHeaderActions()`** returns exactly the 7-pill
+    AC sequence `[backToIndex, preview, sendNow, schedule, cancel, edit,
+    delete]`. Edit gated on `isEditable()`. Delete has
+    `->button()->hiddenLabel()->icon('heroicon-m-trash')->requiresConfirmation()`.
+    Preview/sendNow/schedule/cancel bodies preserved verbatim (preview
+    uses HtmlString modal content with SMS segment count + rendered
+    body; sendNow via HasSmsCampaignSendNowAction trait; schedule via
+    DateTimePicker schema + SmsCampaignService::schedule call; cancel
+    with isCancellable gate + SmsCampaignService::cancel call).
+  - **`ViewSmsCampaign::getHeaderWidgets()`** returns
+    `[SmsCampaignStatsWidget::class]` per AC.
+  - **`ViewSmsCampaign::getHeaderWidgetsColumns()`** returns 4 per AC
+    (public function with `int | array` union return type matching
+    Filament's parent signature).
+  - **`ViewSmsCampaign::getFooterWidgets()`** preserved verbatim —
+    still returns `[SmsCampaignSendsOverTimeChart::class,
+    SmsCampaignTopUrlsWidget::class]`.
+  - **`EditSmsCampaign::getHeaderActions()`** returns exactly the 3-pill
+    AC sequence `[backToIndex, view, delete]`. View has
+    `->button()->hiddenLabel()->icon('heroicon-m-eye')`. Delete has
+    `->button()->hiddenLabel()->icon('heroicon-m-trash')`.
+  - **`EditSmsCampaign::handleRecordUpdate()`** routes through
+    `app(SmsCampaignService::class)->update(FormPayload::wrap($data)
+    ->toArray(), $record)` with `use VentureDrake\LaravelCrmFilament\Support\FormPayload;`
+    import present. Returns `$record->refresh()` tail preserved.
+  - **`EditSmsCampaign::getAllRelationManagers()`** returning `[]` preserved.
+  - **`CreateSmsCampaign::handleRecordCreation()`** routes through
+    `app(SmsCampaignService::class)->create(FormPayload::wrap($data)
+    ->toArray())` with the FormPayload import present.
+  - All 3 files have `SmsCampaignResource::backToIndexAction()` factory
+    references (factory itself added by US-003 of this SmsCampaign
+    parity series).
+- Verified pint: `./vendor/bin/pint --dirty --test` reports
+  `{"tool":"pint","result":"passed"}` (working tree carries only
+  10 pre-existing unrelated dirty files + 2 untracked from prior
+  series follow-up polish work — same baseline noted across every
+  prior new-sequence story).
+- Verified php -l: all 3 page files report "No syntax errors detected".
+- Verified pest: targeted
+  `pest --filter='SmsCampaign|CampaignPerformance|CampaignClicksDrilldown'
+  --no-coverage` → 57 passed (161 assertions) in 4.87s. Zero failures
+  across the entire SmsCampaign + Campaign family. Every AC-adjacent
+  test (SmsCampaignStatsWidget parity, CampaignPerformance send-now
+  action, CampaignClicksDrilldown ClicksRelationManager) remains green.
+- No code changes needed. Working tree preserved with the same 10
+  pre-existing dirty + 2 untracked files as at session start.
+
+### Learnings for future iterations
+- **Twelfth verify-and-noop-adjacent story in the autopilot flow.**
+  Prior instances: US-003/004/005/006 of the form-parity series, US-002
+  of the product list series, US-002 of the Settings cluster evacuation
+  series, US-005 of the PipelineStages RM series, US-001 of the former
+  sequence, US-008 of the new sequence ViewProductCategory, US-009 of
+  the new sequence ProductCategoryProductsRelationManager, US-004 of the
+  IntegrationsSubNavigation series, US-008 of the LabelResource arc
+  (bundled test file already delivered in US-005's commit). Each
+  verify-and-noop response follows the same recipe: (a) grep `git log
+  --oneline` for the story key; (b) if a matching commit exists, read
+  the file end-to-end and map each AC bullet against the current file
+  state; (c) run the AC-named completion gates (pint + php -l + pest
+  filter); (d) confirm green and append a verify-and-noop progress
+  entry. No code changes, no commit (working tree already clean of
+  US-005-scoped edits).
+- **The View/Edit/Create page trio is the standard bundled scope**
+  for a "Update Xxx pages for parity" story. US-005 bundled all three
+  files into one commit because the AC bullets span all three — the
+  ViewXxx contract (7-pill header + header widget + header widget
+  columns + footer widget preservation), the EditXxx contract (3-pill
+  header + FormPayload wrap + import + RelationManager preservation),
+  the CreateXxx contract (FormPayload wrap + import). Same posture as
+  US-007 of the EmailCampaign parity series (which similarly bundled
+  Create + Edit page FormPayload wrapping in one commit).
+- **The 32-failure pre-existing baseline preserved gate has now
+  been re-confirmed across 87+ consecutive stories with byte-exact
+  parity.** Extremely stable pattern. Any future deviation from 32/7
+  is a regression to investigate.
+
+
+## US-006: Update existing tests to reflect SMS parity changes
+- Two surgical test-file updates locking the SMS parity contracts landed
+  by prior stories in the SmsCampaign parity series (US-003 trait swap +
+  US-005 View header 7-pill sequence):
+  1. **`tests/Feature/CampaignPerformanceTest.php`**: flipped the
+     `SmsCampaign` dataset row of the "registers the Send-now header
+     action on each campaign view page" test from the pre-existing
+     4-name set `['sendNow', 'preview', 'schedule', 'cancel']` to the
+     AC-mandated 7-name set `['backToIndex', 'preview', 'sendNow',
+     'schedule', 'cancel', 'edit', 'delete']`. Locks the full 7-action
+     presence in `ViewSmsCampaign::getHeaderActions()` (US-005 of the
+     SmsCampaign parity series). The `EmailCampaign` row was already
+     the correct 7-name set from US-006 of the EmailCampaign parity
+     series — untouched per AC's "No other changes to that file"
+     directive.
+  2. **`tests/Feature/UsesExternalIdRoutingTraitTest.php`**: added the
+     `SmsCampaignResource` import alphabetically after the pre-existing
+     `QuoteResource` import (line 33), AND appended
+     `'SmsCampaignResource' => SmsCampaignResource::class,` as the 23rd
+     (final) entry in the `$traitResources` associative array. Each row
+     drives 4 dataset-driven `it(...)` cases (trait presence, route-key
+     check, both trait methods inherited from trait file), so this
+     addition produces +4 test cases. Locks the trait application
+     landed by US-003 of the SmsCampaign parity series (commit
+     `eae4dcd`).
+- Used a one-shot `php /tmp/us006_patch.php` heredoc script with
+  `str_contains($src, $needle)` idempotency guards + `str_replace` on
+  exact anchors. Fail-loudly on missing anchors via `exit(1)`. Same
+  reusable template as the 35+ prior test-addition / labels-only
+  stories.
+- **Quality gates green**:
+  - AC-named `./vendor/bin/pint --dirty --test` on the 2 modified files
+    reports `{"tool":"pint","result":"passed"}`.
+  - AC-named targeted `pest --filter='CampaignPerformance|UsesExternalIdRoutingTrait'
+    --no-coverage` → **124 passed (204 assertions)** in 7.50s. Every
+    pre-existing test in both files remains green + the 4 new
+    SmsCampaignResource dataset iterations fire green.
+- **Working-tree discipline**: the plugin repo carried 10 pre-existing
+  unrelated dirty files + 2 untracked at session start (3 label files
+  with pending `sales.products` / `sales.fields` / `dashboard.*` /
+  `integrations.xero_description` follow-up additions from prior series
+  + 5 modified source files across Fields / ProductCategory / Pages /
+  Integrations / ClickSend + 3 modified test files + 2 untracked Blade
+  views). Used explicit `git add` to stage ONLY the 2 US-006 test
+  files. Post-commit `git status --short` shows the same 10
+  pre-existing dirty + 2 untracked files preserved untouched for their
+  proper follow-up story. Commit `cd86a99` on `main` in the plugin
+  repo — 2 files changed / +3 insertions / -1 deletion.
+
+### Files changed (in `/Users/andrewdrake/Packages/laravel-crm-filament`)
+- **Modified** `tests/Feature/CampaignPerformanceTest.php` (+1/-1
+  diff: SmsCampaign dataset row expanded from 4-name to 7-name AC-
+  ordered set)
+- **Modified** `tests/Feature/UsesExternalIdRoutingTraitTest.php`
+  (+2/-0 diff: `SmsCampaignResource` import alphabetically placed +
+  dataset entry appended after `FieldGroupResource`)
+
+### Learnings for future iterations
+- **Third occurrence of the "add trait dataset entries + flip
+  dependent test dataset row" combined shape in a single story**.
+  Prior instances: US-002 of the new stories series (added
+  ChatConversationResource to trait dataset after applying trait);
+  US-006 of the new sequence (added ProductCategoryResource); US-002
+  of the LabelResource arc (added LabelResource + also flipped one
+  test's dataset expectation); US-006 of the current SmsCampaign
+  parity series (adds SmsCampaignResource + flips
+  CampaignPerformanceTest's SmsCampaign row). Recurring recipe:
+  when a series applies a trait to a Resource AND that Resource has
+  pre-existing tests that assert a dataset row shape now changed by
+  a sibling story, one focused test-update story bundles both the
+  trait-dataset extension AND the dataset-row flip. Same
+  build-now-wire-later cascade pattern noted across many prior
+  parity refactor series.
+- **The `SmsCampaignResource` alphabetical import placement between
+  `QuoteResource` (Q < S) and no successor** confirms the SortSort
+  discipline: alphabetical by short-name-after-namespace-slash. The
+  dataset entry is appended at the END (after `FieldGroupResource`)
+  per the AC's "append ... mirroring the earlier trait-added rows"
+  directive — the dataset array's ordering doesn't follow the imports'
+  alphabetical order because entries are chronologically-added over
+  time as new resources acquire the trait.
+- **The 32-failure pre-existing baseline preserved gate** was not
+  re-run for this story since the AC's completion gate was just
+  pint + the AC-named targeted filter. When the story's scope is
+  purely test-file edits AND the targeted filter passes cleanly,
+  the full-suite regression run is a defensive check that doesn't
+  add coverage beyond what the targeted filter already verified
+  (the 2 modified test files' scope is well within the filter's
+  pattern match).
+
+
+## US-007: Add SmsCampaignResourceParityTest regression gate (new sequence — SmsCampaign parity wrap)
+- New `tests/Feature/SmsCampaignResourceParityTest.php` (13 tests / 123
+  assertions) locks every AC contract from the SmsCampaign parity series
+  (US-001..US-006) in a single-file regression gate. Mirrors the
+  `EmailCampaignResourceParityTest` shape byte-for-byte with SMS-native
+  FQCN swaps + expected values + 2 SMS-specific tests replacing 2 of the
+  Email-only tests to cover the AC-mandated form Placeholder panel token
+  set + Send Section radio semantics.
+- Test inventory (13 focused tests covering every AC bullet):
+  1. **UsesExternalIdRouting trait + method inheritance** — asserts
+     `class_uses_recursive` contains the trait, `getRecordRouteKeyName()
+     === 'external_id'`, AND BOTH `getRecordRouteKeyName` + `getUrl`
+     methods are inherited from the trait file via
+     `ReflectionMethod::getFileName()` comparison. Byte-identical to
+     EmailCampaign's equivalent test.
+  2. **backToIndexAction factory contract** — Reflection asserts public
+     + static + 0 params; direct invocation confirms name `backToIndex`,
+     color `gray`, icon `heroicon-o-arrow-left`, URL equals
+     `SmsCampaignResource::getUrl('index')`, label resolves via
+     `actions.back_to_sms_campaigns`.
+  3. **7 source-parity table columns in exact order** — mounts via
+     `livewire(ListSmsCampaigns::class)->instance()->getTable()->getColumns()`,
+     asserts `array_keys()` equals
+     `[campaign_id, name, from, status, total_recipients, scheduled_at,
+     sent_at]`. Positive-presence check for `campaign_id` + `from` AND
+     negative-presence guards for `delivered_count` + `failed_count`
+     (dropped columns from US-003 of this SmsCampaign parity series).
+  4. **Table source structural markers** — `substr_count('->since()')
+     >= 2` locks two ->since() timestamp columns; positive-presence
+     checks for `TextColumn::make('scheduled_at')` +
+     `TextColumn::make('sent_at')`; positive-presence for the AC-named
+     searchable-closure OR-search pattern across name / **body** /
+     campaign_id (SMS uses `body` instead of Email's `subject`).
+  5. **RecordActions positional ordering** — source-grep for the three
+     literal call sites AND positional `strpos` walk asserts
+     View → Edit → Delete order. Locks `->button()->hiddenLabel()` chain
+     on all three AND `->requiresConfirmation()` on Delete AND
+     `->visible(fn ($record) => $record->isEditable())` gate on Edit.
+  6. **ViewSmsCampaign 7-pill header + 4-column header widget
+     registration** — extends `ViewRecord` + header actions
+     `[backToIndex, preview, sendNow, schedule, cancel, edit, delete]`
+     in exact order (7 pills) via Reflection on protected
+     `getHeaderActions()`. Per-pill instance types (Action / EditAction /
+     DeleteAction) + icon assertions (`heroicon-o-arrow-left` on
+     backToIndex, `heroicon-m-pencil-square` on Edit, `heroicon-m-trash`
+     on Delete) + Delete confirmation requirement. Combined with
+     `getHeaderWidgets()` returning `SmsCampaignStatsWidget::class` AND
+     `getHeaderWidgetsColumns()` returning 4 — merges what were two
+     separate tests in EmailCampaign's file into one to accommodate the
+     2 SMS-specific tests below within the AC's ~13-test target.
+  7. **EditSmsCampaign header ordering** — extends `EditRecord` +
+     header actions `[backToIndex, view, delete]` in exact order (3
+     pills) via Reflection. Per-pill instance types (Action /
+     ViewAction / DeleteAction).
+  8. **SmsCampaignStatsWidget structural contract + SMS-native metric
+     set** — extends `StatsOverviewWidget`; `columnSpan === 'full'` via
+     Reflection on protected property; `public ?SmsCampaign $record`
+     property with null default (typed + nullable + default null via
+     Reflection); `getColumns()` returns 4; `getStats()` returns exactly
+     4 Stat instances with `'—'` value on null record. **SMS-native
+     metric-set guard**: source-grep asserts widget references
+     `labels.campaign.recipients`, `.delivered`, `.clicks`,
+     `.unsubscribed` translation keys — locks the AC's "Recipients /
+     Delivered / Clicks / Unsubscribed" contract (distinct from
+     EmailCampaign's Recipients/Opens/Clicks/Unsubscribed set).
+  9. **Infolist Details section + 8 TextEntries + 6 rate TextEntries
+     absent + Email-only fields absent** — source-grep for the Details
+     Section heading literal; loop over 8 AC-named `TextEntry::make(...)`
+     literals (name / campaign_id / from / body / status / scheduled_at
+     / sent_at / template.name — the AC's SMS-native 8-entry set has
+     `from` and `body` instead of Email's `subject` + `preview_text`);
+     regression guard for `$record->timezone` (locks the scheduled_at
+     state closure's timezone-appending contract); negative-presence
+     loop over 6 pre-existing rate/count TextEntry literals AND
+     Email-only `subject` + `preview_text` TextEntries.
+  10. **FormPayload::wrap in Create + Edit pages** — source-grep on
+      both CreateSmsCampaign + EditSmsCampaign pages asserts: (a)
+      FormPayload import present on both; (b) each service call routes
+      through `FormPayload::wrap($data)->toArray()`; (c) Create calls
+      `SmsCampaignService::create(...)`; (d) Edit calls
+      `SmsCampaignService::update(..., $record)` with the record as
+      second arg.
+  11. **Form Placeholder panel token set (4 tokens excluding email)** —
+      NEW SMS-native test not present in EmailCampaign's file. Source-
+      grep for `Placeholder::make('available_placeholders')` + the
+      `static::placeholdersPanelHtml()` static helper wired via
+      `HtmlString`; then invokes the static helper via Reflection
+      (`ReflectionMethod::setAccessible(true)->invoke(null)`) and
+      asserts the rendered HTML contains all 4 SMS-native tokens
+      (`{first_name}`, `{last_name}`, `{full_name}`, `{company_name}`)
+      AND does NOT contain `{email}` — the AC-mandated "4 tokens
+      excluding email" regression guard against a future refactor
+      that accidentally adds the email token to the SMS Placeholder.
+  12. **Section-Send radio + conditional DateTimePicker semantics** —
+      NEW SMS-native test not present in EmailCampaign's file. Source-
+      grep asserts `Section::make('Send')` wraps the form fields;
+      `Radio::make('send_mode')` with `send_now` + `schedule_send`
+      options + `->default('send_now')` + `->dehydrated(false)`;
+      `DateTimePicker::make('scheduled_at')` with
+      `->visible(fn ($get): bool => $get('send_mode') === 'schedule_send')`
+      AND matching `->required(fn ...)` gate — locks the AC's
+      "conditional DateTimePicker semantics" contract at the source
+      level.
+  13. **Preserved contracts (RelationManagers + footer widgets) + label
+      parity** — bundled test: `SmsCampaignResource::getRelations()`
+      returns exactly `[RecipientsRelationManager::class,
+      ClicksRelationManager::class]` in that order; `ViewSmsCampaign::
+      getFooterWidgets()` returns an array containing both
+      `SmsCampaignSendsOverTimeChart::class` +
+      `SmsCampaignTopUrlsWidget::class`; en/fr/es label files declare
+      `actions.back_to_sms_campaigns` as non-empty strings in all 3.
+- **AC-named `pest --filter='SmsCampaign|CampaignPerformance|CampaignClicks|UsesExternalIdRoutingTrait|Localization'
+  --no-coverage` all green** — 178 passed (451 assertions) in 20.94s.
+- Full plugin pest suite → **1982 passed / 32 failed / 7 skipped (6874
+  assertions)** in 561.68s. The 32 failures + 7 skipped are IDENTICAL
+  byte-for-byte to the pre-existing baseline noted across the prior
+  87+ stories (Quote/Invoice/Order/PurchaseOrder/Delivery parity tests
+  + Audits/Portal/Pipeline tests + RelationManagersTest expectations
+  on the Crm* RM family). Passing count grew by exactly +13 vs the
+  post-US-006 baseline of ~1969 (accounting for intervening test
+  additions between checkpoints) — matches exactly the 13 new
+  SmsCampaignResourceParityTest cases. Zero net new failures.
+- Quality gates: `./vendor/bin/pint --dirty --test` reports `passed`
+  on the new file (no auto-fixes needed).
+- **Working-tree discipline**: the plugin repo carried 10 pre-existing
+  unrelated dirty files + 2 untracked at session start (3 label files
+  with pending `sales.products` / `sales.fields` / `dashboard.*` /
+  `integrations.xero_description` follow-up additions from prior
+  series + 5 modified source files across Fields / ProductCategory /
+  Pages / Integrations / ClickSend + 3 modified test files including
+  ClickSendIntegrationPageTest + ProductCategory tests + 2 untracked
+  Blade views for clicksend + integrations). Used explicit
+  `git add tests/Feature/SmsCampaignResourceParityTest.php` to stage
+  ONLY the 1 US-007 file. Post-commit `git status --short` shows the
+  same 10 pre-existing dirty + 2 untracked files preserved untouched
+  for their proper follow-up story. Commit `8402bb6` on `main` in the
+  plugin repo — 1 file changed / +345 insertions.
+
+### Files changed (in `/Users/andrewdrake/Packages/laravel-crm-filament`)
+- **Added** `tests/Feature/SmsCampaignResourceParityTest.php` (13 tests
+  / 123 assertions locking the AC contract as a single-file regression
+  gate; ~345 lines including SMS-native form Placeholder panel + Send
+  Section radio semantics tests that aren't in EmailCampaign's parity
+  file)
+
+### Learnings for future iterations
+- **The "byte-for-byte mirror EmailCampaignResourceParityTest with
+  SMS-native swaps" AC pattern is now the canonical shape for the SMS
+  parity wrap story.** Same posture as US-008 of the EmailCampaign
+  parity series (`EmailCampaignResourceParityTest`) — this SMS
+  counterpart mirrors the pattern with only the FQCN + expected-value
+  swaps + 2 SMS-specific coverage additions. Recipe for any future
+  sibling parity wrap story:
+  1. Copy the sibling's parity test file body verbatim.
+  2. Mechanical FQCN + import swaps (Email → SMS naming pattern).
+  3. Column-value swaps (subject → body, no unique_opens_count,
+     scheduled_at + sent_at preserved, etc.).
+  4. Metric-set swaps (Opens → Delivered for SMS-native stats).
+  5. Add sibling-native tests for coverage bullets the AC names but
+     the sibling test file doesn't have (here: Placeholder panel
+     tokens + Send Section radio semantics).
+  6. Adjust test count/assertion count to hit the AC's "~13 tests /
+     ~95 assertions" range — bundle tests as needed (I merged
+     ViewSmsCampaign 7-pill header + header widget registration into
+     one test to save room for the 2 SMS-native tests within the
+     13-test target).
+  Delivery time: ~15 minutes end-to-end via the copy-and-swap
+  discipline. Similar cost/leverage to sibling-widget copy-and-swap
+  from US-002 of this SmsCampaign parity series.
+- **The AC's "~13 tests / ~95 assertions" numeric range was
+  comfortably satisfied with 13 tests / 123 assertions.** Same "AC's
+  numeric prediction is a target/floor, not a ceiling" pattern
+  documented across many prior stories. When the AC's assertion
+  count is exceeded (123 vs target 95), it means the regression
+  gate is MORE robust than the minimum — each test consolidates
+  multiple related assertions inside a single `it(...)` block via
+  chained `->and(...)` calls. Reusable pattern: prefer fewer
+  well-scoped tests with more chained assertions over many tiny
+  tests when the assertions logically belong together.
+- **The AC's SMS-native form coverage tests** (Placeholder panel
+  tokens + Send Section radio semantics) are the value-add over the
+  EmailCampaign parity file. These tests exist because SMS has
+  unique form contracts that Email doesn't (Placeholder panel for
+  SMS-specific tokens without email; Send Section with conditional
+  DateTimePicker replacing Email's top-level DateTimePicker). When
+  a parity wrap AC adds coverage for sibling-native contracts,
+  ALWAYS write those tests in the resource-specific test file
+  rather than trying to force them into the sibling's shape.
+- **`ReflectionMethod::setAccessible(true)->invoke(null)` for a
+  protected STATIC method** is the cleanest way to exercise a
+  static helper from tests without changing the method's
+  visibility. The `null` argument means "invoke with no bound
+  instance" (required for static methods). Reusable for any future
+  test that needs to exercise a resource's protected static helper
+  (e.g. `placeholdersPanelHtml()`, `formatShippingAddress()`,
+  etc.). Same pattern as reflection on protected instance methods
+  but with `null` in `invoke()` instead of a mounted instance.
+- **The 32-failure pre-existing baseline preserved gate has now
+  been re-confirmed across 88+ consecutive stories with byte-exact
+  parity.** Extremely stable pattern.
+
+
+## US-008 (follow-up): Fix MySQL 1054 error on SmsCampaign ClicksRelationManager recipient filter
+- **Real production bug surfaced by the manual browser walkthrough** at
+  `https://laravel-13-crm-v2.test/admin/sms-campaigns/{external_id}?relation=1` — the
+  Clicks tab's recipient SelectFilter threw:
+  > SQLSTATE[42S22]: Column not found: 1054 Unknown column 'crm_sms_campaign_recipients.phone'
+  > in 'field list' ... SQL: select `crm_sms_campaign_recipients`.`phone`,
+  > `crm_sms_campaign_recipients`.`id` from `crm_sms_campaign_recipients` where
+  > `sms_campaign_id` = 7 order by `crm_sms_campaign_recipients`.`phone` asc limit 50
+- **Root cause**: `ClicksRelationManager` (line 62) declared
+  `SelectFilter::make('recipient')->relationship('recipient', 'phone', ...)` — but
+  `phone` on `SmsCampaignRecipient` is a **`belongsTo(Phone::class, 'phone_id')`
+  relation**, NOT a column. Confirmed by:
+  1. Production migration `create_laravel_crm_sms_campaign_recipients_table.php.stub`
+     line 16 declares `phone_id` FK; no `phone` column.
+  2. `/Users/andrewdrake/Packages/laravel-crm/src/Models/SmsCampaignRecipient.php:27-29`
+     declares `public function phone() { return $this->belongsTo(Phone::class, 'phone_id'); }`.
+  3. Filament v5's `SelectFilter->relationship($name, $labelColumn, ...)` requires
+     `$labelColumn` to be a real column on the related table — internally it
+     runs `$query->pluck($labelColumn, $keyColumn)`. Filament emits
+     `SELECT phone, id FROM crm_sms_campaign_recipients` which MySQL rejects.
+  - Compare with EmailCampaign's counterpart (line 62 of
+    `EmailCampaigns/RelationManagers/ClicksRelationManager.php`):
+    `->relationship('recipient', 'address', ...)` — Email works because
+    `crm_email_campaign_recipients.address` IS a real column (email address stored
+    directly on the recipient row). SMS needs to traverse the phone relation to
+    render the phone number.
+  - SQLite (test environment) is permissive here too, so the test suite passed
+    cleanly at 1982/32/7 pre-fix — same class of test-vs-production divergence
+    pattern documented in the Codebase Patterns section AND previously surfaced
+    by the manual walkthrough in v0.x US-006 of the prices RM series (
+    `defaultSort('default', 'desc')` against a non-existent column) AND US-008
+    of the EmailCampaign parity series (only_full_group_by 1055 error on
+    EmailCampaignTopUrlsWidget + SmsCampaignTopUrlsWidget).
+- **Fix** (10-line change): rewrote the recipient SelectFilter chain:
+  - Swap `'phone'` → `'phone_id'` (the real FK column that exists on
+    `crm_sms_campaign_recipients`) for the SELECT — this makes the emitted SQL
+    valid (`SELECT phone_id, id FROM crm_sms_campaign_recipients`).
+  - Add `->with('phone')` to the query modifier so each recipient's `phone`
+    relation is eager-loaded before Filament renders the dropdown options.
+  - Add `->getOptionLabelFromRecordUsing(fn ($record): string =>
+    $record->phone?->number ?? '—')` to override the displayed label — pulls
+    the actual phone number through the phone relation for a readable dropdown
+    while keeping the SELECT valid.
+  - Drop `->searchable()` — Filament's search-by-relationship-column would try
+    to search on `phone_id` (integer FK), which isn't useful. Users who need to
+    narrow by recipient can still preload the full dropdown via `->preload()`
+    and click the phone-number option.
+  - Preceded by a 6-line inline comment documenting the WHY of the fix so a
+    future reader understands why the chain uses the FK column rather than the
+    natural `phone` name.
+- **Verification**:
+  - `./vendor/bin/pint --dirty --test` → `passed`.
+  - Targeted `pest --filter='SmsCampaign|CampaignClicksDrilldown' --no-coverage`
+    → **54 passed (234 assertions)** in 11.86s. Zero regressions across
+    SmsCampaign / EmailCampaign / clicks-drilldown families.
+  - **The user must confirm end-to-end** by revisiting
+    `/admin/sms-campaigns/{external_id}?relation=1` in the host app and
+    verifying the Clicks tab renders (with or without data) instead of
+    throwing 1054, AND the recipient dropdown shows phone-number options.
+- **Commit**: `69a13f4` on `main` in the plugin repo — 1 file changed, 10
+  insertions, 3 deletions.
+
+### Files changed (in `/Users/andrewdrake/Packages/laravel-crm-filament`)
+- **Modified** `src/Resources/SmsCampaigns/RelationManagers/ClicksRelationManager.php`
+  (+10/-3 diff: rewrote `Tables\Filters\SelectFilter::make('recipient')` chain
+  to (a) swap `'phone'` → `'phone_id'` as the label column, (b) eager-load the
+  phone relation via `->with('phone')`, (c) override display via
+  `->getOptionLabelFromRecordUsing()`, (d) drop `->searchable()`; preceded by
+  6-line inline comment documenting the fix rationale)
+
+### Learnings for future iterations
+- **Filament v5's `SelectFilter->relationship($name, $labelColumn, ...)` requires
+  `$labelColumn` to be a real column on the related table.** When the natural
+  display value lives on a nested relation (like `recipient.phone.number`),
+  the fix pattern is:
+  1. Pass a valid FK column as the SELECT label column
+     (`->relationship('recipient', 'phone_id', ...)`).
+  2. Eager-load the nested relation in the query modifier
+     (`->with('phone')`).
+  3. Override the DISPLAYED label via `->getOptionLabelFromRecordUsing()` that
+     reads through the nested relation.
+  4. Drop `->searchable()` — searching against the integer FK column isn't
+     useful. If users need search UX, implement a custom `->query()` closure
+     instead.
+  Same trap applies to any future SelectFilter whose "natural" label lives
+  on a nested relation rather than a direct column.
+- **Third manual-walkthrough-caught production bug in this codebase now**
+  documented across the progress log:
+  1. v0.x US-006 prices RM series — `defaultSort('default', 'desc')` where
+     `default` is a query scope, not a column.
+  2. US-008 of the EmailCampaign parity series — `only_full_group_by` MySQL
+     1055 error on Top URLs widget's GROUP BY with Filament's default primary-
+     key tiebreaker.
+  3. This story — SelectFilter using a relation name as its label column.
+  All three share the same test-vs-production divergence pattern:
+  SQLite (test) is permissive about these issues; MySQL (production) is not.
+  Reusable rule: **whenever a Filament chain includes a string identifier
+  that could be either a column name OR a relation/scope name, cross-check
+  the target model + production migration BEFORE assuming SQLite's permissive
+  behavior extends to MySQL/PostgreSQL production hosts.** The manual browser
+  walkthrough is the LAST QA layer that catches these.
+- **The comment-before-chain regression pattern** (established by
+  US-008-follow-up of the EmailCampaign parity series with 4 lines of
+  "why defaultKeySort(false)") extended here with a 6-line comment
+  explaining the `phone_id` swap + `getOptionLabelFromRecordUsing` composition.
+  Both fixes are single-line changes to a fluent chain that wouldn't be
+  self-explanatory to a future reader — the inline comment documents WHY
+  the chain deviates from the natural `phone` shape. Reusable pattern:
+  **when a fix opts OUT of a natural framework default OR uses a non-obvious
+  workaround, document the rationale in an inline comment above the chain**.
+  Without the comment, a future refactor might strip the workaround thinking
+  it's redundant, silently re-introducing the bug.
