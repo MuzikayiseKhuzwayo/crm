@@ -69,10 +69,9 @@ class QuoteProductController extends Controller
     /**
      * Show the form for editing the specified resource.
      *
-     * @param  int  $id
      * @return Response
      */
-    public function edit(QuoteProduct $quoteProduct)
+    public function edit(Quote $quote, QuoteProduct $product)
     {
         return view('laravel-crm::quote-products.edit');
     }

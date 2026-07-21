@@ -69,10 +69,9 @@ class OrderProductController extends Controller
     /**
      * Show the form for editing the specified resource.
      *
-     * @param  int  $id
      * @return Response
      */
-    public function edit(OrderProduct $orderProduct)
+    public function edit(Order $order, OrderProduct $product)
     {
         return view('laravel-crm::order-products.edit');
     }

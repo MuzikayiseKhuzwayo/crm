@@ -392,6 +392,7 @@ use VentureDrake\LaravelCrm\Observers\XeroItemObserver;
 use VentureDrake\LaravelCrm\Observers\XeroPersonObserver;
 use VentureDrake\LaravelCrm\Observers\XeroPurchaseOrderObserver;
 use VentureDrake\LaravelCrm\Observers\XeroTokenObserver;
+use VentureDrake\LaravelCrm\Policies\ActivityPolicy;
 use VentureDrake\LaravelCrm\Policies\CallPolicy;
 use VentureDrake\LaravelCrm\Policies\ChatConversationPolicy;
 use VentureDrake\LaravelCrm\Policies\ChatWidgetPolicy;
@@ -475,6 +476,7 @@ class LaravelCrmServiceProvider extends ServiceProvider
         'VentureDrake\LaravelCrm\Models\LeadSource' => LeadSourcePolicy::class,
         'VentureDrake\LaravelCrm\Models\Task' => TaskPolicy::class,
         'VentureDrake\LaravelCrm\Models\Note' => NotePolicy::class,
+        'VentureDrake\LaravelCrm\Models\Activity' => ActivityPolicy::class,
         'VentureDrake\LaravelCrm\Models\Call' => CallPolicy::class,
         'VentureDrake\LaravelCrm\Models\Meeting' => MeetingPolicy::class,
         'VentureDrake\LaravelCrm\Models\Lunch' => LunchPolicy::class,
