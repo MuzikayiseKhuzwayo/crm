@@ -63,34 +63,11 @@
                     && method_exists($crmUser, 'allTeams')
                     && method_exists($crmUser, 'isCurrentTeam')
                     && $crmUser->currentTeam;
-
-                $teamSettingsRoute = null;
-                if ($hasTeamCapability) {
-                    foreach (['teams.show', 'settings.teams.edit', 'teams.edit'] as $candidate) {
-                        if (Route::has($candidate)) {
-                            $teamSettingsRoute = $candidate;
-                            break;
-                        }
-                    }
-                }
             @endphp
             @if ($hasTeamCapability)
                 <x-mary-dropdown label="{{ $crmUser->currentTeam->name }}" class="btn-neutral btn-sm" right>
-                    @if ($teamSettingsRoute)
-                        <x-mary-menu-item href="{{ route($teamSettingsRoute, $crmUser->currentTeam) }}" title="{{ __('Team Settings') }}" />
-                    @endif
-                    @if (Route::has('teams.create'))
-                        @if (class_exists('\Laravel\Jetstream\Jetstream'))
-                            @can('create', Laravel\Jetstream\Jetstream::newTeamModel())
-                                <x-mary-menu-item href="{{ route('teams.create') }}" title="{{ __('Create New Team') }}" />
-                            @endcan
-                        @else
-                            <x-mary-menu-item href="{{ route('teams.create') }}" title="{{ __('Create New Team') }}" />
-                        @endif
-                    @endif
-                    @if (Route::has('current-team.update') && $crmUser->allTeams()->count() > 1)
-                        <x-mary-menu-separator />
-                        <x-mary-menu-item title="{{ __('Switch Teams') }}" class="menu-title" />
+                    <x-mary-menu-item title="{{ __('Teams') }}" class="menu-title" />
+                    @if (Route::has('current-team.update'))
                         @foreach ($crmUser->allTeams() as $team)
                             <form method="POST" action="{{ route('current-team.update') }}" x-data>
                                 @csrf
@@ -99,6 +76,17 @@
                                 <x-mary-menu-item @click.prevent="$root.submit();" title="{{ $team->name }}" @if ($crmUser->isCurrentTeam($team)) icon="o-check" @endif />
                             </form>
                         @endforeach
+                    @endif
+                    @if (Route::has('teams.create'))
+                        @if (class_exists('\Laravel\Jetstream\Jetstream'))
+                            @can('create', Laravel\Jetstream\Jetstream::newTeamModel())
+                                <x-mary-menu-separator />
+                                <x-mary-menu-item href="{{ route('teams.create') }}" icon="o-plus" title="{{ __('New team') }}" />
+                            @endcan
+                        @else
+                            <x-mary-menu-separator />
+                            <x-mary-menu-item href="{{ route('teams.create') }}" icon="o-plus" title="{{ __('New team') }}" />
+                        @endif
                     @endif
                 </x-mary-dropdown>
             @endif
