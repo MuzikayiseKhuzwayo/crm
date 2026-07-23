@@ -2,6 +2,7 @@
 
 namespace VentureDrake\LaravelCrm\Livewire\Teams;
 
+use Illuminate\Support\Facades\Schema;
 use Livewire\Component;
 use VentureDrake\LaravelCrm\Livewire\Teams\Traits\HasTeamCommon;
 use VentureDrake\LaravelCrm\Models\Team;
@@ -21,20 +22,25 @@ class TeamCreate extends Component
     {
         $this->validate();
 
+        $user = auth()->user();
+
         $team = Team::create([
             'name' => $this->name,
-            'user_id' => auth()->user()->id,
+            'user_id' => $user->id,
         ]);
 
-        if ($this->teamUsers) {
-            $team->users()->sync($this->teamUsers);
-        } else {
-            $team->users()->sync([]);
+        $userIds = collect($this->teamUsers)->push($user->id)->unique()->values()->all();
+        $team->users()->sync($userIds);
+
+        if (method_exists($user, 'switchTeam')) {
+            $user->switchTeam($team);
+        } elseif (Schema::hasColumn($user->getTable(), 'current_team_id')) {
+            $user->forceFill(['current_team_id' => $team->id])->save();
         }
 
         $this->success(
             ucfirst(trans('laravel-crm::lang.team_created')),
-            redirectTo: route('laravel-crm.teams.index')
+            redirectTo: route('laravel-crm.dashboard')
         );
     }
 

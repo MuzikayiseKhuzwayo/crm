@@ -65,6 +65,15 @@
                     && $crmUser->currentTeam;
             @endphp
             @if ($hasTeamCapability)
+                @php
+                    $newTeamRoute = null;
+                    foreach (['teams.create', 'laravel-crm.teams.create'] as $candidate) {
+                        if (Route::has($candidate)) {
+                            $newTeamRoute = $candidate;
+                            break;
+                        }
+                    }
+                @endphp
                 <x-mary-dropdown label="{{ $crmUser->currentTeam->name }}" class="btn-neutral btn-sm" right>
                     <x-mary-menu-item title="{{ __('Teams') }}" class="menu-title" />
                     @if (Route::has('current-team.update'))
@@ -77,16 +86,9 @@
                             </form>
                         @endforeach
                     @endif
-                    @if (Route::has('teams.create'))
-                        @if (class_exists('\Laravel\Jetstream\Jetstream'))
-                            @can('create', Laravel\Jetstream\Jetstream::newTeamModel())
-                                <x-mary-menu-separator />
-                                <x-mary-menu-item href="{{ route('teams.create') }}" icon="o-plus" title="{{ __('New team') }}" />
-                            @endcan
-                        @else
-                            <x-mary-menu-separator />
-                            <x-mary-menu-item href="{{ route('teams.create') }}" icon="o-plus" title="{{ __('New team') }}" />
-                        @endif
+                    @if ($newTeamRoute)
+                        <x-mary-menu-separator />
+                        <x-mary-menu-item link="{{ route($newTeamRoute) }}" icon="o-plus" title="{{ __('New team') }}" no-wire-navigate />
                     @endif
                 </x-mary-dropdown>
             @endif
