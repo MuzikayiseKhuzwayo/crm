@@ -58,37 +58,59 @@
             <x-mary-theme-toggle class="btn btn-ghost" />
             @php
                 $crmUser = Auth::user();
-                $hasTeamCapability = $crmUser
-                    && method_exists($crmUser, 'currentTeam')
-                    && method_exists($crmUser, 'allTeams')
-                    && method_exists($crmUser, 'isCurrentTeam')
-                    && $crmUser->currentTeam;
-            @endphp
-            @if ($hasTeamCapability)
-                @php
-                    $newTeamRoute = null;
-                    foreach (['teams.create', 'laravel-crm.teams.create'] as $candidate) {
-                        if (Route::has($candidate)) {
-                            $newTeamRoute = $candidate;
-                            break;
-                        }
+                $crmCurrentTeam = null;
+                if ($crmUser) {
+                    try { $crmCurrentTeam = $crmUser->currentTeam; } catch (\Throwable $e) {}
+                }
+                if ($crmUser && ! $crmCurrentTeam && method_exists($crmUser, 'crmTeams')) {
+                    $crmCurrentTeam = $crmUser->crmTeams()->first();
+                }
+
+                $crmAllTeams = collect();
+                if ($crmUser) {
+                    if (method_exists($crmUser, 'allTeams')) {
+                        $crmAllTeams = collect($crmUser->allTeams());
+                    } elseif (method_exists($crmUser, 'crmTeams')) {
+                        $crmAllTeams = $crmUser->crmTeams()->get();
                     }
-                @endphp
-                <x-mary-dropdown label="{{ $crmUser->currentTeam->name }}" class="btn-neutral btn-sm" right>
+                }
+
+                $crmIsCurrentTeam = function ($team) use ($crmUser, $crmCurrentTeam) {
+                    if ($crmUser && method_exists($crmUser, 'isCurrentTeam')) {
+                        return $crmUser->isCurrentTeam($team);
+                    }
+                    return $crmCurrentTeam && $crmCurrentTeam->id === $team->id;
+                };
+
+                $newTeamRoute = null;
+                foreach (['teams.create', 'laravel-crm.teams.create'] as $candidate) {
+                    if (Route::has($candidate)) {
+                        $newTeamRoute = $candidate;
+                        break;
+                    }
+                }
+            @endphp
+            @if ($crmCurrentTeam || $crmAllTeams->isNotEmpty() || $newTeamRoute)
+                <x-mary-dropdown label="{{ $crmCurrentTeam?->name ?? __('Teams') }}" class="btn-neutral btn-sm" right>
                     <x-mary-menu-item title="{{ __('Teams') }}" class="menu-title" />
                     @if (Route::has('current-team.update'))
-                        @foreach ($crmUser->allTeams() as $team)
+                        @foreach ($crmAllTeams as $team)
                             <form method="POST" action="{{ route('current-team.update') }}" x-data>
                                 @csrf
                                 @method('PUT')
                                 <input type="hidden" name="team_id" value="{{ $team->id }}">
-                                <x-mary-menu-item @click.prevent="$root.submit();" title="{{ $team->name }}" @if ($crmUser->isCurrentTeam($team)) icon="o-check" @endif />
+                                <x-mary-menu-item @click.prevent="$root.submit();" title="{{ $team->name }}" @if ($crmIsCurrentTeam($team)) icon="o-check" @endif />
                             </form>
                         @endforeach
                     @endif
                     @if ($newTeamRoute)
                         <x-mary-menu-separator />
-                        <x-mary-menu-item link="{{ route($newTeamRoute) }}" icon="o-plus" title="{{ __('New team') }}" no-wire-navigate />
+                        <li>
+                            <a href="{{ route($newTeamRoute) }}" class="my-0.5 py-1.5 px-4 hover:text-inherit whitespace-nowrap">
+                                <span class="block py-0.5"><x-mary-icon name="o-plus" class="mb-0.5" /></span>
+                                <span class="whitespace-nowrap truncate">{{ __('New team') }}</span>
+                            </a>
+                        </li>
                     @endif
                 </x-mary-dropdown>
             @endif
