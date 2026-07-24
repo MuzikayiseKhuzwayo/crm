@@ -83,7 +83,7 @@
                 };
 
                 $newTeamRoute = null;
-                foreach (['teams.create', 'laravel-crm.teams.create'] as $candidate) {
+                foreach (['laravel-crm.teams.create', 'teams.create'] as $candidate) {
                     if (Route::has($candidate)) {
                         $newTeamRoute = $candidate;
                         break;
@@ -95,12 +95,21 @@
                     <x-mary-menu-item title="{{ __('Teams') }}" class="menu-title" />
                     @if (Route::has('current-team.update'))
                         @foreach ($crmAllTeams as $team)
-                            <form method="POST" action="{{ route('current-team.update') }}" x-data>
-                                @csrf
-                                @method('PUT')
-                                <input type="hidden" name="team_id" value="{{ $team->id }}">
-                                <x-mary-menu-item @click.prevent="$root.submit();" title="{{ $team->name }}" @if ($crmIsCurrentTeam($team)) icon="o-check" @endif />
-                            </form>
+                            <li>
+                                <form method="POST" action="{{ route('current-team.update') }}" class="!p-0">
+                                    @csrf
+                                    @method('PUT')
+                                    <input type="hidden" name="team_id" value="{{ $team->id }}">
+                                    <button type="submit" class="my-0.5 py-1.5 px-4 w-full text-left hover:text-inherit whitespace-nowrap flex items-center gap-2">
+                                        @if ($crmIsCurrentTeam($team))
+                                            <x-mary-icon name="o-check" class="w-5 h-5" />
+                                        @else
+                                            <span class="w-5"></span>
+                                        @endif
+                                        <span class="whitespace-nowrap truncate">{{ $team->name }}</span>
+                                    </button>
+                                </form>
+                            </li>
                         @endforeach
                     @endif
                     @if ($newTeamRoute)
