@@ -46,6 +46,21 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | Host Team Model
+    |--------------------------------------------------------------------------
+    |
+    | The Eloquent model in the host application that represents a team the
+    | user can switch to (typically Jetstream or a starter kit's App\Models\Team).
+    | When set, the "+ New team" link in the CRM header uses this model to
+    | create the team, then switches the user's current team to it.
+    | Leave null to auto-detect via the user's ownedTeams() relationship.
+    |
+    */
+
+    'host_team_model' => env('LARAVEL_CRM_HOST_TEAM_MODEL'),
+
+    /*
+    |--------------------------------------------------------------------------
     | Default Settings
     |--------------------------------------------------------------------------
     |

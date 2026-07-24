@@ -83,7 +83,7 @@
                 };
 
                 $newTeamRoute = null;
-                foreach (['laravel-crm.teams.create', 'teams.create'] as $candidate) {
+                foreach (['laravel-crm.host-teams.create', 'teams.create', 'laravel-crm.teams.create'] as $candidate) {
                     if (Route::has($candidate)) {
                         $newTeamRoute = $candidate;
                         break;

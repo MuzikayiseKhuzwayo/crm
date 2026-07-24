@@ -1508,3 +1508,12 @@ if (! is_array(config('laravel-crm.modules')) || in_array('monitoring', config('
 Route::put('/current-team', 'VentureDrake\LaravelCrm\Http\Controllers\Jetstream\CurrentTeamController@update')
     ->name('current-team.update')
     ->middleware(['auth', 'verified']);
+
+/* Host team quick-create (creates a row in the host app's teams table and switches) */
+Route::group(['prefix' => 'new-team', 'middleware' => 'auth.laravel-crm'], function () {
+    Route::get('', 'VentureDrake\LaravelCrm\Http\Controllers\HostTeamController@create')
+        ->name('laravel-crm.host-teams.create');
+
+    Route::post('', 'VentureDrake\LaravelCrm\Http\Controllers\HostTeamController@store')
+        ->name('laravel-crm.host-teams.store');
+});
