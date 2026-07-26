@@ -257,14 +257,15 @@
                 @endhasfeaturesenabled
 
                 @hasmonitoringenabled
-                    
                     @can('view crm monitors')
                         <x-mary-menu-item title="{{ ucfirst(__('laravel-crm::lang.monitors')) }}" icon="fas.heartbeat" link="{{ url(route('laravel-crm.monitors.index')) }}" />
                     @endcan
                 @endhasmonitoringenabled
-
-                <hr class="my-2 border-t-[length:var(--border)] border-base-content/10">
-
+                
+                @canany(['view crm features', 'view crm monitors'])
+                    <hr class="my-2 border-t-[length:var(--border)] border-base-content/10">
+                @endcanany
+                
                 @can('view crm products')
                     <x-mary-menu-item title="{{ ucfirst(__('laravel-crm::lang.products')) }}" icon="fas.tag" link="{{ url(route('laravel-crm.products.index')) }}" />
                 @endcan
