@@ -9,7 +9,7 @@
                 </h1>
 
                 <p class="text-base-content/70 mb-6">
-                    {{ __('laravel-crm::lang.user_invitation_invalid_message') }}
+                    {{ $message ?? __('laravel-crm::lang.user_invitation_invalid_message') }}
                 </p>
 
                 <div class="card-actions justify-center">

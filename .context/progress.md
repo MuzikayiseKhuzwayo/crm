@@ -29638,3 +29638,229 @@ rendering layer.
   clarity (rather than relying on implicit route-model binding
   via `UserInvitation $invitation` typehint) so the branch on
   `null || ! isValid()` reads as a single conditional.
+
+
+## US-005: Accept invitation for an existing host user (invite-users series)
+- Extended `UserController@showAcceptInvite` + `acceptInvite` per AC to
+  handle the three logged-in-vs-logged-out branches for existing host
+  users:
+  1. **Existing user + not logged in** → `redirect()->to(route(
+     'laravel-crm.login').'?invitation='.urlencode($code))`. The post-
+     login intended-URL flow is a follow-up story; the invitation code
+     rides on the query string so a future Login component update can
+     read it and resume the accept flow.
+  2. **Existing user + logged in as different email** →
+     `response()->view('...users.invalid-invite', ['message' => trans(
+     '...user_invitation_wrong_user', ['email' => $invitation->email])],
+     403)`. The invalid-invite blade view now accepts an optional
+     `$message` prop and falls back to the default translation when
+     absent (single-line `{{ $message ?? __(...) }}` swap).
+  3. **Existing user + logged in as invitee** → routes to a new
+     `acceptExistingUser(UserInvitation, User): RedirectResponse`
+     helper that wraps in `DB::transaction`:
+     - `$user->forceFill(['crm_access' => 1])->save()`.
+     - Role assignment: when `$invitation->role_id` resolves via
+       `Role::find(...)`, calls
+       `app(PermissionRegistrar::class)->setPermissionsTeamId(
+       $invitation->team_id)` if `config('laravel-crm.teams')` AND
+       `$invitation->team_id` are both set, then removes any existing
+       crm role via `$user->roles()->where('crm_role', 1)->first()`
+       + `$user->removeRole(...)`, then `$user->assignRole($role)`.
+       Mirrors `store()`'s role-assignment shape byte-for-byte.
+     - Team pivot: when `config('laravel-crm.teams')` AND
+       `$invitation->team_id`, inserts a row into `team_user` with
+       `role => 'editor'` (verbatim from `store()` lines 88-100) AND
+       stamps `current_team_id => $invitation->team_id` on the user
+       via `forceFill(...)` ONLY when the pre-existing `current_team_id`
+       is null (per AC's "set current_team_id if null" wording).
+     - `$invitation->forceFill(['accepted_at' => now()])->save()`.
+     - After the transaction, fires `flash()->success(...)` wrapped in
+       a try/catch that falls back to `session()->flash('status', ...)`
+       when php-flasher isn't initialized (test environment).
+     - Returns `redirect(route('laravel-crm.dashboard'))`.
+- **Case-insensitive host-user lookup** via
+  `User::whereRaw('LOWER(email) = ?', [strtolower($invitation->email)])
+  ->first()`. Portable across MySQL / PostgreSQL / SQLite. The
+  auth-user comparison uses `strtolower(...) !== strtolower(...)` for
+  the same reason.
+- **`acceptInvite()` (POST) handler updated to the same 3-branch
+  shape.** POST-from-logged-out still redirects to login (matches
+  browser back-button + form-resubmit semantics); POST-from-wrong-user
+  still renders the invalid view; POST-from-invitee runs the accept
+  logic identically to GET. Real per-user signup persistence for the
+  no-existing-user branch lands in US-006+.
+- **Route middleware fix**: added
+  `->withoutMiddleware([HasCrmAccess::class])` to BOTH accept routes
+  in `src/Http/routes.php`. The pre-existing US-004 routing left them
+  inside the `['web', 'crm', 'crm-api']` outer middleware group. The
+  `crm` group includes `HasCrmAccess` which aborts 403 when the auth
+  user has `crm_access != 1` — but an invitation's WHOLE POINT is to
+  grant CRM access to a user who doesn't yet have it. Without this
+  fix, logged-in invitees can never actually accept via the route
+  because the middleware fires first. The AC's premise (invitee starts
+  with crm_access=0) implicitly requires this exclusion. Same
+  discipline as other public/onboarding routes that live under the
+  `web` group but need to bypass CRM-access gating.
+- **Translation keys** added to en/lang.php after the pre-existing
+  `user_invitation_back_to_login` anchor:
+  - `user_invitation_wrong_user` — `'This invitation is for :email.
+    Please log out and sign back in as :email to accept it.'` (two
+    `:email` substitutions so the intended address is visible to both
+    the sentence's subject AND the actionable instruction).
+  - `user_invitation_accepted` — `'invitation accepted'` (matches the
+    lowercase-key convention used by every other user_* success
+    message — `flash()->success(ucfirst(trans(...)))` capitalizes for
+    display).
+- **New `resources/views/users/invalid-invite.blade.php` change**: the
+  message paragraph now reads
+  `{{ $message ?? __('laravel-crm::lang.user_invitation_invalid_message') }}`
+  so callers can pass an override via `response()->view(...,
+  ['message' => trans('...')], $status)`. Falls back to the pre-existing
+  default message when `$message` is null/absent.
+- New Pest test `tests/Feature/UserInvitationAcceptExistingUserTest.php`
+  (4 tests / 18 assertions, all pass) mirrors the AC's exact test
+  bullet list:
+  1. **Logged-out visitor with an existing invitee → redirect to
+     login with `?invitation={code}`** — creates the user, creates a
+     valid invitation, hits the GET route without calling
+     `actingAsUser()`, asserts `assertRedirect(route(
+     'laravel-crm.login').'?invitation='.$invitation->code)`.
+  2. **Wrong-user error view** — creates the target user, calls
+     `actingAsUser(['email' => 'viewer@...'])` to log in as a
+     DIFFERENT user, creates the invitation for the target's email,
+     hits the GET route. Asserts `assertStatus(403)` +
+     `assertViewIs('...invalid-invite')` + `assertSee($invitation->
+     email)` + `assertSee('log out', escape: false)`. Regression
+     guards: invitation `accepted_at` is null + viewer's crm_access
+     defaults to 1 (test-schema default) so the middleware doesn't
+     mistake the 403 for a HasCrmAccess bounce.
+  3. **Successful accept without teams** — sets
+     `config(['laravel-crm.teams' => false])`, creates the invitee
+     with `crm_access => 0`, logs in as invitee, hits the GET route,
+     asserts `assertRedirect(route('laravel-crm.dashboard'))` +
+     `$invitee->fresh()->crm_access === 1` +
+     `$invitation->fresh()->accepted_at !== null`. Invitation has no
+     `role_id` (nullable per US-001 migration) so the role branch
+     is skipped — same posture used across many prior "test the accept
+     flow without pulling in Spatie HasRoles" scenarios.
+  4. **Successful accept with teams** — sets teams=true, creates the
+     `team_user` pivot table on demand via `ensureTeamUserTable()`
+     helper (mirrors the `ensureRoleTables()` / `ensureInviteRolesTable()`
+     helpers from FeatureNotificationsTest / UserInviteTest), logs in
+     as invitee, hits the GET route. Asserts the accept-flow tail
+     PLUS `$invitee->fresh()->current_team_id === 42` AND
+     `DB::table('team_user')->where('user_id', $id)->where('team_id',
+     42)->exists()`. Locks the `team_user` insert + `current_team_id`
+     set behaviors end-to-end.
+- Quality gates:
+  - `./vendor/bin/pint --dirty --test` → `{"tool":"pint","result":
+    "passed"}` after auto-fix of `fully_qualified_strict_types` +
+    `unary_operator_spaces` + `not_operator_with_successor_space` +
+    `ordered_imports` on the routes.php (pint moved my inline FQCN
+    `\VentureDrake\LaravelCrm\Http\Middleware\HasCrmAccess::class`
+    to a `use` import + shortened to `HasCrmAccess::class`).
+  - Targeted `pest tests/Feature/UserInvitationAcceptExistingUserTest.php`
+    → 4 passed (18 assertions).
+  - Broader `pest tests/Feature/UserInvitationAcceptExistingUserTest.php
+    tests/Feature/UserInvitationAcceptRoutesTest.php` (US-004 tests +
+    my new US-005 tests) → 9 passed (34 assertions).
+  - `pest tests/Feature/RoutingTest.php tests/Feature/BootTest.php
+    tests/Feature/Livewire/` → 27 passed (120 assertions). Zero
+    regressions across the routing / boot / livewire families.
+
+### Files changed (in `/Users/andrewdrake/.polyscope/clones/66571e70/jolly-cat`)
+- **Modified** `src/Http/Controllers/UserController.php` (+81/-24: added
+  `PermissionRegistrar` import; rewrote `showAcceptInvite()` +
+  `acceptInvite()` with 3-branch logic for existing users; added
+  `acceptExistingUser(UserInvitation, User): RedirectResponse`
+  protected helper wrapping the DB::transaction'ed accept flow with
+  flash-failure fallback to session flash)
+- **Modified** `src/Http/routes.php` (+7/-3: added `HasCrmAccess` import
+  via pint's `use` auto-normalization; extended both accept routes with
+  `->withoutMiddleware([HasCrmAccess::class])`; expanded the pre-existing
+  comment to explain WHY (invitee has crm_access=0 by design))
+- **Modified** `resources/views/users/invalid-invite.blade.php` (+1/-1:
+  `{{ __(...) }}` → `{{ $message ?? __(...) }}` on the message
+  paragraph so callers can override via `response()->view(..., [
+  'message' => ...])`)
+- **Modified** `resources/lang/en/lang.php` (+2 keys:
+  `user_invitation_wrong_user` after `user_invitation_back_to_login`;
+  `user_invitation_accepted`)
+- **Added** `tests/Feature/UserInvitationAcceptExistingUserTest.php`
+  (~125 lines; 4 tests / 18 assertions locking every AC bullet as a
+  regression gate; includes an `ensureTeamUserTable()` file-local
+  helper mirroring the `ensureRoleTables()` / `ensureInviteRolesTable()`
+  precedent from other tests in the codebase)
+
+### Learnings for future iterations
+- **The `HasCrmAccess` middleware (in the `crm` middleware group)
+  fires 403 for any logged-in user with `crm_access != 1`.** Any
+  public/onboarding route where the user's crm_access status is
+  UNSET or 0 by design must include
+  `->withoutMiddleware([HasCrmAccess::class])`. Symptom of missing
+  this: routes appear "public" (no `auth.laravel-crm` middleware) but
+  a logged-in-with-crm_access=0 user hits a Symfony HttpException 403
+  instead of reaching the controller. Same discipline applies to any
+  future "invitation acceptance", "email verification", "password
+  reset landing", or similar bootstrap flow. Recipe: if the AC's
+  premise is "user starts without crm_access and the flow grants it",
+  the route MUST bypass HasCrmAccess.
+- **`response()->view(...)`'s underlying `$original` property is
+  clobbered when Laravel's exception handler renders a default error
+  page.** When my controller returned `response()->view(...)->status(
+  403)` but the middleware chain threw an `HttpException` before the
+  view reached the client, Laravel's default error handler replaced
+  the response body with the "Forbidden" HTML page. Symptom in tests:
+  `assertStatus(403)` passes but `assertViewIs()` fails with "response
+  is not a view" — because Laravel's rendered exception page isn't
+  a view. Diagnostic recipe: dump
+  `substr($response->getContent(), 0, 500)` — if it's Laravel's
+  default error HTML (with `<title>Forbidden</title>` or similar),
+  the controller's actual view never got rendered. Then use
+  `$this->withoutExceptionHandling()` + try/catch to surface the
+  underlying exception. Once traced, the fix was to exclude the
+  offending middleware from the route.
+- **`flash()` from php-flasher package is not universally available
+  at request time in testbench environments.** The `FlasherContainer`
+  package's static state isn't wired up unless the FlasherServiceProvider
+  is registered — but this package isn't in `TestCase::getPackageProviders()`.
+  Every existing controller call to `flash()->success(...)` in this
+  codebase throws `LogicException` in tests. The clean pattern for
+  new controller flash calls: wrap in try/catch and fall back to
+  Laravel's core `session()->flash('status', ...)` which is always
+  available in a real HTTP request context. Preserves production
+  behavior while making tests robust.
+- **The `->withoutMiddleware(...)` chain on a Route works on a
+  per-middleware-class basis** — you exclude specific classes, NOT
+  entire middleware groups. `Route::withoutMiddleware([HasCrmAccess::class])`
+  strips HasCrmAccess from the effective middleware chain WITHOUT
+  affecting Settings, LastOnlineAt, LogUsage, etc. that also belong
+  to the same `crm` group. This is the right surgical shape when a
+  route needs to opt out of ONE middleware from an inherited group
+  without opting out of the entire group.
+- **Case-insensitive email comparison via `LOWER(email) = LOWER(?)`
+  is portable across SQLite/MySQL/PostgreSQL/MariaDB.** Distinct from
+  `->where('email', $email)` (case-sensitive by default in some
+  collations) OR MySQL's `LIKE` (LIKE-with-no-wildcards is
+  case-insensitive in some collations but not portable). For any
+  future "look up a user by email regardless of case" contract, use
+  `whereRaw('LOWER(email) = ?', [strtolower($needle)])`. Same shape
+  applies to any similar lowercase-index-friendly lookup.
+- **The `$user->roles()->where('crm_role', 1)->first()` pattern for
+  finding a user's existing CRM role**, mirrored verbatim from
+  `store()`, is what the AC calls "remove any existing crm role
+  first". The pattern relies on Spatie's `HasRoles` trait providing
+  the `roles()` belongsToMany relation + the `crm_role` column being
+  set on all CRM-specific roles (versus non-CRM roles from the host
+  app's own roles table). Any future story that touches this pattern
+  should preserve the `crm_role = 1` filter — otherwise we'd
+  accidentally remove non-CRM roles the user needs for the host app.
+- **The role-branch is skippable in tests** by omitting `role_id`
+  from the invitation. This lets me test the accept flow's crm_access
+  + team_user + accepted_at behaviors without needing to set up
+  Spatie's `roles` + `model_has_roles` tables + configure the User
+  stub with `HasRoles`. Trade-off: role assignment logic isn't
+  exercised in the automated tests. The code path mirrors `store()`
+  which also has no test coverage — a future story could add
+  role-aware tests via the `ensureRoleTables()` + direct `DB::table(
+  'model_has_roles')->insert()` pattern from FeatureNotificationsTest.

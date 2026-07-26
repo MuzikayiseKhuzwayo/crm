@@ -3,6 +3,7 @@
 use Dcblogdev\Xero\Facades\Xero;
 use Illuminate\Support\Facades\Route;
 use Illuminate\Support\Facades\View;
+use VentureDrake\LaravelCrm\Http\Middleware\HasCrmAccess;
 use VentureDrake\LaravelCrm\Livewire\Settings\Integrations\ClickSend\ClickSendConnect;
 use VentureDrake\LaravelCrm\Livewire\Settings\Integrations\Xero\XeroConnect;
 
@@ -1501,12 +1502,16 @@ if (! is_array(config('laravel-crm.modules')) || in_array('monitoring', config('
 }
 
 /* User invitation acceptance (public — no auth.laravel-crm middleware so
-   logged-out invitees can visit the emailed link) */
+   logged-out invitees can visit the emailed link; also excluded from
+   HasCrmAccess since the invited user has crm_access=0 by design and
+   the accept flow itself is what grants them access) */
 Route::get('users/invitations/{code}/accept', 'VentureDrake\LaravelCrm\Http\Controllers\UserController@showAcceptInvite')
-    ->name('laravel-crm.users.invitations.accept');
+    ->name('laravel-crm.users.invitations.accept')
+    ->withoutMiddleware([HasCrmAccess::class]);
 
 Route::post('users/invitations/{code}/accept', 'VentureDrake\LaravelCrm\Http\Controllers\UserController@acceptInvite')
-    ->name('laravel-crm.users.invitations.accept.store');
+    ->name('laravel-crm.users.invitations.accept.store')
+    ->withoutMiddleware([HasCrmAccess::class]);
 
 /* Jetstream */
 Route::put('/current-team', 'VentureDrake\LaravelCrm\Http\Controllers\Jetstream\CurrentTeamController@update')

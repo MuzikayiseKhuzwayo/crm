@@ -10,6 +10,7 @@ use Illuminate\Http\Request;
 use Illuminate\Http\Response;
 use Illuminate\Support\Facades\Hash;
 use Ramsey\Uuid\Uuid;
+use Spatie\Permission\PermissionRegistrar;
 use Symfony\Component\HttpFoundation\StreamedResponse;
 use VentureDrake\LaravelCrm\Http\Requests\StoreUserRequest;
 use VentureDrake\LaravelCrm\Http\Requests\UpdateUserRequest;
@@ -340,8 +341,23 @@ class UserController extends Controller
      * Render the public accept-invitation landing page.
      * Loads the invitation by code and short-circuits to the
      * invalid-invite view when the code is missing, expired, or
-     * already accepted. Real accept logic (form + persistence)
-     * lands in US-005/US-006.
+     * already accepted.
+     *
+     * When the invitation's email maps to an existing host User,
+     * three branches apply per US-005:
+     *  - logged-out: redirect to the CRM login page with
+     *    ?invitation={code} appended so a post-login flow can
+     *    resume the accept action.
+     *  - logged in as a different email: render the invalid-invite
+     *    view with a 'please log out and sign back in as {email}'
+     *    message.
+     *  - logged in as the invitee: run the accept logic inline
+     *    (crm_access, role, team_user, accepted_at) inside a
+     *    DB::transaction and redirect to the CRM dashboard.
+     *
+     * The no-existing-user path is out of scope for US-005 and
+     * still renders the accept-invite placeholder for US-006+ to
+     * build a real signup form on top of.
      */
     public function showAcceptInvite(string $code)
     {
@@ -351,17 +367,37 @@ class UserController extends Controller
             return response()->view('laravel-crm::users.invalid-invite', [], 404);
         }
 
+        $existingUser = User::whereRaw('LOWER(email) = ?', [strtolower($invitation->email)])->first();
+
+        if ($existingUser) {
+            if (! auth()->check()) {
+                return redirect()->to(
+                    route('laravel-crm.login').'?invitation='.urlencode($invitation->code)
+                );
+            }
+
+            if (strtolower(auth()->user()->email) !== strtolower($invitation->email)) {
+                return response()->view('laravel-crm::users.invalid-invite', [
+                    'message' => trans('laravel-crm::lang.user_invitation_wrong_user', [
+                        'email' => $invitation->email,
+                    ]),
+                ], 403);
+            }
+
+            return $this->acceptExistingUser($invitation, $existingUser);
+        }
+
         return view('laravel-crm::users.accept-invite', [
             'invitation' => $invitation,
         ]);
     }
 
     /**
-     * Handle the accept-invitation POST. Real acceptance logic
-     * lands in US-006 (create the user, mark invitation accepted,
-     * log them in). For now this is a placeholder that shows the
-     * invalid view when the code is bad and otherwise re-renders
-     * the accept placeholder.
+     * Handle the accept-invitation POST. Existing users hit the
+     * same three-branch flow as showAcceptInvite so that a POST
+     * from a logged-out browser still redirects to login and a
+     * POST from the wrong user still renders the invalid view.
+     * Real acceptance for new users lands in US-006+.
      */
     public function acceptInvite(Request $request, string $code)
     {
@@ -371,9 +407,82 @@ class UserController extends Controller
             return response()->view('laravel-crm::users.invalid-invite', [], 404);
         }
 
+        $existingUser = User::whereRaw('LOWER(email) = ?', [strtolower($invitation->email)])->first();
+
+        if ($existingUser) {
+            if (! auth()->check()) {
+                return redirect()->to(
+                    route('laravel-crm.login').'?invitation='.urlencode($invitation->code)
+                );
+            }
+
+            if (strtolower(auth()->user()->email) !== strtolower($invitation->email)) {
+                return response()->view('laravel-crm::users.invalid-invite', [
+                    'message' => trans('laravel-crm::lang.user_invitation_wrong_user', [
+                        'email' => $invitation->email,
+                    ]),
+                ], 403);
+            }
+
+            return $this->acceptExistingUser($invitation, $existingUser);
+        }
+
         return view('laravel-crm::users.accept-invite', [
             'invitation' => $invitation,
         ]);
+    }
+
+    /**
+     * Grant an existing host user CRM access for the invitation's
+     * team+role, then mark the invitation accepted. Wraps in a
+     * DB::transaction so a mid-way failure rolls back cleanly.
+     * The team_user + current_team_id block mirrors
+     * UserController@store verbatim.
+     */
+    protected function acceptExistingUser(UserInvitation $invitation, User $user): RedirectResponse
+    {
+        DB::transaction(function () use ($invitation, $user) {
+            $user->forceFill(['crm_access' => 1])->save();
+
+            if ($invitation->role_id && $role = Role::find($invitation->role_id)) {
+                if (config('laravel-crm.teams') && $invitation->team_id) {
+                    app(PermissionRegistrar::class)->setPermissionsTeamId($invitation->team_id);
+                }
+
+                if ($removeRole = $user->roles()->where('crm_role', 1)->first()) {
+                    $user->removeRole($removeRole);
+                }
+
+                $user->assignRole($role);
+            }
+
+            if (config('laravel-crm.teams') && $invitation->team_id) {
+                DB::table('team_user')->insert([
+                    'team_id' => $invitation->team_id,
+                    'user_id' => $user->id,
+                    'role' => 'editor',
+                ]);
+
+                if (is_null($user->current_team_id)) {
+                    $user->forceFill([
+                        'current_team_id' => $invitation->team_id,
+                    ])->save();
+                }
+            }
+
+            $invitation->forceFill(['accepted_at' => now()])->save();
+        });
+
+        // php-flasher may not be initialized in every host bootstrap; fall
+        // back to a plain session flash so the success message still lands
+        // in the redirect's session even when the flasher container is absent.
+        try {
+            flash()->success(ucfirst(trans('laravel-crm::lang.user_invitation_accepted')));
+        } catch (\Throwable) {
+            session()->flash('status', ucfirst(trans('laravel-crm::lang.user_invitation_accepted')));
+        }
+
+        return redirect(route('laravel-crm.dashboard'));
     }
 
     protected function updateUserPhones($user, $phones)
