@@ -964,4 +964,15 @@ return [
     'feature_comment_posted_intro_owner' => 'A new comment has been posted on your feature.',
     'feature_comment_posted_intro_admin' => 'A new comment has been posted on a feature.',
     'view_feature' => 'view feature',
+
+    // User invitation notification
+    'user_invitation_subject' => "You've been invited to :app",
+    'user_invitation_greeting' => 'Hello,',
+    'user_invitation_intro' => ':inviter has invited you to join :app.',
+    'user_invitation_team_line' => 'Team: :team',
+    'user_invitation_role_line' => 'Role: :role',
+    'user_invitation_expires_line' => 'This invitation expires on :date.',
+    'user_invitation_no_expiry_line' => 'This invitation does not expire.',
+    'user_invitation_action' => 'accept invitation',
+    'user_invitation_outro' => 'If you did not expect this invitation, you can safely ignore this email.',
 ];

@@ -29063,3 +29063,215 @@ rendering layer.
   workaround, document the rationale in an inline comment above the chain**.
   Without the comment, a future refactor might strip the workaround thinking
   it's redundant, silently re-introducing the bug.
+
+
+## US-001: Create user_invitations migration, model, and observer (new sequence — invite-users kickoff)
+- New `database/migrations/create_crm_user_invitations_table.php.stub`
+  (deliberately using the AC's explicit `create_crm_*` filename shape,
+  not the sibling `create_laravel_crm_*` convention) creates the
+  `crm_user_invitations` table via
+  `Schema::create(config('laravel-crm.db_table_prefix').'user_invitations', ...)`.
+  Columns per AC: `id`, `external_id` string, `code` string(64) with a
+  unique index, `team_id` unsignedBigInteger nullable + indexed, `email`
+  string, `role_id` unsignedBigInteger nullable with FK to `roles`,
+  `invited_by` unsignedBigInteger nullable with FK to `users`,
+  `expires_at` timestamp nullable, `accepted_at` timestamp nullable,
+  `timestamps()`. Down drops the same table.
+- New `src/Models/UserInvitation.php` extends the package base
+  `VentureDrake\LaravelCrm\Models\Model` (which provides `saveQuietly()`).
+  Uses `BelongsToTeams` trait (matches sibling FeatureStatus /
+  ProductCategory shape). `getTable()` prepends the prefix.
+  `getRouteKeyName()` returns `'code'` per AC. `$casts` decodes
+  `expires_at` + `accepted_at` to Carbon so `isPast()` works. Four
+  helper predicates: `isAccepted()` returns `accepted_at !== null`;
+  `isExpired()` returns `expires_at !== null && expires_at->isPast()`;
+  `isPending()` returns `! isAccepted() && ! isExpired()`;
+  `isValid()` delegates to `isPending()` (per AC semantics: "still
+  usable = not accepted and not expired").
+- New `src/Observers/UserInvitationObserver.php` — thin `creating`
+  handler that stamps `external_id = Uuid::uuid4()->toString()` when
+  missing AND `code = Str::random(64)` when missing. `??`-style
+  presence checks mean pre-supplied values are preserved (idempotent
+  for importers / seeders / programmatic callers). Note this observer
+  is intentionally NOT gated by `! app()->runningInConsole()` (unlike
+  the audit-column observers like FeatureStatusObserver) because
+  external_id + code MUST be populated regardless of context — a
+  console-created row that lacks them would fail the unique constraint
+  OR produce broken routing.
+- Registered `UserInvitation::observe(UserInvitationObserver::class)`
+  in `src/LaravelCrmServiceProvider.php::boot()` immediately after the
+  Feature-family observer registrations at line ~623. Added the two
+  imports (`Models\UserInvitation` + `Observers\UserInvitationObserver`)
+  alphabetically after their siblings.
+- Extended `tests/TestSchema.php` with a matching
+  `Schema::create($prefix.'user_invitations', ...)` block (mirrors the
+  production migration column set + skips FK constraints per the
+  established test-schema convention documented across many prior
+  stories) inserted after the `feature_views` block.
+- New Pest test `tests/Feature/Models/UserInvitationTest.php` (7 tests
+  / 16 assertions; all pass) locks every AC contract:
+  - Table naming: `getTable()` returns `'crm_user_invitations'`.
+  - Route key: `getRouteKeyName()` returns `'code'`.
+  - Observer stamping: creating with just an email yields a valid
+    UUID `external_id` (regex-matched) AND a 64-char `code`.
+  - Observer idempotency: pre-supplied `code` is preserved verbatim
+    (locks the `??` guard).
+  - `isPending()` true + `isExpired()`/`isAccepted()` false when the
+    invitation has a future `expires_at` and no `accepted_at`.
+  - `isExpired()` true (and `isPending()`/`isValid()` false) when
+    `expires_at` is in the past.
+  - `isAccepted()` true (and `isPending()`/`isValid()` false) when
+    `accepted_at` is set.
+- Full `tests/Feature/Models/*` suite (129 tests / 237 assertions) runs
+  cleanly post-change — zero regressions across the sibling Deal /
+  Lead / Person / Organization / Quote / Invoice / SmsCampaign /
+  EmailCampaign / etc. model tests. Pint on all 6 dirty files reports
+  `passed`.
+
+### Files changed (in `/Users/andrewdrake/.polyscope/clones/66571e70/jolly-cat`)
+- **Added** `database/migrations/create_crm_user_invitations_table.php.stub`
+- **Added** `src/Models/UserInvitation.php`
+- **Added** `src/Observers/UserInvitationObserver.php`
+- **Added** `tests/Feature/Models/UserInvitationTest.php`
+- **Modified** `src/LaravelCrmServiceProvider.php` (+3 lines: 2 imports
+  + observer registration)
+- **Modified** `tests/TestSchema.php` (+13 lines: new user_invitations
+  table block after feature_views)
+
+### Learnings for future iterations
+- **This is CORE CRM package work** (working directory
+  `/Users/andrewdrake/.polyscope/clones/66571e70/jolly-cat` is the
+  `venturedrake/laravel-crm` core package clone), NOT the sibling
+  Filament plugin at `/Users/andrewdrake/Packages/laravel-crm-filament`
+  that all the prior progress entries reference. The core package
+  writes production migration stubs to `database/migrations/*.php.stub`
+  (published to host apps at install time via
+  `php artisan laravelcrm:install`) AND test-only schema definitions
+  to `tests/TestSchema.php`. Both must match column-for-column for
+  the test suite to exercise real code paths against real fixtures.
+  Recurring rule: whenever a story adds a table to the core CRM,
+  update BOTH the migration stub AND `tests/TestSchema.php` in
+  lockstep — mirrors the "TestSchema divergence" pattern
+  documented in the plugin's progress log but in reverse (core adds
+  the source-of-truth; test schema mirrors it).
+- **The AC's explicit `create_crm_user_invitations_table.php.stub`
+  filename** deviates from the sibling `create_laravel_crm_*_table.php.stub`
+  convention (33+ prior migration files in this repo use the
+  `create_laravel_crm_` prefix). Followed the AC literally since:
+  (a) the AC is authoritative; (b) the resulting table name
+  `crm_user_invitations` (via config prefix) is unchanged either way;
+  (c) `LaravelCrmInstall` command's migration publisher walks the
+  full `database/migrations/*.php.stub` glob without filename-shape
+  filtering, so either name resolves correctly at install time.
+  If a future story wants to rename for consistency, `git mv` is
+  trivial.
+- **The observer's UUID + code stamping is NOT gated by
+  `! app()->runningInConsole()`** — unlike audit-column observers
+  (FeatureStatusObserver / TaskObserver / etc.) which skip the
+  `user_created_id` stamp during console execution to prevent
+  seeders/artisan commands from spuriously attributing rows to
+  arbitrary users. UserInvitation's `external_id` + `code` are
+  STRUCTURAL identifiers, not audit columns — they MUST be populated
+  regardless of context (console seed, HTTP request, queued job, etc.)
+  or the row would fail its unique constraint OR produce broken
+  routing (the model uses `code` as its route key). This is a
+  meaningful distinction from the audit-column observer pattern:
+  structural identifiers get unconditional stamping; audit
+  attribution gets console-gated stamping. Reusable rule for any
+  future observer that stamps a mix of structural + audit columns.
+- **The `isValid()` method delegating to `isPending()`** encodes the
+  semantic that "a still-usable invitation is one that hasn't been
+  accepted AND hasn't expired". A future story that adds a
+  `revoked_at` column would need to update both predicates in
+  lockstep (invitation becomes invalid when revoked, in addition
+  to expired/accepted). Bundling the semantic in one place
+  (`isValid()`) makes that future extension a single-method edit.
+- **PHP 8.5 PDO deprecation warnings in the test output** —
+  `PDO::MYSQL_ATTR_SSL_CA is deprecated since 8.5, use
+  Pdo\Mysql::ATTR_SSL_CA instead` originates from Testbench's
+  default `config/database.php` and is unrelated to any plugin code.
+  It shows as `129 deprecated` in the pest summary alongside
+  `237 assertions` — the tests themselves all PASS. Same
+  deprecation shape will appear across every test file this suite
+  runs until Testbench updates its default config for PHP 8.5
+  compatibility. Ignore the count; check that no
+  FAILED/ERROR/RISKY lines appear before declaring green.
+
+
+## US-002: Build UserInvitationNotification mailable
+- New `src/Notifications/UserInvitationNotification.php` extends
+  `Illuminate\Notifications\Notification` AND implements
+  `Illuminate\Contracts\Queue\ShouldQueue` (with `Queueable` trait) per AC.
+  Constructor takes `UserInvitation $invitation`; `via()` returns `['mail']`.
+  `toMail()` builds a `MailMessage` with:
+  - **Subject** `"You've been invited to :app"` (resolved via
+    `laravel-crm::lang.user_invitation_subject` + `['app' => config('app.name')]`).
+  - **Greeting** via `laravel-crm::lang.user_invitation_greeting`.
+  - **Intro line** including the inviter's name (resolved from
+    `$invitation->invited_by` via `config('auth.providers.users.model')::find($id)?->name`;
+    falls back to `config('app.name')` when the inviter isn't resolvable).
+  - **Team line** (`laravel-crm::lang.user_invitation_team_line`) rendered
+    ONLY when `$invitation->team_id` is set and the Team model resolves.
+  - **Role line** (`laravel-crm::lang.user_invitation_role_line`) rendered
+    ONLY when `$invitation->role_id` is set and `Spatie\Permission\Models\Role`
+    resolves.
+  - **Expiry line**: `user_invitation_expires_line` when `expires_at` is set
+    (formatted via `toDayDateTimeString()`); `user_invitation_no_expiry_line`
+    otherwise.
+  - **Action button** labeled via `laravel-crm::lang.user_invitation_action`
+    with URL `route('laravel-crm.users.invitations.accept', $invitation->code)`.
+  - **Outro line** via `laravel-crm::lang.user_invitation_outro`.
+- **All user-facing strings routed through `laravel-crm::lang.*`** — added
+  9 net-new translation keys to `resources/lang/en/lang.php` (only en
+  updated; the AC scope names only en).
+- **Team + Role resolution is defensive** — both use
+  `Model::query()->whereKey($id)->value('column_name')` which returns null
+  when the row doesn't exist. Then the calling code branches on non-null
+  before rendering the line. Prevents runtime errors when an invitation
+  references a since-deleted Team or Role.
+- New Pest test `tests/Feature/Notifications/UserInvitationNotificationTest.php`
+  (4 tests / 9 assertions):
+  - Class implements `ShouldQueue` AND extends `Illuminate\Notifications\Notification`.
+  - `toMail()` produces subject containing `config('app.name')` AND action
+    URL containing the invitation `code` — the AC-mandated regression gate.
+    Uses `Notification::fake()` + a real `User` stub as the notifiable,
+    calls `$notifiable->notify(...)`, then `Notification::assertSentTo` with
+    a callback that invokes `toMail()` and asserts on the resulting message.
+  - `toMail()` intro includes the inviter's name when `invited_by` resolves
+    to a real User.
+  - Translation keys resolve to non-key strings (regression guard against
+    silent-broken missing translations).
+- **Route registration in test's `beforeEach`**: the
+  `laravel-crm.users.invitations.accept` route doesn't exist yet in
+  `src/Http/routes.php` (will land in a later story). To satisfy Laravel's
+  `route()` helper in the notification's `toMail()`, the test's beforeEach
+  registers a placeholder route mapping `crm/users/invitations/{code}/accept`
+  to a stub closure.
+
+### Files changed (in `/Users/andrewdrake/.polyscope/clones/66571e70/jolly-cat`)
+- **Added** `src/Notifications/UserInvitationNotification.php`
+- **Added** `tests/Feature/Notifications/UserInvitationNotificationTest.php`
+- **Modified** `resources/lang/en/lang.php` (+9 translation keys under a
+  new `// User invitation notification` section)
+
+### Learnings for future iterations
+- **The route `laravel-crm.users.invitations.accept` doesn't exist yet**
+  in `src/Http/routes.php`. The AC's directive to reference it in the
+  notification's action URL is a **forward reference** — the route will
+  be added in a later story. Tests must register a placeholder route in
+  beforeEach so `route(...)` resolves. Same build-now-wire-later pattern
+  documented across many prior stories.
+- **`Notification::assertSentTo` with a closure requires the notifiable
+  to have a `getKey()` method** — anonymous classes with the `Notifiable`
+  trait don't inherit an Eloquent-compatible `getKey()`. Use a real
+  `Tests\Stubs\User` instance via `User::create()` (the users table is
+  available in TestSchema.php) as the notifiable. Reusable rule for any
+  future notification test.
+- **`MailMessage->actionUrl` / `->subject` / `->introLines` are all
+  public properties** on Filament's MailMessage — no getter methods.
+  Assertion shape: `expect($mail->actionUrl)->toContain($needle)`.
+- **`Model::query()->whereKey($id)->value('column')`** is the defensive
+  pattern for "look up a related model's single column when the related
+  model might not exist". Returns null when missing; caller branches on
+  null before rendering. Cleaner than `findOrFail` (throws) or
+  `find($id)?->column` (hydrates whole model just to read one column).
