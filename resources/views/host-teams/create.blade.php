@@ -1,8 +1,8 @@
-<x-crm::app-layout title="{{ __('Create team') }}">
+<x-crm::app-layout title="{{ __('Create enterprise') }}">
     <div class="crm-content">
         <x-mary-header
-            title="{{ __('Create team') }}"
-            subtitle="{{ __('Create a new team to collaborate with others') }}"
+            title="{{ __('Create enterprise') }}"
+            subtitle="{{ __('Create a new enterprise to collaborate with others') }}"
             class="mb-5"
         />
 
@@ -30,7 +30,7 @@
                             class="btn"
                         />
                         <x-mary-button
-                            label="{{ __('Create team') }}"
+                            label="{{ __('Create enterprise') }}"
                             class="btn-primary text-white"
                             type="submit"
                         />
