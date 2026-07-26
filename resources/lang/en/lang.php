@@ -978,4 +978,7 @@ return [
     'user_invitation_email_taken' => 'a user with this email already exists',
     'user_invitation_pending' => 'a pending invitation already exists for this email',
     'user_invitation_role_invalid' => 'the selected role is invalid',
+    'user_invitation_invalid_title' => 'Invitation is no longer valid',
+    'user_invitation_invalid_message' => 'This invitation link is invalid, has expired, or has already been used. If you believe this is a mistake, please contact whoever invited you and ask them to send a new invitation.',
+    'user_invitation_back_to_login' => 'back to login',
 ];

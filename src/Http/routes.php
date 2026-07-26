@@ -1500,6 +1500,14 @@ if (! is_array(config('laravel-crm.modules')) || in_array('monitoring', config('
     });
 }
 
+/* User invitation acceptance (public — no auth.laravel-crm middleware so
+   logged-out invitees can visit the emailed link) */
+Route::get('users/invitations/{code}/accept', 'VentureDrake\LaravelCrm\Http\Controllers\UserController@showAcceptInvite')
+    ->name('laravel-crm.users.invitations.accept');
+
+Route::post('users/invitations/{code}/accept', 'VentureDrake\LaravelCrm\Http\Controllers\UserController@acceptInvite')
+    ->name('laravel-crm.users.invitations.accept.store');
+
 /* Jetstream */
 Route::put('/current-team', 'VentureDrake\LaravelCrm\Http\Controllers\Jetstream\CurrentTeamController@update')
     ->name('current-team.update')

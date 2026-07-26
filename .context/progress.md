@@ -29485,3 +29485,156 @@ rendering layer.
   other two "add user" pathways. Matches the AC's "secondary"
   styling directive (`class="btn-outline"`). Same posture as many
   prior "add a secondary action pill to an existing header" stories.
+
+
+## US-004: Add public accept-invitation routes and controller actions (invite-users series)
+- Added 2 new public routes in `src/Http/routes.php` OUTSIDE the
+  `auth.laravel-crm` middleware group per AC (inserted immediately
+  before the `/* Jetstream */` block near the end of the file so
+  the routes still sit within the `crm/` prefix). Both routes bind
+  by `{code}` (the UserInvitation's `getRouteKeyName() === 'code'`
+  from US-001 of the invite-users series):
+  - `GET  crm/users/invitations/{code}/accept` →
+    `UserController@showAcceptInvite`, named
+    `laravel-crm.users.invitations.accept`.
+  - `POST crm/users/invitations/{code}/accept` →
+    `UserController@acceptInvite`, named
+    `laravel-crm.users.invitations.accept.store`.
+- Added two empty-shell controller methods to
+  `src/Http/Controllers/UserController.php` (per AC):
+  - `public function showAcceptInvite(string $code)` — loads the
+    invitation via `UserInvitation::query()->where('code', $code)
+    ->first()`; returns `response()->view('...invalid-invite', [], 404)`
+    when `! $invitation || ! $invitation->isValid()`; otherwise
+    returns the new `accept-invite` placeholder view (real form
+    lands in US-005/006).
+  - `public function acceptInvite(Request $request, string $code)`
+    — mirrors the show method's shape: invalid → 404 invalid-invite
+    view; valid → accept-invite placeholder. Real persistence lands
+    in US-006.
+  - Added `use VentureDrake\LaravelCrm\Models\UserInvitation;`
+    import alphabetically after `Team`.
+- New `resources/views/users/invalid-invite.blade.php` extends the
+  package's `laravel-crm::layouts.portal` layout (chosen because
+  the route is PUBLIC — the invitee is logged out). Renders a
+  centered card with:
+  - `user_invitation_invalid_title` heading.
+  - `user_invitation_invalid_message` body explaining the code is
+    invalid/expired/already-accepted with a suggestion to contact
+    the inviter.
+  - "Back to login" primary button linking to `url('/')` (the app's
+    root — hosts typically wire this to their login page via
+    Laravel's default `RouteServiceProvider::HOME` constant).
+- New `resources/views/users/accept-invite.blade.php` — placeholder
+  for the valid-invitation path. Same portal-layout shape; docblock
+  comment inside explicitly notes "real accept-invitation form
+  lands in US-005/US-006". Receives `$invitation` from the
+  controller so US-005 can bind Livewire state via `wire:model` to
+  invitation-derived defaults.
+- Added 3 new translation keys to `resources/lang/en/lang.php`
+  immediately after the pre-existing `user_invitation_role_invalid`
+  entry (added by US-003 of the invite-users series):
+  - `user_invitation_invalid_title` — 'Invitation is no longer
+    valid'.
+  - `user_invitation_invalid_message` — full sentence explaining
+    the invalid state + contact-inviter suggestion.
+  - `user_invitation_back_to_login` — 'back to login' (the
+    button label, `ucfirst()`-wrapped at render time to match the
+    codebase's lowercase-key convention).
+- New Pest test `tests/Feature/UserInvitationAcceptRoutesTest.php`
+  (5 tests / 16 assertions locking every AC contract):
+  1. **Route registration + no-auth contract**: asserts both routes
+     exist under the AC-named names, have the expected URI
+     (`crm/users/invitations/{code}/accept`), respective GET/POST
+     methods, AND the middleware array does NOT contain
+     `auth.laravel-crm`. Locks the "public route" contract at the
+     router-layer level.
+  2. **Missing code → invalid-invite view**: `$this->get('/crm/
+     users/invitations/does-not-exist/accept')` returns 404 and
+     asserts `assertViewIs('laravel-crm::users.invalid-invite')`.
+  3. **Expired invitation → invalid-invite view**: creates a
+     UserInvitation with `expires_at = now()->subDay()`, hits the
+     GET route, asserts 404 + correct view.
+  4. **Already-accepted invitation → invalid-invite view**: creates
+     an invitation with both `expires_at = now()->addWeek()` AND
+     `accepted_at = now()`, hits the route, asserts 404 + correct
+     view.
+  5. **Valid invitation → accept-invite placeholder view**: creates
+     a valid invitation (future `expires_at`, null `accepted_at`),
+     hits the route while LOGGED OUT (no `actingAsUser()` call in
+     this test), asserts 200 + `accept-invite` view — locks the
+     AC's "route works while logged out (no auth redirect)"
+     contract at the response-code + view-name layer.
+- Pint's `single_quote` fixer auto-normalized my double-quoted
+  `user_invitation_invalid_message` value (it contained no
+  apostrophes so single quotes work cleanly). Same discipline as
+  many prior stories that let pint auto-fix trivial style issues.
+- Quality gates:
+  - `./vendor/bin/pint --dirty --test` → `{"tool":"pint","result":"passed"}`.
+  - Targeted `pest tests/Feature/UserInvitationAcceptRoutesTest.php`
+    → 5 passed (16 assertions) in 3.69s (all deprecated warnings
+    are the pre-existing PHP 8.5 PDO deprecations from Testbench —
+    unrelated to my changes).
+  - Broader sweep `pest RoutingTest BootTest UserInvitationTest
+    UserInviteTest UserInvitationNotificationTest UserInvitationAcceptRoutesTest`
+    → 25 passed (74 assertions) in ~6s. Zero regressions across
+    the invite-users family.
+- Working tree post-commit was clean of any unrelated changes —
+  only my 6 US-004 files (5 modified/new + 1 pint auto-fix).
+
+### Files changed (in `/Users/andrewdrake/.polyscope/clones/66571e70/jolly-cat`)
+- **Modified** `src/Http/routes.php` (+9 lines: 2 new
+  `Route::get/post()` calls with the AC-named route names OUTSIDE
+  the `auth.laravel-crm` middleware group, inserted before the
+  `/* Jetstream */` block)
+- **Modified** `src/Http/Controllers/UserController.php` (+1
+  `UserInvitation` import + 2 new public methods
+  `showAcceptInvite(string): Response` and `acceptInvite(Request,
+  string): Response` inserted after `destroy()` and before
+  `updateUserPhones()`)
+- **Added** `resources/views/users/invalid-invite.blade.php` — the
+  error view rendered on 404 for missing/expired/accepted codes;
+  extends portal layout so it works without a logged-in session
+- **Added** `resources/views/users/accept-invite.blade.php` — the
+  placeholder view for the valid-code path; docblock notes real
+  form lands in US-005/006
+- **Modified** `resources/lang/en/lang.php` (+3 translation keys
+  after `user_invitation_role_invalid`)
+- **Added** `tests/Feature/UserInvitationAcceptRoutesTest.php` (5
+  tests / 16 assertions locking route registration + no-auth
+  middleware contract + 3 invalid-branch view assertions + 1
+  valid-branch placeholder assertion)
+
+### Learnings for future iterations
+- **The `laravel-crm::layouts.portal` layout is the right choice
+  for any public/unauthenticated CRM page** (invitation
+  acceptance, public feature board, public quote/invoice portal,
+  etc.). It doesn't require a logged-in user, wraps the content
+  in a minimal shell with the app name in the title, and uses the
+  DaisyUI card/btn primitives that the rest of the CRM UI uses.
+  Distinct from `laravel-crm::layouts.app` which requires the
+  authenticated navigation shell.
+- **`Route::getRoutes()->getByName('name')->middleware()`** is the
+  cleanest test-side assertion for "this route is/isn't in the
+  auth.laravel-crm middleware group". Returns an array of
+  middleware strings; assert via `->toContain(...)` or
+  `->not->toContain(...)`. Reusable for any future "assert route
+  is public" or "assert route has specific middleware" test.
+- **`response()->view($name, $data, $status)`** is the correct
+  Laravel API for returning a view WITH a specific status code.
+  Distinct from `view($name)` which always returns a 200. When an
+  AC requires "return the invalid view WITHOUT errors" but the
+  semantics of the invalid state warrant a 4xx status code, the
+  `response()->view(...)` form gives you both — the view renders,
+  the status code communicates the invalid state to any bots/
+  monitors/HTTP-aware consumers. Same posture as any "render an
+  error view with a status code" pattern.
+- **The `getRouteKeyName() === 'code'` override on UserInvitation
+  (US-001)** is what makes the `{code}` route parameter work
+  cleanly at the router-binding layer AND lets us look up the
+  invitation via `UserInvitation::query()->where('code', $code)
+  ->first()` in the controller. Both patterns are compatible —
+  the controller uses the explicit `where('code', ...)` for
+  clarity (rather than relying on implicit route-model binding
+  via `UserInvitation $invitation` typehint) so the branch on
+  `null || ! isValid()` reads as a single conditional.

@@ -18,6 +18,7 @@ use VentureDrake\LaravelCrm\Models\Email;
 use VentureDrake\LaravelCrm\Models\Phone;
 use VentureDrake\LaravelCrm\Models\Role;
 use VentureDrake\LaravelCrm\Models\Team;
+use VentureDrake\LaravelCrm\Models\UserInvitation;
 
 class UserController extends Controller
 {
@@ -333,6 +334,46 @@ class UserController extends Controller
         flash()->success(ucfirst(trans('laravel-crm::lang.user_deleted')));
 
         return redirect(route('laravel-crm.users.index'));
+    }
+
+    /**
+     * Render the public accept-invitation landing page.
+     * Loads the invitation by code and short-circuits to the
+     * invalid-invite view when the code is missing, expired, or
+     * already accepted. Real accept logic (form + persistence)
+     * lands in US-005/US-006.
+     */
+    public function showAcceptInvite(string $code)
+    {
+        $invitation = UserInvitation::query()->where('code', $code)->first();
+
+        if (! $invitation || ! $invitation->isValid()) {
+            return response()->view('laravel-crm::users.invalid-invite', [], 404);
+        }
+
+        return view('laravel-crm::users.accept-invite', [
+            'invitation' => $invitation,
+        ]);
+    }
+
+    /**
+     * Handle the accept-invitation POST. Real acceptance logic
+     * lands in US-006 (create the user, mark invitation accepted,
+     * log them in). For now this is a placeholder that shows the
+     * invalid view when the code is bad and otherwise re-renders
+     * the accept placeholder.
+     */
+    public function acceptInvite(Request $request, string $code)
+    {
+        $invitation = UserInvitation::query()->where('code', $code)->first();
+
+        if (! $invitation || ! $invitation->isValid()) {
+            return response()->view('laravel-crm::users.invalid-invite', [], 404);
+        }
+
+        return view('laravel-crm::users.accept-invite', [
+            'invitation' => $invitation,
+        ]);
     }
 
     protected function updateUserPhones($user, $phones)
