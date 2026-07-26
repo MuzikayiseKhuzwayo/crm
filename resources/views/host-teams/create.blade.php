@@ -1,6 +1,10 @@
 <x-crm::app-layout title="{{ __('Create team') }}">
     <div class="crm-content">
-        <x-mary-header title="{{ __('Create team') }}" class="mb-5" />
+        <x-mary-header
+            title="{{ __('Create team') }}"
+            subtitle="{{ __('Create a new team to collaborate with others') }}"
+            class="mb-5"
+        />
 
         <div class="max-w-xl">
             <x-mary-card>
