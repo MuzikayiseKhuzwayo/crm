@@ -325,6 +325,7 @@ use VentureDrake\LaravelCrm\Models\SmsCampaign;
 use VentureDrake\LaravelCrm\Models\SmsCampaignRecipient;
 use VentureDrake\LaravelCrm\Models\SmsTemplate;
 use VentureDrake\LaravelCrm\Models\Task;
+use VentureDrake\LaravelCrm\Models\UserInvitation;
 use VentureDrake\LaravelCrm\Models\XeroContact;
 use VentureDrake\LaravelCrm\Models\XeroInvoice;
 use VentureDrake\LaravelCrm\Models\XeroItem;
@@ -385,6 +386,7 @@ use VentureDrake\LaravelCrm\Observers\SmsCampaignRecipientObserver;
 use VentureDrake\LaravelCrm\Observers\SmsTemplateObserver;
 use VentureDrake\LaravelCrm\Observers\TaskObserver;
 use VentureDrake\LaravelCrm\Observers\TeamObserver;
+use VentureDrake\LaravelCrm\Observers\UserInvitationObserver;
 use VentureDrake\LaravelCrm\Observers\UserObserver;
 use VentureDrake\LaravelCrm\Observers\XeroContactObserver;
 use VentureDrake\LaravelCrm\Observers\XeroInvoiceObserver;
@@ -620,6 +622,7 @@ class LaravelCrmServiceProvider extends ServiceProvider
         FeatureComment::observe(FeatureCommentObserver::class);
         FeatureVote::observe(FeatureVoteObserver::class);
         FeatureView::observe(FeatureViewObserver::class);
+        UserInvitation::observe(UserInvitationObserver::class);
 
         if (class_exists('App\Models\User')) {
             \App\Models\User::observe(UserObserver::class);

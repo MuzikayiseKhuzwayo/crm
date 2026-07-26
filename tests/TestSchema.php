@@ -942,6 +942,19 @@ class TestSchema
             $table->timestamp('viewed_at');
         });
 
+        Schema::create($prefix.'user_invitations', function (Blueprint $table) {
+            $table->bigIncrements('id');
+            $table->string('external_id');
+            $table->string('code', 64)->unique();
+            $table->unsignedBigInteger('team_id')->nullable();
+            $table->string('email');
+            $table->unsignedBigInteger('role_id')->nullable();
+            $table->unsignedBigInteger('invited_by')->nullable();
+            $table->timestamp('expires_at')->nullable();
+            $table->timestamp('accepted_at')->nullable();
+            $table->timestamps();
+        });
+
         Schema::create($prefix.'monitors', function (Blueprint $table) {
             $table->bigIncrements('id');
             $table->string('external_id');
