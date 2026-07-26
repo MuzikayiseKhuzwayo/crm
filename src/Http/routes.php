@@ -1018,10 +1018,6 @@ Route::group(['prefix' => 'users', 'middleware' => 'auth.laravel-crm'], function
         ->name('laravel-crm.users.invite')
         ->middleware(['can:create,App\User']);
 
-    Route::post('invite', 'VentureDrake\LaravelCrm\Http\Controllers\UserController@sendInvite')
-        ->name('laravel-crm.users.sendinvite')
-        ->middleware(['can:create,App\User']);
-
     Route::get('import', 'VentureDrake\LaravelCrm\Http\Controllers\UserController@import')
         ->name('laravel-crm.users.import')
         ->middleware(['can:create,App\User']);

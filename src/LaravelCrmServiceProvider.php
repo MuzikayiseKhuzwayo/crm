@@ -270,6 +270,7 @@ use VentureDrake\LaravelCrm\Livewire\Users\UserCreate;
 use VentureDrake\LaravelCrm\Livewire\Users\UserEdit;
 use VentureDrake\LaravelCrm\Livewire\Users\UserImport;
 use VentureDrake\LaravelCrm\Livewire\Users\UserIndex;
+use VentureDrake\LaravelCrm\Livewire\Users\UserInvite;
 use VentureDrake\LaravelCrm\Livewire\Users\UserShow;
 use VentureDrake\LaravelCrm\Models\Activity;
 use VentureDrake\LaravelCrm\Models\Call;
@@ -1027,6 +1028,7 @@ class LaravelCrmServiceProvider extends ServiceProvider
         Livewire::component('crm-user-edit', UserEdit::class);
         Livewire::component('crm-user-show', UserShow::class);
         Livewire::component('crm-user-import', UserImport::class);
+        Livewire::component('crm-user-invite', UserInvite::class);
         Livewire::component('crm-team-index', TeamIndex::class);
         Livewire::component('crm-team-create', TeamCreate::class);
         Livewire::component('crm-team-edit', TeamEdit::class);

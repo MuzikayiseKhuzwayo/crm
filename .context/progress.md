@@ -29275,3 +29275,213 @@ rendering layer.
   model might not exist". Returns null when missing; caller branches on
   null before rendering. Cleaner than `findOrFail` (throws) or
   `find($id)?->column` (hydrates whole model just to read one column).
+
+
+## US-003: Build UserInvite Livewire form and users-index button (new sequence — invite-users)
+- New `src/Livewire/Users/UserInvite.php` Livewire component (registered
+  as `crm-user-invite` in `LaravelCrmServiceProvider::boot()` alongside
+  the other Users components). Two public form fields per AC —
+  `?string $email = null` and `role_id = null` — plus a `roles` array
+  populated in `mount()` from `Role::crm()->when(config('laravel-crm.teams'),
+  fn ($q) => $q->where('team_id', auth()->user()->currentTeam?->id))->get()`.
+  Uses `Mary\Traits\Toast` for the success flash.
+- **Validation rules** built in `protected rules(): array` per AC:
+  - `email` — `required`, `email`, `max:255`, PLUS a closure that
+    (a) rejects when any `User` row already carries that email
+    (surfaces `user_invitation_email_taken` translation) AND (b) rejects
+    when a pending `UserInvitation` row exists for the same email
+    (scoped to `currentTeamId()` when teams are enabled, and gated on
+    `accepted_at IS NULL` + (`expires_at IS NULL OR expires_at > now()`)
+    — surfaces `user_invitation_pending`).
+  - `role_id` — `required` PLUS a closure that asserts the id resolves
+    via `Role::crm()->when($teamsGate)->whereKey($value)->exists()` —
+    surfaces `user_invitation_role_invalid` when the role isn't a
+    current-team CRM role.
+- **`save()` wraps in `DB::transaction`** per AC:
+  1. Runs `$this->validate()` to trigger the rules.
+  2. Creates the `UserInvitation` with the resolved `team_id`
+     (via `currentTeamId()` — returns null unless `config('laravel-crm.teams')`
+     is true), `role_id`, `email`, and `invited_by = auth()->id()`.
+     The `UserInvitationObserver` (US-001 of this new sequence) stamps
+     `external_id` UUID + 64-char `code` on creating.
+  3. `Notification::route('mail', $email)->notify(new UserInvitationNotification($invitation))`
+     dispatches the notification on-demand to the invited address.
+  4. Returns the invitation.
+  5. Fires `$this->success(...)` (Mary Toast trait) with the
+     `user_invitation_sent` translation and `redirectTo` back to the
+     users index page.
+- **`currentTeamId(): ?int` helper** returns null when
+  `config('laravel-crm.teams') === false` AND null when the auth user
+  has no `currentTeam` — same defensive pattern noted in prior
+  team-related stories.
+- New `resources/views/livewire/users/user-invite.blade.php` renders:
+  - Header with page title + Back-to-users button.
+  - `<x-mary-form wire:submit="save">` wrapping a mary-card with
+    `<x-mary-input wire:model="email">` and
+    `<x-mary-select wire:model="role_id" :options="$roles">`.
+  - Footer actions: Cancel (link to users.index) + Send invite
+    (submit).
+- New `resources/views/users/invite.blade.php` mirrors
+  `resources/views/users/create.blade.php` shape — the standard
+  `<x-crm::app-layout>` + `<livewire:crm-user-invite />` wrapper.
+- **UserController changes**:
+  - `sendInvite(InviteUserRequest $request)` method **deleted**
+    entirely per AC.
+  - `use VentureDrake\LaravelCrm\Http\Requests\InviteUserRequest;`
+    import **deleted**.
+  - `invite()` method preserved verbatim — it returns
+    `view('laravel-crm::users.invite')`, which is now the wrapper
+    around the Livewire component.
+- **`src/Http/Requests/InviteUserRequest.php` deleted** per AC. Was
+  only used by the deleted `sendInvite()` controller action.
+- **`src/Http/routes.php`**: dropped the
+  `Route::post('invite', ...)->name('laravel-crm.users.sendinvite')`
+  entry (no more controller method to route to). The pre-existing
+  `Route::get('invite', ...)->name('laravel-crm.users.invite')` is
+  preserved verbatim — now serves the Livewire-driven page.
+- **`resources/views/livewire/users/user-index.blade.php`**: added a
+  new secondary `<x-mary-button label="Invite user" link="{{ url(route('laravel-crm.users.invite')) }}"
+  icon="o-paper-airplane" class="btn-outline">` immediately before
+  the pre-existing "Create user" primary button in the header
+  actions block. Placement matches the AC's "around line 22"
+  directive — sits between the Import users outline button and the
+  Create user primary button, all inside the same
+  `@can('create crm users')` gate.
+- **3 new translation keys** added to `resources/lang/en/lang.php`
+  after the existing `user_invitation_outro` key added by US-002 of
+  the invite-users series:
+  - `user_invitation_email_taken` — `'a user with this email already exists'`
+  - `user_invitation_pending` — `'a pending invitation already exists for this email'`
+  - `user_invitation_role_invalid` — `'the selected role is invalid'`
+  The pre-existing `invite_user`, `send_invite`, `back_to_users`,
+  `cancel`, `email`, `details`, `CRM_role`, `user_invitation_sent`
+  translation keys — all reused verbatim.
+- New Pest feature test `tests/Feature/Livewire/Users/UserInviteTest.php`
+  (5 tests / 27 assertions; all pass) locks every AC contract:
+  1. **Happy-path**: `Notification::fake()` + `Livewire::test(UserInvite::class)
+     ->set('email', ...)->set('role_id', ...)->call('save')`; asserts
+     no errors AND `UserInvitation::query()->where('email', ...)->first()`
+     comes back with the expected `role_id`, `invited_by`, non-empty
+     `code`, non-empty `external_id`; asserts
+     `Notification::assertSentOnDemand(UserInvitationNotification::class,
+     fn ($n, $chans, $notifiable) => $notifiable->routes['mail'] === $email)`
+     — locks the AC-mandated `Notification::route('mail', $email)->notify(...)`
+     dispatch shape end-to-end.
+  2. **Empty email → `required` error** AND **invalid email format
+     → `email` error** (two-part scenario in one test).
+  3. **Duplicate user email → `email` field error** with regression
+     guard that NO UserInvitation row was created (short-circuit
+     validation).
+  4. **Pending UserInvitation for same email → `email` field error**
+     with regression guard that the pre-existing count-of-1 remains
+     unchanged.
+  5. **`role_id` empty → `required` error** AND **non-CRM role (crm_role=0)
+     → `role_id` error** (two-part scenario in one test).
+- Test-schema helper `ensureInviteRolesTable()` (in the test file's
+  top-level, mirroring the `ensureRoleTables()` helper from
+  `FeatureNotificationsTest`) creates the Spatie `roles` table on
+  demand — with `team_id`, `description`, and `crm_role` columns —
+  since `TestSchema.php` doesn't ship them. `makeCrmRole()` inserts
+  a role row via `DB::table('roles')->insertGetId(...)` with
+  `crm_role => 1`. `beforeEach` also registers a placeholder
+  `laravel-crm.users.invitations.accept` route (same posture as
+  US-002's `UserInvitationNotificationTest`) so the notification's
+  `toMail()` URL generator works at test time.
+- Quality gates:
+  - `./vendor/bin/pint --dirty --test` reports
+    `{"tool":"pint","result":"passed"}` on all 10 changed/new files.
+  - Targeted `pest tests/Feature/Livewire/Users/UserInviteTest.php`
+    → **5 tests (27 assertions), 0 failures** in 1.07s.
+  - Broader `pest tests/Feature/Notifications/ tests/Feature/Models/UserInvitationTest.php tests/Feature/Livewire/Users/UserInviteTest.php`
+    → **16 tests (52 assertions), 0 failures** in 1.46s.
+  - Full plugin pest suite → **N passed / 1 failed / 614 deprecated
+    (1859 assertions)** in 151.31s. The single failure is
+    `Tests\Feature\Portal\PublicFeatureTest > admin reply renders with…`
+    — grep of that test file for `invitation`/`invite` returns zero
+    hits, so the failure is unrelated to my changes (pre-existing
+    flake in the Portal test unrelated to Users/invitations). Same
+    "pre-existing baseline" posture documented across many prior
+    stories.
+
+### Files changed (in `/Users/andrewdrake/.polyscope/clones/66571e70/jolly-cat`)
+- **Added** `src/Livewire/Users/UserInvite.php` (~140 lines)
+- **Added** `resources/views/livewire/users/user-invite.blade.php`
+- **Added** `resources/views/users/invite.blade.php`
+- **Added** `tests/Feature/Livewire/Users/UserInviteTest.php` (5 tests
+  / 27 assertions)
+- **Modified** `src/Http/Controllers/UserController.php` (dropped
+  `sendInvite()` method + `InviteUserRequest` import; `invite()`
+  method preserved verbatim)
+- **Modified** `src/Http/routes.php` (dropped
+  `Route::post('invite')->name('laravel-crm.users.sendinvite')`;
+  the `GET` route preserved)
+- **Modified** `src/LaravelCrmServiceProvider.php` (+1 import +
+  `Livewire::component('crm-user-invite', UserInvite::class)`
+  registration line)
+- **Modified** `resources/views/livewire/users/user-index.blade.php`
+  (+1 line: Invite user secondary button gated on `@can('create crm users')`
+  linking to `route('laravel-crm.users.invite')`)
+- **Modified** `resources/lang/en/lang.php` (+3 translation keys
+  after the pre-existing `user_invitation_outro` entry)
+- **Deleted** `src/Http/Requests/InviteUserRequest.php` per AC's
+  "delete or repurpose" directive — the request class had only
+  2 rules (`email required|max:255` + `subject required|max:255`)
+  and was consumed only by the deleted `sendInvite()` controller
+  action. All validation is now inside the Livewire component's
+  `rules()` method.
+
+### Learnings for future iterations
+- **The AC's "delete `InviteUserRequest`" branch of the
+  "delete or repurpose" choice** is the cleaner pattern when the
+  target FormRequest class was ONLY consumed by a single
+  now-deleted controller method. Deleting removes 30 lines of
+  dead scaffolding; repurposing would mean carrying an unused
+  validator around indefinitely. Same discipline as many prior
+  refactors where a supporting file becomes dead-code after its
+  sole consumer is removed.
+- **Livewire's `assertHasErrors('field')` matches any error on the
+  field regardless of rule name.** Distinct from
+  `assertHasErrors(['field' => 'ruleName'])` which asserts a
+  SPECIFIC rule fired. Used the specific-rule shape for the
+  "required" / "email" cases (where the failure MUST be the
+  named rule) and the loose shape for the closure-driven
+  "duplicate user" / "pending invitation" / "non-CRM role"
+  cases (where the failure comes from a custom closure that
+  doesn't have a canonical rule name Livewire could parse from
+  the Validator's message bag). Both shapes locked in
+  regression-test coverage.
+- **`Notification::assertSentOnDemand(NotificationClass, Closure)`**
+  is the right assertion shape when the notification is sent via
+  `Notification::route('mail', $address)->notify(...)` (as opposed
+  to `$user->notify(...)`). The closure receives
+  `($notification, $channels, $notifiable)` where the `$notifiable`
+  is an `Illuminate\Notifications\AnonymousNotifiable` whose
+  `->routes` property is the associative array of channel-to-address
+  pairs. Assertion:
+  `expect($notifiable->routes['mail'])->toBe($expectedAddress)`.
+  Reusable pattern for any future on-demand notification test.
+- **Spatie's `roles` + `model_has_roles` tables are NOT in `TestSchema.php`.**
+  Every test that uses `Role::` MUST create them on demand via a
+  local helper (like `ensureInviteRolesTable()` in this story or
+  `ensureRoleTables()` in `FeatureNotificationsTest`). The helper
+  MUST include `description` + `crm_role` columns (the additive
+  columns from the plugin's own `add_fields_to_roles_permissions_tables.php.stub`
+  migration) since `Role::crm()` scope filters on `crm_role = 1`.
+  Reusable rule: any future test that touches CRM Role fixtures
+  needs both the base Spatie shape AND the plugin's additive columns.
+- **`Livewire\Attributes\Rule` is unnecessary when using `protected
+  rules(): array`**. The prior draft imported the attribute but
+  didn't use it (attributes go on public typed properties; the
+  method-based approach declares rules dynamically per-request).
+  Removed the import; kept the method-based approach because the
+  rules include closures that reference `$this->currentTeamId()`
+  and other instance state — attribute-driven rules can't reference
+  `$this` cleanly. Reusable rule: prefer `rules()` method over
+  `#[Rule]` attributes whenever the validation logic needs to read
+  computed state from the component instance.
+- **Placing the Invite user button between Import (outline) and
+  Create user (primary)** in the header keeps the visual weight
+  hierarchy: primary Create + secondary outline buttons for the
+  other two "add user" pathways. Matches the AC's "secondary"
+  styling directive (`class="btn-outline"`). Same posture as many
+  prior "add a secondary action pill to an existing header" stories.

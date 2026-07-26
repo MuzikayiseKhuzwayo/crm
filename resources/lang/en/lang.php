@@ -975,4 +975,7 @@ return [
     'user_invitation_no_expiry_line' => 'This invitation does not expire.',
     'user_invitation_action' => 'accept invitation',
     'user_invitation_outro' => 'If you did not expect this invitation, you can safely ignore this email.',
+    'user_invitation_email_taken' => 'a user with this email already exists',
+    'user_invitation_pending' => 'a pending invitation already exists for this email',
+    'user_invitation_role_invalid' => 'the selected role is invalid',
 ];

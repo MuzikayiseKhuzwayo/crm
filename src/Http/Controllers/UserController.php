@@ -11,7 +11,6 @@ use Illuminate\Http\Response;
 use Illuminate\Support\Facades\Hash;
 use Ramsey\Uuid\Uuid;
 use Symfony\Component\HttpFoundation\StreamedResponse;
-use VentureDrake\LaravelCrm\Http\Requests\InviteUserRequest;
 use VentureDrake\LaravelCrm\Http\Requests\StoreUserRequest;
 use VentureDrake\LaravelCrm\Http\Requests\UpdateUserRequest;
 use VentureDrake\LaravelCrm\Models\Address;
@@ -40,19 +39,6 @@ class UserController extends Controller
     public function invite()
     {
         return view('laravel-crm::users.invite');
-    }
-
-    /**
-     * Send invite
-     *
-     * @param  Request  $request
-     * @return Response
-     */
-    public function sendInvite(InviteUserRequest $request)
-    {
-        flash()->success(ucfirst(trans('laravel-crm::lang.user_invitation_sent')));
-
-        return redirect(route('laravel-crm.users.index'));
     }
 
     /**
