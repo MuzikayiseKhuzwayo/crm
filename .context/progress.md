@@ -30291,3 +30291,72 @@ stories.
   baseline preserved" discipline documented across every prior
   autopilot story — extremely stable pattern. Any future deviation is
   a regression to investigate, not a baseline shift.
+
+
+## US-001: Add SoftDeletes and last_sent_at to UserInvitation model + migrations (invite-users lifecycle series)
+- **Model** at `src/Models/UserInvitation.php`: added `use Illuminate\Database\Eloquent\SoftDeletes;`
+  import + `use SoftDeletes;` in the trait list; added `'last_sent_at' => 'datetime'`
+  to `$casts` so the timestamp round-trips as a Carbon instance.
+- **Base migration stub** at `database/migrations/create_crm_user_invitations_table.php.stub`
+  (#137): added `$table->timestamp('last_sent_at')->nullable();` immediately after
+  `accepted_at` AND `$table->softDeletes();` after `$table->timestamps();` so
+  fresh installs get both columns from the start.
+- **New patch stub** at `database/migrations/add_soft_deletes_and_last_sent_at_to_crm_user_invitations_table.php.stub`:
+  standalone class `AddSoftDeletesAndLastSentAtToCrmUserInvitationsTable` extending
+  `Migration`. `up()` guards each column via `if (! Schema::hasColumn(...))` for
+  idempotency (safe on hosts that already ran the base install AND hosts that
+  didn't); `down()` guards symmetrically via `if (Schema::hasColumn(...))`.
+  Uses `dropSoftDeletes()` for the `deleted_at` reverse path.
+- **`LaravelCrmServiceProvider::boot()` publishes block**: added the new stub
+  as sequence #138 immediately after the pre-existing #137 line, following
+  the same `$this->getMigrationFileName($filesystem, '...', 138)` pattern
+  established for every prior migration in the block.
+- **`tests/TestSchema.php`**: added `$table->timestamp('last_sent_at')->nullable();`
+  after `accepted_at` AND `$table->softDeletes();` after `$table->timestamps();`
+  in the `crm_user_invitations` block. Keeps the test schema aligned with
+  the base migration stub column-for-column.
+- **Quality gates green**:
+  - `./vendor/bin/pint --dirty --test` reports `{"tool":"pint","result":"passed"}`.
+  - `pest tests/Feature/Models/UserInvitationTest.php` → 7 passed (16 assertions).
+    All pre-existing observer + isValid/isPending/isExpired/isAccepted tests
+    remain green — the SoftDeletes trait doesn't disturb any of those behaviors.
+  - Broader `pest Livewire/Users UserInvitationAcceptRoutesTest
+    UserInvitationAcceptExistingUserTest UserInvitationAcceptNewUserTest
+    Notifications/UserInvitationNotificationTest` → 26 passed (109 assertions).
+    Zero regressions across the entire invite-users series test suite.
+
+### Files changed (in `/Users/andrewdrake/.polyscope/clones/66571e70/jolly-cat`)
+- **Modified** `src/Models/UserInvitation.php` (+2 imports/lines: SoftDeletes
+  import + trait usage; +1 cast entry for `last_sent_at`)
+- **Modified** `database/migrations/create_crm_user_invitations_table.php.stub`
+  (+2 lines in the CREATE block: `last_sent_at` timestamp + `softDeletes()`)
+- **Added** `database/migrations/add_soft_deletes_and_last_sent_at_to_crm_user_invitations_table.php.stub`
+  (~34 lines; guarded per-column `Schema::hasColumn` checks in both `up()` and
+  `down()` for idempotency)
+- **Modified** `src/LaravelCrmServiceProvider.php` (+1 line in the publishes
+  block: new stub registered as sequence #138 immediately after #137)
+- **Modified** `tests/TestSchema.php` (+2 lines in the crm_user_invitations
+  create block matching the base migration stub)
+
+### Learnings for future iterations
+- **SoftDeletes + `dropSoftDeletes()` in the down migration** is the
+  canonical Laravel pattern — mirrors `softDeletes()`'s helper on the
+  reverse side. Distinct from `dropColumn('deleted_at')` which works too
+  but is slightly less idiomatic. Reusable for any future migration that
+  adds/removes the `deleted_at` column via a patch stub.
+- **Symmetrical `Schema::hasColumn` guards in both `up()` and `down()`**
+  make a patch stub safe to run in ANY state: fresh install (base already
+  has both columns → patch's `up()` no-ops both; base doesn't have them →
+  patch's `up()` adds both), rollback from partial state (only one column
+  present → patch's `down()` only drops that one). Same idempotency
+  discipline documented across prior schema-patch stubs like
+  `make_name_nullable_on_laravel_crm_monitors_table` and
+  `add_recovered_notified_at_to_laravel_crm_monitors_table`.
+- **This story adds foundational schema for a downstream lifecycle
+  series**: future stories can now (a) auto-populate `last_sent_at` when
+  a fresh invite email fires, (b) surface a "last sent" column in the
+  admin listing, (c) enable soft-delete via a "delete invitation" row
+  action that doesn't permanently block re-invites of the same email.
+  All downstream stories benefit from having both columns in place from
+  the start rather than needing to bundle schema changes with feature
+  work.

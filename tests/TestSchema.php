@@ -952,7 +952,9 @@ class TestSchema
             $table->unsignedBigInteger('invited_by')->nullable();
             $table->timestamp('expires_at')->nullable();
             $table->timestamp('accepted_at')->nullable();
+            $table->timestamp('last_sent_at')->nullable();
             $table->timestamps();
+            $table->softDeletes();
         });
 
         Schema::create($prefix.'monitors', function (Blueprint $table) {

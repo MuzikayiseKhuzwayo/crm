@@ -25,7 +25,9 @@ return new class extends Migration
             $table->foreign('invited_by')->references('id')->on('users');
             $table->timestamp('expires_at')->nullable();
             $table->timestamp('accepted_at')->nullable();
+            $table->timestamp('last_sent_at')->nullable();
             $table->timestamps();
+            $table->softDeletes();
         });
     }
 

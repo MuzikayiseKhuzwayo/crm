@@ -2,17 +2,20 @@
 
 namespace VentureDrake\LaravelCrm\Models;
 
+use Illuminate\Database\Eloquent\SoftDeletes;
 use VentureDrake\LaravelCrm\Traits\BelongsToTeams;
 
 class UserInvitation extends Model
 {
     use BelongsToTeams;
+    use SoftDeletes;
 
     protected $guarded = ['id'];
 
     protected $casts = [
         'expires_at' => 'datetime',
         'accepted_at' => 'datetime',
+        'last_sent_at' => 'datetime',
     ];
 
     public function getTable()
