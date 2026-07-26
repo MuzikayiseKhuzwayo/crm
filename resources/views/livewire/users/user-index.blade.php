@@ -84,7 +84,7 @@
                         {{ $row->expires_at?->diffForHumans() ?? '—' }}
                     @endscope
                     @scope('actions', $row)
-                        <x-mary-button icon="o-paper-airplane" wire:click="resendInvitation({{ $row->id }})" class="btn-sm btn-square btn-outline" spinner />
+                        <x-mary-button label="{{ ucfirst(__('laravel-crm::lang.resend_invitation')) }}" icon="o-paper-airplane" wire:click="resendInvitation({{ $row->id }})" class="btn-sm btn-outline" spinner />
                         <x-mary-button icon="o-trash" wire:click="deleteInvitation({{ $row->id }})" wire:confirm class="btn-sm btn-square btn-error text-white" spinner />
                     @endscope
 
