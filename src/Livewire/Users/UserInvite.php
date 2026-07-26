@@ -104,6 +104,7 @@ class UserInvite extends Component
                 'role_id' => $data['role_id'],
                 'team_id' => $this->currentTeamId(),
                 'invited_by' => auth()->id(),
+                'last_sent_at' => now(),
             ]);
 
             Notification::route('mail', $data['email'])

@@ -64,7 +64,8 @@ test('submitting the form creates an invitation row and queues a notification', 
         ->and($invitation->role_id)->toBe($roleId)
         ->and($invitation->invited_by)->toBe(auth()->id())
         ->and($invitation->code)->not->toBeEmpty()
-        ->and($invitation->external_id)->not->toBeEmpty();
+        ->and($invitation->external_id)->not->toBeEmpty()
+        ->and($invitation->last_sent_at)->not->toBeNull();
 
     Notification::assertSentOnDemand(
         UserInvitationNotification::class,
