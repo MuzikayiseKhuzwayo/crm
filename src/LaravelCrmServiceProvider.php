@@ -813,6 +813,7 @@ class LaravelCrmServiceProvider extends ServiceProvider
                 __DIR__.'/../database/migrations/create_laravel_crm_feature_views_table.php.stub' => $this->getMigrationFileName($filesystem, 'create_laravel_crm_feature_views_table.php', 134),
                 __DIR__.'/../database/migrations/add_perf_notified_at_to_laravel_crm_monitors_table.php.stub' => $this->getMigrationFileName($filesystem, 'add_perf_notified_at_to_laravel_crm_monitors_table.php', 135),
                 __DIR__.'/../database/migrations/add_recovered_notified_at_to_laravel_crm_monitors_table.php.stub' => $this->getMigrationFileName($filesystem, 'add_recovered_notified_at_to_laravel_crm_monitors_table.php', 136),
+                __DIR__.'/../database/migrations/create_crm_user_invitations_table.php.stub' => $this->getMigrationFileName($filesystem, 'create_crm_user_invitations_table.php', 137),
             ], 'migrations');
 
             // Publishing the seeders
