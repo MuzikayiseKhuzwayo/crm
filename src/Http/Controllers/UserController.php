@@ -8,6 +8,7 @@ use DB;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
+use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Hash;
 use Ramsey\Uuid\Uuid;
 use Spatie\Permission\PermissionRegistrar;
@@ -397,7 +398,11 @@ class UserController extends Controller
      * same three-branch flow as showAcceptInvite so that a POST
      * from a logged-out browser still redirects to login and a
      * POST from the wrong user still renders the invalid view.
-     * Real acceptance for new users lands in US-006+.
+     * New users (no existing host User for the invitation email)
+     * run through acceptNewUser() which validates name+password,
+     * creates the User, applies role+team, marks the invitation
+     * accepted, logs the new user in, and redirects to the
+     * dashboard.
      */
     public function acceptInvite(Request $request, string $code)
     {
@@ -427,9 +432,7 @@ class UserController extends Controller
             return $this->acceptExistingUser($invitation, $existingUser);
         }
 
-        return view('laravel-crm::users.accept-invite', [
-            'invitation' => $invitation,
-        ]);
+        return $this->acceptNewUser($request, $invitation);
     }
 
     /**
@@ -476,6 +479,70 @@ class UserController extends Controller
         // php-flasher may not be initialized in every host bootstrap; fall
         // back to a plain session flash so the success message still lands
         // in the redirect's session even when the flasher container is absent.
+        try {
+            flash()->success(ucfirst(trans('laravel-crm::lang.user_invitation_accepted')));
+        } catch (\Throwable) {
+            session()->flash('status', ucfirst(trans('laravel-crm::lang.user_invitation_accepted')));
+        }
+
+        return redirect(route('laravel-crm.dashboard'));
+    }
+
+    /**
+     * Create a brand-new host User from the accept-invitation form,
+     * grant CRM access for the invitation's team+role, mark the
+     * invitation accepted, log the user in, and redirect them to
+     * the CRM dashboard. Wraps in a DB::transaction so a mid-way
+     * failure rolls back cleanly. The role + team_user blocks
+     * mirror acceptExistingUser() (and UserController@store)
+     * verbatim.
+     */
+    protected function acceptNewUser(Request $request, UserInvitation $invitation): RedirectResponse
+    {
+        $data = $request->validate([
+            'name' => 'required|string|max:255',
+            'password' => 'required|string|min:8|confirmed',
+        ]);
+
+        $user = DB::transaction(function () use ($invitation, $data) {
+            $user = User::forceCreate([
+                'name' => $data['name'],
+                'email' => $invitation->email,
+                'password' => Hash::make($data['password']),
+                'crm_access' => 1,
+            ]);
+
+            if ($invitation->role_id && $role = Role::find($invitation->role_id)) {
+                if (config('laravel-crm.teams') && $invitation->team_id) {
+                    app(PermissionRegistrar::class)->setPermissionsTeamId($invitation->team_id);
+                }
+
+                $user->assignRole($role);
+            }
+
+            if (config('laravel-crm.teams') && $invitation->team_id) {
+                DB::table('team_user')->insert([
+                    'team_id' => $invitation->team_id,
+                    'user_id' => $user->id,
+                    'role' => 'editor',
+                ]);
+
+                $user->forceFill([
+                    'current_team_id' => $invitation->team_id,
+                ])->save();
+            }
+
+            $invitation->forceFill(['accepted_at' => now()])->save();
+
+            return $user;
+        });
+
+        Auth::login($user);
+
+        // php-flasher may not be initialized in every host bootstrap;
+        // fall back to a plain session flash so the success message still
+        // lands in the redirect's session even when the flasher container
+        // is absent.
         try {
             flash()->success(ucfirst(trans('laravel-crm::lang.user_invitation_accepted')));
         } catch (\Throwable) {

@@ -983,4 +983,5 @@ return [
     'user_invitation_back_to_login' => 'back to login',
     'user_invitation_wrong_user' => 'This invitation is for :email. Please log out and sign back in as :email to accept it.',
     'user_invitation_accepted' => 'invitation accepted',
+    'user_invitation_new_user_intro' => 'Set your name and a password to finish creating your account.',
 ];
