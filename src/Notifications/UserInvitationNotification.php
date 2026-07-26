@@ -6,8 +6,8 @@ use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Notifications\Messages\MailMessage;
 use Illuminate\Notifications\Notification;
+use Illuminate\Support\Facades\DB;
 use Spatie\Permission\Models\Role;
-use VentureDrake\LaravelCrm\Models\Team;
 use VentureDrake\LaravelCrm\Models\UserInvitation;
 
 class UserInvitationNotification extends Notification implements ShouldQueue
@@ -91,7 +91,21 @@ class UserInvitationNotification extends Notification implements ShouldQueue
             return null;
         }
 
-        return Team::query()->whereKey($teamId)->value('name');
+        // team_id references the host teams table (same ID used for
+        // current_team_id, the team_user pivot, and Spatie permissions),
+        // not crm_teams. Try the configured host model first, then
+        // App\Models\Team, and finally read the row directly.
+        $hostTeamModel = config('laravel-crm.host_team_model');
+
+        if ($hostTeamModel && class_exists($hostTeamModel)) {
+            return $hostTeamModel::query()->whereKey($teamId)->value('name');
+        }
+
+        if (class_exists(\App\Models\Team::class)) {
+            return \App\Models\Team::query()->whereKey($teamId)->value('name');
+        }
+
+        return DB::table('teams')->where('id', $teamId)->value('name');
     }
 
     protected function resolveRoleName(): ?string
