@@ -29864,3 +29864,430 @@ rendering layer.
   which also has no test coverage — a future story could add
   role-aware tests via the `ensureRoleTables()` + direct `DB::table(
   'model_has_roles')->insert()` pattern from FeatureNotificationsTest.
+
+
+## US-006: Accept invitation and create host user for a new invitee (invite-users series)
+- Extended `UserController@acceptInvite` at
+  `/Users/andrewdrake/.polyscope/clones/66571e70/jolly-cat/src/Http/Controllers/UserController.php`
+  so the no-existing-user branch (previously a placeholder that returned
+  `view('...accept-invite')`) delegates to a new
+  `acceptNewUser(Request, UserInvitation): RedirectResponse` protected
+  helper. The existing 3-branch existing-user logic (logged-out →
+  login redirect, wrong-user → 403 invalid view, invitee →
+  acceptExistingUser) preserved verbatim.
+- New `acceptNewUser()` helper wraps in `DB::transaction`:
+  1. `$request->validate(['name' => 'required|string|max:255',
+     'password' => 'required|string|min:8|confirmed'])` — Laravel's
+     `confirmed` rule looks for the AC-mandated `password_confirmation`
+     field automatically.
+  2. `User::forceCreate(['name' => $data['name'], 'email' =>
+     $invitation->email, 'password' => Hash::make($data['password']),
+     'crm_access' => 1])` — email pulled from the invitation (not the
+     form) so the read-only email display can't be tampered with.
+  3. Role assignment: when `$invitation->role_id` resolves via
+     `Role::find(...)`, calls
+     `app(PermissionRegistrar::class)->setPermissionsTeamId(
+     $invitation->team_id)` if `config('laravel-crm.teams')` AND
+     `$invitation->team_id` are both set, then `$user->assignRole($role)`.
+     Distinct from `acceptExistingUser` (US-005) which also removes
+     any pre-existing crm role — new users have none, so no removal
+     step needed.
+  4. Team pivot: when `config('laravel-crm.teams')` AND
+     `$invitation->team_id`, inserts a row into `team_user` with
+     `role => 'editor'` (verbatim from `store()` lines 91-100) AND
+     always stamps `current_team_id => $invitation->team_id` via
+     `forceFill(...)`. Distinct from `acceptExistingUser` which only
+     sets `current_team_id` when `null` — a brand-new user has no
+     existing current_team_id, so unconditional-set is correct.
+  5. `$invitation->forceFill(['accepted_at' => now()])->save()`.
+  6. Transaction returns the new `$user`.
+- After the transaction: `Auth::login($user)` logs the new user in
+  immediately (matches the AC-mandated "then Auth::login($user)"
+  contract). Uses the `Illuminate\Support\Facades\Auth` import added
+  alphabetically after `RedirectResponse`. Same discipline as
+  `PortalAuthService::register()` which also does `Auth::login($user)`
+  after creating a new user.
+- After login: success flash via
+  `flash()->success(ucfirst(trans('...user_invitation_accepted')))`
+  wrapped in try/catch with `session()->flash('status', ...)` fallback
+  (php-flasher isn't always initialized in testbench environments —
+  same posture as US-005's `acceptExistingUser`).
+- Redirects to `route('laravel-crm.dashboard')`.
+- **Guard against invalid/expired code**: the POST handler's
+  short-circuit `if (! $invitation || ! $invitation->isValid())
+  return response()->view('laravel-crm::users.invalid-invite', [], 404)`
+  fires BEFORE any user creation, satisfying the AC's "Guard against
+  invalid/expired code inside acceptInvite too" contract.
+- **Rewrote `resources/views/users/accept-invite.blade.php`** from
+  the US-004 placeholder to a real HTML form:
+  - Extends `laravel-crm::layouts.portal` (public layout, no auth
+    required).
+  - Renders `$errors->any() → alert-error` block with validation
+    error messages at the top of the card.
+  - Form uses standard `method="POST" action="{{ route(
+    'laravel-crm.users.invitations.accept.store', $invitation->code) }}"`
+    with `@csrf`.
+  - Email field: `<input type="email" value="{{ $invitation->email }}"
+    readonly disabled />` — the AC's "email is displayed read-only from
+    the invitation" contract. `readonly` prevents user typing;
+    `disabled` also excludes the field from POST body (defensive against
+    a form-tampering attack; the server ignores form email regardless
+    since it reads from the invitation).
+  - Name field: required, `type="text"`, `autofocus`, `old('name')`
+    fallback on validation failure.
+  - Password field: required, `type="password"`.
+  - Password confirmation field: `name="password_confirmation"` — the
+    literal name Laravel's `confirmed` rule looks for.
+  - Both password fields have `input-error` class conditional on
+    `@error('password')` (DaisyUI error state).
+  - Submit button uses the pre-existing `user_invitation_action` label
+    ("accept invitation").
+- Added `user_invitation_new_user_intro` translation key to
+  `resources/lang/en/lang.php` after the pre-existing
+  `user_invitation_accepted` entry: `'Set your name and a password to
+  finish creating your account.'`. Rendered as the card intro text.
+  Other 4 labels used by the form (`email`, `name`, `password`,
+  `confirm_password`) are all pre-existing in en/lang.php from prior
+  stories.
+- **Added `use Illuminate\Support\Facades\Auth;`** to UserController
+  alphabetically between `Illuminate\Support\Facades\Hash` and the
+  existing `RedirectResponse` import group.
+- **New Pest test `tests/Feature/UserInvitationAcceptNewUserTest.php`**
+  (8 tests / 39 assertions) locks every AC bullet as a regression gate:
+  1. **GET valid + no existing user → accept-invite form** — asserts
+     200 + view + email displayed + all 3 field markers
+     (`name="name"`, `name="password"`, `name="password_confirmation"`).
+  2. **POST happy path without teams** — user created with expected
+     name/email/crm_access=1 + password hashed via `Hash::check`;
+     invitation.accepted_at stamped; `Auth::check() === true` AND
+     `Auth::id() === $user->id`; redirect to dashboard.
+  3. **POST happy path with teams=true** — additionally asserts
+     `current_team_id === 77` AND `team_user` pivot row exists. Uses
+     `ensureAcceptNewUserTeamUserTable()` file-local helper mirroring
+     `ensureTeamUserTable()` from US-005's test file (same
+     TestSchema-doesn't-ship-team_user posture noted across many prior
+     stories).
+  4. **Missing name → 422 with `name` session error**; regression guard
+     that NO user was created AND NO invitation was accepted AND
+     `Auth::check() === false`.
+  5. **Password shorter than 8 → session error on `password`**.
+  6. **Password confirmation mismatch → session error on `password`**
+     (Laravel puts `confirmed` rule failure on the base field, not
+     `password_confirmation`).
+  7. **POST to expired invitation → 404 + invalid-invite view**;
+     regression guard that NO user was created.
+  8. **POST to already-accepted invitation → 404 + invalid-invite
+     view**; regression guard that NO user was created.
+- Every test's `beforeEach` scoped-cleanup pattern
+  (`DB::table('users')->where('email', 'like', '%@invite-us006.test')->delete()`
+  + `UserInvitation::query()->delete()` + `Auth::logout()`) matches
+  the US-005 test file's discipline. `@invite-us006.test` domain
+  scoping keeps my test fixtures isolated from any other test's
+  fixture leakage.
+- Quality gates:
+  - `./vendor/bin/pint --dirty --test` reports
+    `{"tool":"pint","result":"passed"}`.
+  - Targeted `pest tests/Feature/UserInvitationAcceptNewUserTest.php`
+    → 8 passed (39 assertions) in 7.48s.
+  - Broader `pest UserInvitationAcceptNewUserTest UserInvitationAcceptExistingUserTest
+    UserInvitationAcceptRoutesTest Models/UserInvitationTest
+    Notifications/UserInvitationNotificationTest Livewire/Users/UserInviteTest`
+    → 33 passed (125 assertions) in 16.47s. Zero regressions across
+    the invite-users series.
+  - `pest RoutingTest BootTest` → 4 passed (6 assertions) — routing +
+    boot lifecycle unaffected.
+- Commit `0b0685e3` on branch `invite-users` in the core CRM package
+  repo — 4 files changed / +343 insertions / -8 deletions.
+
+### Files changed (in `/Users/andrewdrake/.polyscope/clones/66571e70/jolly-cat`)
+- **Modified** `src/Http/Controllers/UserController.php` (+70/-3:
+  added `Auth` facade import; extended `acceptInvite()` to delegate
+  the no-existing-user branch to `acceptNewUser()`; added
+  `acceptNewUser(Request, UserInvitation): RedirectResponse` protected
+  helper wrapping the validate → DB::transaction → forceCreate →
+  role/team → accepted_at → Auth::login → redirect flow with php-
+  flasher fallback)
+- **Modified** `resources/views/users/accept-invite.blade.php`
+  (rewrote from ~18-line placeholder to ~86-line real form with 4
+  fields (email read-only + name + password + password_confirmation),
+  error alert block, CSRF token, portal-layout wrapper)
+- **Modified** `resources/lang/en/lang.php` (+1 key:
+  `user_invitation_new_user_intro`)
+- **Added** `tests/Feature/UserInvitationAcceptNewUserTest.php` (~180
+  lines; 8 tests / 39 assertions locking every AC bullet as a
+  regression gate; includes `ensureAcceptNewUserTeamUserTable()`
+  file-local helper for the teams=true test path)
+
+### Learnings for future iterations
+- **Laravel's `confirmed` validation rule automatically looks for a
+  `{field}_confirmation` sibling.** No explicit `password_confirmation`
+  rule declaration needed — the rule string
+  `'password' => 'required|string|min:8|confirmed'` handles both the
+  min-length check on the primary field AND the equality check
+  against the sibling `password_confirmation` field. When the
+  confirmation fails, Laravel puts the error message on the base
+  `password` key (NOT on `password_confirmation`), so test assertions
+  should use `assertSessionHasErrors('password')` for mismatch cases.
+  Same discipline applies to any future "primary field + confirmed
+  sibling" validation contract.
+- **`readonly disabled` on an HTML input excludes it from the POST
+  body entirely.** Distinct from `readonly` alone (which prevents
+  typing but STILL submits the value) or `disabled` alone (which
+  greys out the field and blocks focus AND excludes from submission).
+  Using both together is defense-in-depth for a field whose canonical
+  value must come from the server-side invitation record, not from
+  any form data. The controller reads `$invitation->email` regardless,
+  so form-tampering can't change what email the user is registered
+  under — but the `disabled` attribute makes it visually obvious to
+  admins that the field is authoritative-from-server.
+- **`Auth::login($user)` vs `$this->actingAs($user)`** are the
+  production-code vs test-code equivalents. Both establish an
+  authenticated session for the given User; `Auth::login` is
+  session-driven (works in HTTP context) while `actingAs` is
+  request-scoped (works only within the calling test). Same posture
+  as `PortalAuthService::register()` which uses `Auth::login($user)`
+  after creating a new user via `create(...)` — well-established
+  Laravel pattern for post-registration auto-login.
+- **The `acceptNewUser` helper diverges from `acceptExistingUser`
+  in TWO subtle ways that matter for a fresh user**:
+  1. **No pre-existing CRM role removal step**: new users have no
+     roles at all, so the `if ($removeRole = $user->roles()->
+     where('crm_role', 1)->first())` branch from `acceptExistingUser`
+     is skipped. Attempting `->roles()` on a not-yet-saved user
+     within a transaction can also produce awkward hydration
+     behavior; skipping the removal step is both semantically
+     correct AND safer.
+  2. **Unconditional `current_team_id` assignment**: new users have
+     `current_team_id === null` by definition (never set anywhere
+     else), so the `if (is_null($user->current_team_id))` guard
+     from `acceptExistingUser` is unnecessary. The
+     forceFill-and-save is unconditional here.
+  These are cases where the sibling-code-mirror discipline had to
+  give way to entity-specific correctness. Same posture as any
+  future "existing entity" vs "brand new entity" branch where the
+  common shape has small semantic divergences.
+- **`Hash::check($rawPassword, $storedHash)` is the canonical
+  test-side assertion for "the password was hashed correctly on
+  save".** Distinct from directly comparing hashes (which would
+  fail because bcrypt salts randomize per-call). Reusable for any
+  future test that verifies a user creation flow properly hashed
+  the input password.
+- **PHP 8.5 PDO deprecation warnings continue to show as
+  `N deprecated`** in the pest output for every test run in this
+  codebase — same PDO::MYSQL_ATTR_SSL_CA deprecation from
+  Testbench's default database.php. Ignore the count; check that
+  no FAILED/ERROR lines appear before declaring green. Same
+  discipline documented across every prior story in the invite-
+  users series and every other core-package test story.
+
+
+## US-007: End-to-end verification pass in host apps (invite-users series wrap)
+- **Verification-only story** wrapping the invite-users series (US-001..US-006).
+  No production code changes. This is the 13th manual-verification story in
+  the autopilot flow — recurring shape well-established across many prior
+  series (v0.x US-007 recalc, v0.x US-006 prices RM, v0.x US-007 Settings
+  cluster evacuation, v0.x US-007 PipelineStages RM, US-004 new stories,
+  US-005 calendar refactor, US-007 pipeline view page, US-006 PipelineStage
+  view page, US-010 ProductCategory parity, US-010 TaxRate/Label/LeadSource
+  wrap, US-005 chat widget parity wrap, US-005 integrations sub-nav series,
+  US-010 dashboard parity).
+- **All three automated proxy gates satisfied**:
+  - **`npm run build`** (AC-mandated) → produced
+    `public/vendor/laravel-crm/assets/{app.css,app.js}` cleanly in 3.39s.
+    Vite build reports 121 modules transformed, one benign daisyUI warning
+    about an `@property` at-rule and a chunk-size hint (563kB gzipped JS —
+    matches the codebase's baseline; no size regression from the invite-
+    users work).
+  - **`./vendor/bin/pint --dirty --test`** →
+    `{"tool":"pint","result":"passed"}`. Working tree at session start
+    carried only `.context/progress.md` staged from prior autopilot loop.
+  - **Full `pest --no-coverage` (memory 512M)** → **1932 assertions / 1
+    failed / 631 deprecated** in 165.31s. The single failure is
+    `Tests\Feature\Portal\PublicFeatureTest > admin reply renders with…` —
+    same pre-existing baseline flake documented in US-003 of the invite-
+    users series ("grep of that test file for `invitation`/`invite`
+    returns zero hits, so the failure is unrelated to my changes"). All
+    33 invite-users tests (across UserInvitationTest, UserInviteTest,
+    UserInvitationNotificationTest, UserInvitationAcceptRoutesTest,
+    UserInvitationAcceptExistingUserTest, UserInvitationAcceptNewUserTest)
+    remain green.
+
+### Host apps identified per AC
+- `/Users/andrewdrake/Sites/laravel-12-crm-v2` (teams off) — Laravel 12
+  host app with the CRM package linked via Composer path repository.
+- `/Users/andrewdrake/Sites/laravel-crm-premium` (teams on when
+  `LARAVEL_CRM_TEAMS=true`) — Laravel 11 + Jetstream + Xero premium host.
+Both exist on-disk; both are valid targets for the AC's browser walkthrough.
+
+### Structural-proxy mapping per AC bullet
+The autopilot cannot literally exercise a browser at either host app —
+Polyscope clones don't have a browser harness (same constraint noted across
+every prior manual-verification story). Each AC bullet maps to existing
+regression tests + code inspection built up across US-001..US-006.
+
+1. **L12 host new-user invite flow**
+   (`open /crm/users` → click Invite user → submit email+role →
+   confirm mail body → open signed URL in incognito → set-password form →
+   dashboard → `crm_access = 1`):
+   - **`open /crm/users`** — pre-existing UserController::index route
+     unchanged; users-index page renders via
+     `resources/views/livewire/users/user-index.blade.php` which US-003 of
+     the invite-users series extended with an "Invite user" secondary
+     button gated on `@can('create crm users')`. Structural coverage:
+     `UserInviteTest::it('renders the invite form + submits successfully')`
+     end-to-end asserts Livewire component mount.
+   - **Click Invite user** — button links to
+     `route('laravel-crm.users.invite')` which US-003 preserved on
+     `GET crm/users/invite` (removed only the corresponding POST). Route
+     serves `resources/views/users/invite.blade.php` which wraps the new
+     `<livewire:crm-user-invite />` component.
+   - **Submit email + role** — Livewire component's `save()` method wraps
+     in `DB::transaction`, calls `UserInvitation::create([...])` with the
+     resolved team_id/role_id/email/invited_by, then dispatches via
+     `Notification::route('mail', $email)->notify(new UserInvitationNotification(...))`.
+     Structural coverage: 5 UserInviteTest scenarios lock validation +
+     happy-path persistence + notification dispatch.
+   - **Mail body in `storage/logs/laravel.log`** (or MailHog) — the
+     notification's `toMail()` builds a `MailMessage` with the AC-named
+     subject/greeting/intro/team/role/expiry/action/outro lines routed
+     through `laravel-crm::lang.user_invitation_*` translation keys.
+     Structural coverage: `UserInvitationNotificationTest` (4 tests / 9
+     assertions) asserts subject contains app name, action URL contains
+     invitation code, translation keys resolve non-key strings.
+   - **Open signed URL in incognito → set-password form** — accept-invite
+     GET route `crm/users/invitations/{code}/accept` (US-004 route
+     registration, US-005 3-branch existing-user logic, US-006 new-user
+     branch delegation to `acceptNewUser`). Route uses
+     `->withoutMiddleware([HasCrmAccess::class])` per US-005 fix so
+     invitee-with-crm_access=0 can reach the controller. Controller
+     branches: existing-user + not-logged-in → login redirect; existing +
+     logged in as different → 403 invalid; existing + logged in as invitee
+     → `acceptExistingUser`; NO existing user → renders
+     `users.accept-invite` form. Structural coverage:
+     `UserInvitationAcceptRoutesTest` (5 tests) + `UserInvitationAcceptExistingUserTest`
+     (4 tests) + `UserInvitationAcceptNewUserTest` (8 tests) lock every
+     branch AND the invalid-code short-circuit.
+   - **Complete set-password form → land on dashboard** — POST handler
+     validates name+password+password_confirmation, `DB::transaction`s
+     `User::forceCreate(['email' => $invitation->email, 'crm_access' => 1,
+     ...])`, assigns role if resolvable, stamps `accepted_at`, `Auth::login($user)`,
+     redirects to `route('laravel-crm.dashboard')`. Structural coverage:
+     `UserInvitationAcceptNewUserTest::it('POST happy path without teams
+     creates user + accepts invitation + logs in + redirects to
+     dashboard')` locks all 4 side effects.
+   - **Confirm `crm_access = 1`** — same test asserts
+     `$user->fresh()->crm_access === 1`. Regression-guarded.
+2. **L12 host existing-user invite flow (no password step)**:
+   - Same GET route → controller sees email matches an existing User via
+     case-insensitive `whereRaw('LOWER(email) = ?', [strtolower(...)])`
+     lookup → branches to `acceptExistingUser` when logged in as invitee.
+     Structural coverage:
+     `UserInvitationAcceptExistingUserTest::it('successful accept without
+     teams sets crm_access + accepted_at + redirects to dashboard')` locks
+     the end-to-end without needing the invitee to set a password
+     (`acceptExistingUser` skips the password/name form entirely).
+3. **Premium host with `LARAVEL_CRM_TEAMS=true`**:
+   - Same routes; `config('laravel-crm.teams') === true` gates the
+     team_user pivot insert + `current_team_id` stamping in BOTH
+     `acceptExistingUser` (US-005) and `acceptNewUser` (US-006).
+     Structural coverage:
+     `UserInvitationAcceptExistingUserTest::it('successful accept with
+     teams also creates team_user pivot with role=editor and sets
+     current_team_id')` + `UserInvitationAcceptNewUserTest::it('POST
+     happy path with teams=true creates user + team_user pivot + sets
+     current_team_id')` both lock the AC-mandated `role => 'editor'`
+     pivot row AND `current_team_id === $invitation->team_id` write.
+
+### What the user still needs to click through
+The structural coverage above proves the WIRING is correct. What the AC
+still asks the user to confirm in a real browser at each host:
+- **L12 host walkthrough** (`/Users/andrewdrake/Sites/laravel-12-crm-v2`,
+  teams off):
+  - Verify `/crm/users` shows the new "Invite user" secondary button
+    between the Import users outline button and the Create user primary
+    button.
+  - Click Invite user → verify form renders with email + role Select.
+  - Submit an email (a NEW email not in `users` table) + role → verify
+    success flash AND redirect back to `/crm/users`.
+  - Open `storage/logs/laravel.log` (or MailHog if configured) → verify
+    the notification email body contains the invitation subject
+    ("You've been invited to {app}"), the inviter name, the role name,
+    the "accept invitation" button, AND the signed URL
+    `/crm/users/invitations/{64-char-code}/accept`.
+  - Open the signed URL in an incognito window → verify the accept-
+    invite form renders with email displayed read-only, name TextInput,
+    password + password_confirmation inputs.
+  - Fill in name + matching password twice + submit → verify redirect
+    to `/crm/dashboard` (not a 404, not a 500).
+  - Log in via Tinker or a direct DB check: `SELECT crm_access FROM
+    users WHERE email = '{invited-email}'` → confirm `crm_access = 1`.
+  - Repeat with an ALREADY-EXISTING user email (someone with a User row
+    but crm_access=0):
+    - Send invite → verify email still delivered.
+    - Open signed URL in incognito → verify redirect to login page
+      with `?invitation={code}` query string.
+    - Log in as the target user → per current codebase the query
+      string isn't yet consumed by the Login flow (future story;
+      documented in US-005 progress entry). Manually visit the accept
+      URL again after login → verify redirect to dashboard AND
+      `crm_access` flips to 1 WITHOUT any password re-entry.
+- **Premium host walkthrough** (`/Users/andrewdrake/Sites/laravel-crm-premium`,
+  `LARAVEL_CRM_TEAMS=true` in `.env`):
+  - Verify `config('laravel-crm.teams') === true` at Tinker.
+  - Send an invite to a NEW email → complete the set-password form.
+  - Query `SELECT * FROM team_user WHERE user_id = {new-user-id}` →
+    confirm the row exists with `role = 'editor'` AND
+    `team_id = {invitation->team_id}`.
+  - Query `SELECT current_team_id FROM users WHERE id = {new-user-id}`
+    → confirm `current_team_id = {invitation->team_id}`.
+  - Log in as the new user → verify Jetstream's team switcher lists
+    the team AND it's the active team.
+
+### AC "Fix any issues found; record notes in the PR description"
+Structural tests are all green; automated gates all satisfied; no
+regressions introduced by any invite-users series story. If the manual
+walkthrough surfaces a regression (recurring pattern documented in
+prices RM series US-006 progress entry — the "manual walkthrough
+caught a real production bug" section), that fix would land as a
+follow-up commit on this branch OR a new story per the maintainer's
+preference. Same handoff posture as many prior verification-only
+stories.
+
+### Files changed (in `/Users/andrewdrake/.polyscope/clones/66571e70/jolly-cat`)
+- **Modified** `.context/progress.md` (this entry only — verification
+  story carries no code change in the plugin repo)
+
+### Learnings for future iterations
+- **Thirteenth manual-verification story in the autopilot flow.** The
+  recurring recipe is fully mature: (a) run any AC-mandated build
+  step (`npm run build` here); (b) run pint on any dirty files; (c)
+  run the AC-appropriate targeted pest filter; (d) run the full pest
+  suite for baseline preservation; (e) map each AC bullet to
+  structural test coverage; (f) clearly document what still needs
+  the literal browser click-through with specific "what to confirm"
+  per-host guidance. Never claim "manually verified" when the
+  verification can't literally happen — that's misleading.
+- **Both host apps are on-disk AND both have `AGENTS.md`** guides
+  suggesting they're actively maintained autopilot targets. Same
+  discipline as many prior manual-verification stories — the host
+  apps' existence is a necessary precondition; the actual clicking
+  is a human handoff.
+- **The invite-users series' 7-story arc is complete with US-007**:
+  US-001 core CRM migration + model + observer + code+external_id
+  stamping; US-002 mailable notification; US-003 Livewire invite form
+  + validation + users-index button; US-004 public accept routes +
+  controller shells + invalid-invite view; US-005 accept-existing-user
+  branch with 3-way logged-in-vs-logged-out semantics + case-insensitive
+  email + `HasCrmAccess::class` middleware bypass; US-006 accept-new-user
+  branch with name+password form + `Auth::login` + role/team assignment;
+  US-007 verification wrap. Each story small (typically 1-3 file
+  changes), incremental, and independently testable. The series
+  shipped 3 new source files + 3 new page/view files + 6 new test
+  files + 15+ translation keys + one core-CRM migration/model/observer
+  triple + one Livewire component + one controller-actions pair.
+- **The 1-failure pre-existing baseline preserved gate has now been
+  re-confirmed across the invite-users series with byte-exact parity**
+  (`PublicFeatureTest > admin reply renders with…`). Same "pre-existing
+  baseline preserved" discipline documented across every prior
+  autopilot story — extremely stable pattern. Any future deviation is
+  a regression to investigate, not a baseline shift.
