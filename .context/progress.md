@@ -30723,3 +30723,254 @@ stories.
   avoid double-alias fatals across nested test boots). Per-test-file
   aliasing is the escape hatch. Reusable for any future test that
   needs to reference a plugin class referencing `App\Models\User`.
+
+
+## US-005: Render Registered Users + Pending Invitations tabs in user-index view (invite-users lifecycle series)
+- Three surgical additions to wire the two-tab UI on the user-index page:
+  1. **`src/Models/UserInvitation.php`**: added `role()` → `belongsTo(Role::class,
+     'role_id')` and `invitedByUser()` → `belongsTo(config('auth.providers.users.model'),
+     'invited_by')` relations. Required so the AC's blade markup
+     (`$row->role?->name ?? '—'`, `$row->invitedByUser?->name ?? '—'`)
+     resolves at render time.
+  2. **`src/Livewire/Users/UserIndex.php`**: added `invitationHeaders(): array`
+     public method returning 6 header definitions matching the AC's column
+     spec — `email`/`role`/`invited_by`/`sent_at`/`last_sent`/`expires` keys,
+     the last 5 marked `sortable => false` (they're rendered via cell
+     scopes rather than direct column lookup). Header keys deliberately
+     match the natural column names the AC uses in the scope directives
+     so `@scope('cell_X', $row)` resolves cleanly. Passed the new headers
+     into `render()`'s view data array as `invitationHeaders => $this->
+     invitationHeaders()`.
+  3. **`resources/views/livewire/users/user-index.blade.php`**: wrapped
+     the existing `<x-mary-card><x-mary-table :rows="$users">` block
+     verbatim inside a new `<x-mary-tabs wire:model.live="tab">` +
+     `<x-mary-tab name="users">` panel. Added a sibling
+     `<x-mary-tab name="invitations">` panel containing:
+     - `<x-mary-card shadow>` wrapping a
+       `<x-mary-table :headers="$invitationHeaders" :rows="$this->invitations"
+       :with-pagination="true">`.
+     - 5 `@scope('cell_X', $row)` blocks rendering the AC-named cell
+       computations verbatim (`role`, `invited_by`, `sent_at`,
+       `last_sent`, `expires`).
+     - `@scope('actions', $row)` with 2 icon-pill buttons: Resend
+       (o-paper-airplane icon, `wire:click="resendInvitation($id)"`,
+       btn-outline) + Delete (o-trash icon,
+       `wire:click="deleteInvitation($id) wire:confirm"`, btn-error).
+       The `wire:confirm` bare attribute produces Livewire 3's default
+       "Are you sure?" browser prompt before firing the action.
+     - `<x-slot:empty>` populated with a centered
+       `no_pending_invitations` translation string (mary-table's
+       `public mixed $empty = null` prop maps `<x-slot:empty>` into
+       the render's empty-state block at Table.blade.php:438-442).
+- Tab strip labels use the pre-existing translation keys added by
+  US-003 of the invite-users lifecycle series: `registered_users`
+  and `pending_invitations`. `wire:model.live="tab"` binds the tab
+  strip to the `#[Url]` public string $tab property added by US-004
+  of the same series, so the active tab syncs to the query string
+  (bookmarking `?tab=invitations` deep-links to the Pending
+  Invitations tab).
+- The Registered Users tab preserves the existing block **byte-for-
+  byte** (same headers, same rows, same scope actions for view/edit/
+  delete). No behavioral change to the users listing — just a wrapper.
+- Row actions are gated at the Livewire component level via
+  `Gate::allows('create', User::class)` (US-004's implementation).
+  The blade doesn't need `@can` wrappers around the action buttons
+  because the server-side guard short-circuits when the user lacks
+  permission — same posture as many other resend/delete flows across
+  the codebase.
+- Quality gates green:
+  - `./vendor/bin/pint --dirty --test` reports
+    `{"tool":"pint","result":"passed"}`.
+  - `pest tests/Feature/Livewire/Users/UserIndexInvitationsTest.php
+    tests/Feature/Models/UserInvitationTest.php` → 14 passed (32
+    assertions). Pre-existing UserIndex tests + model tests remain
+    green.
+  - Broader `pest Livewire/Users Models/UserInvitationTest
+    UserInvitationAcceptRoutesTest UserInvitationAcceptExistingUserTest
+    UserInvitationAcceptNewUserTest Notifications/UserInvitationNotificationTest`
+    → 40 passed (142 assertions). Zero regressions across the
+    invite-users series.
+
+### Files changed (in `/Users/andrewdrake/.polyscope/clones/66571e70/jolly-cat`)
+- **Modified** `src/Models/UserInvitation.php` (+10 lines: `role()` +
+  `invitedByUser()` belongsTo relations)
+- **Modified** `src/Livewire/Users/UserIndex.php` (+13 lines:
+  `invitationHeaders(): array` public method returning 6 header defs
+  + `'invitationHeaders' => $this->invitationHeaders()` entry in the
+  render's view-data array)
+- **Modified** `resources/views/livewire/users/user-index.blade.php`
+  (+61/-24 diff: wrapped existing card in `<x-mary-tabs>` +
+  `<x-mary-tab name="users">`; added second `<x-mary-tab name="invitations">`
+  containing a mary-table with 5 cell scopes + 2 action pills +
+  `<x-slot:empty>` fallback)
+
+### Learnings for future iterations
+- **The `<x-slot:empty>` slot on `<x-mary-table>`** maps to the
+  Table component's `public mixed $empty = null` prop via Blade's
+  standard slot-to-prop convention. When the rows collection is
+  empty AND the `$empty` slot is populated, Table.blade.php:438-442
+  renders the slot's HTML inside a `<div class="text-center py-4
+  text-base-content/50">` wrapper. Distinct from mary Table's
+  `$emptyText` (string prop with 'No records found.' default) —
+  the slot approach lets you inject translated + styled markup
+  rather than a bare string. Reusable for any future mary-table
+  that needs a customized empty state.
+- **The AC's cell scope pattern with header keys matching scope
+  names** (e.g. header `key => 'role'` + `@scope('cell_role', $row)`)
+  is mary-table's standard mechanism for "let a Blade template
+  compute the cell value instead of reading it directly off the
+  row model". Distinct from mary-table's `format` header option
+  (a closure). Scopes are more flexible when the cell needs
+  complex HTML (e.g. multiple elements, conditional rendering).
+  Same posture as the pre-existing `cell_role` scope in the same
+  file for User rows (which resolves the Spatie role name via
+  `$user->roles()->first()->name`).
+- **The `belongsTo(config('auth.providers.users.model'), ...)`
+  pattern** is the canonical way to reference the host app's User
+  model from a package without hardcoding a specific FQCN. Enables
+  hosts that override `auth.providers.users.model` in their own
+  `config/auth.php` (e.g. custom User model with additional traits)
+  to have the invitation's `invitedByUser` relation resolve
+  correctly. Same posture as many other package-level relations
+  across the CRM codebase.
+- **The `#[Url]` decorated `$tab` property from US-004 wires the
+  tab strip to the query string cleanly.** `<x-mary-tabs
+  wire:model.live="tab">` reads and writes the property; the
+  `#[Url]` attribute makes Livewire sync the property state to
+  the URL query string on every change. Bookmarking / sharing a
+  filtered-tab URL works out of the box. Same pattern reusable for
+  any future "tab strip whose active state should persist in the
+  URL" contract.
+
+
+## US-006: Feature tests for tabs, invitations query, resend, and delete (invite-users lifecycle series)
+- New `tests/Feature/Livewire/Users/UserIndexTabsTest.php` (5 tests / 18 assertions
+  covering the AC's 5 named scenarios verbatim):
+  1. **`?tab=invitations` mount** — instantiates a UserIndex, sets `tab =
+     'invitations'` (simulating what Livewire's `#[Url]` binding does at mount
+     time), calls `mount()`, then asserts `tab === 'invitations'` AND the
+     `invitations` magic property returns the seeded pending invitation.
+     Uses direct instantiation rather than `Livewire::test()` because the
+     User stub lacks Spatie's `HasRoles` trait and the users-index blade
+     iterates `$user->roles()->first()->name` in the Registered Users
+     tab — a full render would blow up. Same discipline documented in
+     US-004 of the invite-users lifecycle series (UserIndexInvitationsTest).
+  2. **`getInvitationsProperty` scoping** — seeds 4 invitations (pending,
+     accepted, expired, soft-deleted) and asserts only the pending one
+     appears. Then enables `laravel-crm.teams` config, seeds an
+     explicit-team_id row, and asserts it's hidden (team scope narrows to
+     `auth->currentTeam->id`, null in tests). Locks all 4 exclusion
+     branches AND the team-scope gate in one test.
+  3. **`resendInvitation` end-to-end** — Notification::fake(), seeds
+     invitation with `last_sent_at = 5 days ago`, calls
+     `(new UserIndex)->resendInvitation($id)`, asserts `last_sent_at`
+     was updated AND `Notification::assertSentOnDemand` fires via
+     `Notification::route('mail', $email)->notify(...)`.
+  4. **`deleteInvitation` soft-deletes** — asserts `UserInvitation::find($id) === null`
+     (default scope hides trashed) AND
+     `UserInvitation::withTrashed()->find($id)?->deleted_at !== null`
+     (row survives with timestamp). Verbatim AC-mandated assertion pair.
+  5. **Regression guard: soft-deleted doesn't block re-invite** — creates
+     a pending invitation, deletes it, then invokes the full
+     `Livewire::test(UserInvite::class)->set('email', ...)->call('save')`
+     flow against the same email. Asserts no validation errors, a new
+     invitation row is persisted (with a different id from the trashed
+     one), AND the trashed row still has `deleted_at`. Locks the AC's
+     "soft-deleted doesn't block" contract end-to-end via BOTH the
+     UserInvite Livewire component's `email` validation rule (which uses
+     the default query scope excluding trashed) AND the persistence
+     round-trip.
+- **Helper reuse via guarded declaration**: my new file uses
+  `if (! function_exists('ensureInviteRolesTable')) { function ... }`
+  wrapping the sibling helper. To make this work bidirectionally, ALSO
+  updated `tests/Feature/Livewire/Users/UserInviteTest.php` to guard its
+  own declarations of `ensureInviteRolesTable()` + `makeCrmRole()` the
+  same way. Load order can now be either — whichever file loads first
+  defines the function; the second's guard skips. Full-suite runs no
+  longer fatal-error on "cannot redeclare". Same discipline reusable
+  for any future test file that needs to share a top-level helper with
+  a sibling file.
+- **Beforeach `Gate::before(fn () => true)`** grants the `create User`
+  policy so resend/delete row actions execute in tests. Same shape as
+  US-004's UserIndexInvitationsTest beforeEach.
+- Test-scaffold shape (route registration + roles table + acting user +
+  gate grant) matches the established invite-users test pattern
+  byte-for-byte.
+- **Quality gates green**:
+  - `./vendor/bin/pint --dirty --test` reports `passed` on all 3 changed
+    files.
+  - Targeted `pest tests/Feature/Livewire/Users/UserIndexTabsTest.php` →
+    5 passed (18 assertions) in 0.82s.
+  - Broader `pest tests/Feature/Livewire/Users/ tests/Feature/Models/UserInvitationTest.php
+    tests/Feature/Notifications/UserInvitationNotificationTest.php
+    tests/Feature/UserInvitationAcceptRoutesTest.php
+    tests/Feature/UserInvitationAcceptExistingUserTest.php
+    tests/Feature/UserInvitationAcceptNewUserTest.php` → 45 passed
+    (160 assertions). Zero regressions across the entire invite-users
+    series.
+  - Full `pest --no-coverage` → **643 passed / 1 failed (1967 assertions)**
+    in 180.61s. The 1 failure is `Tests\Feature\Portal\PublicFeatureTest >
+    admin reply renders with...` — the pre-existing baseline flake
+    documented across prior invite-users progress entries as unrelated
+    to invitations (grep of the test file for `invitation`/`invite`
+    returns zero hits). Net +5 passing tests match exactly the 5 new
+    cases. AC's "Full pest run passes with only the one pre-existing
+    PublicFeatureTest failure documented elsewhere" contract satisfied.
+
+### Files changed (in `/Users/andrewdrake/.polyscope/clones/66571e70/jolly-cat`)
+- **Added** `tests/Feature/Livewire/Users/UserIndexTabsTest.php` (~155 lines;
+  5 tests / 18 assertions locking every AC bullet as a regression gate)
+- **Modified** `tests/Feature/Livewire/Users/UserInviteTest.php` (+6/-2 diff:
+  wrapped both `ensureInviteRolesTable()` and `makeCrmRole()` in
+  `if (! function_exists(...))` guards + added an inline comment explaining
+  the "sibling files can reuse via their own guards" contract)
+
+### Learnings for future iterations
+- **Reciprocal `function_exists` guards** are the right pattern when the
+  AC says "reuse the helper from sibling file X". PHP's global function
+  scope means the FIRST file to declare wins; the SECOND file must skip
+  the declaration to avoid "cannot redeclare" fatal errors. My initial
+  attempt guarded only my new file, which worked when my file loaded
+  first BUT failed when UserInviteTest loaded first (its unguarded
+  declaration ran, then my guarded declaration correctly skipped) OR
+  when my file loaded first (my guarded declaration ran, then
+  UserInviteTest's UNGUARDED declaration fatalled). The fix: guard BOTH
+  files' declarations. Load-order-independent. Any future story that
+  needs to share a top-level helper across two test files MUST guard
+  BOTH ends of the pair — not just the newcomer.
+- **Direct instantiation of a Livewire component + manual property
+  assignment simulates URL-driven mount** without needing `Livewire::test()`.
+  When the component's render() path hits blade markup that requires
+  traits the User stub doesn't have (e.g. Spatie's HasRoles for
+  `$user->roles()->first()->name` in the users-index blade), the render
+  fails at the Livewire::test level but the state-verification path
+  (mount → set property → invoke magic property) works cleanly on a
+  raw `new UserIndex` instance. Trade-off: the "did the blade actually
+  render the pending table" assertion is semantically expressed as
+  "did the invitations magic property return the pending row" — same
+  runtime effect, tests-friendly shape. Same discipline as the pre-existing
+  UserIndexInvitationsTest tests all use `new UserIndex` for method-level
+  checks.
+- **`Notification::assertSentOnDemand($class, Closure)`** is the correct
+  assertion when the notification is dispatched via
+  `Notification::route('mail', $email)->notify(...)` — NOT via a
+  Notifiable model. The closure receives `($notification, $channels,
+  $notifiable)` where `$notifiable` is an
+  `Illuminate\Notifications\AnonymousNotifiable` whose `->routes`
+  associative array holds the channel→address pairs. Assertion:
+  `$notifiable->routes['mail'] === $expectedAddress`. Same pattern
+  established across US-002 / US-003 of the invite-users series and
+  used verbatim here.
+- **The soft-deleted-doesn't-block re-invite contract** was documented
+  by US-002 of the invite-users lifecycle series as "Laravel's default
+  global scope excludes soft-deleted rows from the pending-invitation
+  lookup, so validation-rule updates aren't needed when SoftDeletes
+  lands". This story's test 5 is the end-to-end regression guard that
+  proves the contract at the full Livewire-mount-through-persistence
+  layer. Any future refactor that accidentally adds
+  `->withTrashed()` to the duplicate-check query would trip this test.
+- **The 1-failure pre-existing baseline preserved gate has now been
+  re-confirmed across US-001..US-006 of the invite-users lifecycle
+  series with byte-exact parity** (`PublicFeatureTest > admin reply
+  renders with…`). Same "pre-existing baseline preserved" discipline
+  documented across every prior autopilot story.

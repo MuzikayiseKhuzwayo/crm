@@ -11,30 +11,37 @@ use VentureDrake\LaravelCrm\Models\UserInvitation;
 use VentureDrake\LaravelCrm\Notifications\UserInvitationNotification;
 use VentureDrake\LaravelCrm\Tests\Stubs\User;
 
-function ensureInviteRolesTable(): void
-{
-    if (! Schema::hasTable('roles')) {
-        Schema::create('roles', function (Blueprint $table) {
-            $table->bigIncrements('id');
-            $table->unsignedBigInteger('team_id')->nullable();
-            $table->string('name');
-            $table->string('guard_name')->default('web');
-            $table->string('description')->nullable();
-            $table->boolean('crm_role')->default(0);
-            $table->timestamps();
-        });
+// Guarded declarations so sibling test files (e.g. UserIndexTabsTest) can
+// reuse the same helpers via their own function_exists guards without
+// triggering a "cannot redeclare" fatal in full-suite runs.
+if (! function_exists('ensureInviteRolesTable')) {
+    function ensureInviteRolesTable(): void
+    {
+        if (! Schema::hasTable('roles')) {
+            Schema::create('roles', function (Blueprint $table) {
+                $table->bigIncrements('id');
+                $table->unsignedBigInteger('team_id')->nullable();
+                $table->string('name');
+                $table->string('guard_name')->default('web');
+                $table->string('description')->nullable();
+                $table->boolean('crm_role')->default(0);
+                $table->timestamps();
+            });
+        }
     }
 }
 
-function makeCrmRole(string $name = 'Editor'): int
-{
-    return DB::table('roles')->insertGetId([
-        'name' => $name,
-        'guard_name' => 'web',
-        'crm_role' => 1,
-        'created_at' => now(),
-        'updated_at' => now(),
-    ]);
+if (! function_exists('makeCrmRole')) {
+    function makeCrmRole(string $name = 'Editor'): int
+    {
+        return DB::table('roles')->insertGetId([
+            'name' => $name,
+            'guard_name' => 'web',
+            'crm_role' => 1,
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+    }
 }
 
 beforeEach(function () {
