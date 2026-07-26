@@ -8,12 +8,12 @@
 
         {{-- ACTIONS  --}}
         <x-slot:actions>
-            {{--<x-mary-button label="Filters"
+            <x-mary-button label="Filters"
                            icon="o-funnel"
                            :badge="$filterCount ?? 0"
                            badge-classes="font-mono badge-primary badge-soft"
                            @click="$wire.showFilters = true"
-                           responsive />--}}
+                           responsive />
 
            {{-- <x-crm-index-toggle :layout="$layout" model="users"/>--}}
 
@@ -54,6 +54,8 @@
         <div class="grid gap-5" @keydown.enter="$wire.showFilters = false">
             <x-mary-choices label="Owner" wire:model.live="user_id" :options="$ownerUsers" icon="o-user" inline allow-all />
             <x-mary-choices label="Label" wire:model.live="label_id" :options="$labels" icon="o-tag" inline allow-all />
+            <x-mary-choices label="{{ ucfirst(__('laravel-crm::lang.role')) }}" wire:model.live="role_id" :options="$roles" icon="o-shield-check" inline allow-all />
+            <x-mary-select label="{{ ucfirst(__('laravel-crm::lang.CRM_Access')) }}" wire:model.live="crm_access" :options="[['id' => '1', 'name' => ucfirst(__('laravel-crm::lang.yes'))], ['id' => '0', 'name' => ucfirst(__('laravel-crm::lang.no'))]]" icon="o-key" placeholder="{{ ucfirst(__('laravel-crm::lang.all')) }}" />
         </div>
 
         {{-- ACTIONS --}}

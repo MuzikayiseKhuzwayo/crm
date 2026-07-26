@@ -11,6 +11,7 @@ use Livewire\Component;
 use Livewire\WithPagination;
 use Mary\Traits\Toast;
 use VentureDrake\LaravelCrm\Models\Label;
+use VentureDrake\LaravelCrm\Models\Role;
 use VentureDrake\LaravelCrm\Traits\ClearsProperties;
 use VentureDrake\LaravelCrm\Traits\ResetsPaginationWhenPropsChanges;
 
@@ -30,6 +31,12 @@ class UserIndex extends Component
     public ?array $label_id = [];
 
     #[Url]
+    public ?array $role_id = [];
+
+    #[Url]
+    public ?string $crm_access = null;
+
+    #[Url]
     public array $sortBy = ['column' => 'created_at', 'direction' => 'desc'];
 
     public bool $showFilters = false;
@@ -43,7 +50,10 @@ class UserIndex extends Component
 
     public function filterCount(): int
     {
-        return (count($this->user_id) > 0 ? 1 : 0) + ($this->label_id ? 1 : 0);
+        return (count($this->user_id) > 0 ? 1 : 0)
+            + ($this->label_id ? 1 : 0)
+            + (count($this->role_id) > 0 ? 1 : 0)
+            + ($this->crm_access !== null && $this->crm_access !== '' ? 1 : 0);
     }
 
     public function ownerUsers(): Collection
@@ -54,6 +64,11 @@ class UserIndex extends Component
     public function labels(): Collection
     {
         return Label::all();
+    }
+
+    public function roles(): Collection
+    {
+        return Role::crm()->orderBy('name')->get();
     }
 
     public function headers()
@@ -76,6 +91,8 @@ class UserIndex extends Component
             $q->where('name', 'like', "%$this->search%");
         })->when($this->user_id, fn (Builder $q) => $q->whereIn('user_owner_id', $this->user_id))
             ->when($this->label_id, fn (Builder $q) => $q->whereHas('labels', fn (Builder $q) => $q->whereIn(config('laravel-crm.db_table_prefix').'labels.id', $this->label_id)))
+            ->when($this->crm_access !== null && $this->crm_access !== '', fn (Builder $q) => $q->where('crm_access', (bool) $this->crm_access))
+            ->when($this->role_id, fn (Builder $q) => $q->whereHas('roles', fn (Builder $q) => $q->where('crm_role', 1)->whereIn('roles.id', $this->role_id)))
             ->orderBy(...array_values($this->sortBy))
             ->paginate(25);
     }
@@ -94,6 +111,7 @@ class UserIndex extends Component
         return view('laravel-crm::livewire.users.user-index', [
             'ownerUsers' => $this->ownerUsers(),
             'labels' => $this->labels(),
+            'roles' => $this->roles(),
             'filterCount' => $this->filterCount(),
             'headers' => $this->headers(),
             'users' => $this->users(),
