@@ -54,37 +54,39 @@
             </x-mary-card>
         </x-mary-tab>
 
-        <x-mary-tab name="invitations" label="{{ ucfirst(__('laravel-crm::lang.pending_invitations')) }}">
-            <x-mary-card shadow>
-                <x-mary-table :headers="$invitationHeaders" :rows="$this->invitations" :with-pagination="true" class="whitespace-nowrap">
-                    @scope('cell_role', $row)
-                        {{ $row->role?->name ?? '—' }}
-                    @endscope
-                    @scope('cell_invited_by', $row)
-                        {{ $row->invitedByUser?->name ?? '—' }}
-                    @endscope
-                    @scope('cell_sent_at', $row)
-                        {{ $row->created_at->diffForHumans() }}
-                    @endscope
-                    @scope('cell_last_sent', $row)
-                        {{ $row->last_sent_at?->diffForHumans() ?? $row->created_at->diffForHumans() }}
-                    @endscope
-                    @scope('cell_expires', $row)
-                        {{ $row->expires_at?->diffForHumans() ?? '—' }}
-                    @endscope
-                    @scope('actions', $row)
-                        <x-mary-button icon="o-paper-airplane" wire:click="resendInvitation({{ $row->id }})" class="btn-sm btn-square btn-outline" spinner />
-                        <x-mary-button icon="o-trash" wire:click="deleteInvitation({{ $row->id }})" wire:confirm class="btn-sm btn-square btn-error text-white" spinner />
-                    @endscope
+        @can('create crm users')
+            <x-mary-tab name="invitations" label="{{ ucfirst(__('laravel-crm::lang.pending_invitations')) }}">
+                <x-mary-card shadow>
+                    <x-mary-table :headers="$invitationHeaders" :rows="$this->invitations" :with-pagination="true" class="whitespace-nowrap">
+                        @scope('cell_role', $row)
+                            {{ $row->role?->name ?? '—' }}
+                        @endscope
+                        @scope('cell_invited_by', $row)
+                            {{ $row->invitedByUser?->name ?? '—' }}
+                        @endscope
+                        @scope('cell_sent_at', $row)
+                            {{ $row->created_at->diffForHumans() }}
+                        @endscope
+                        @scope('cell_last_sent', $row)
+                            {{ $row->last_sent_at?->diffForHumans() ?? $row->created_at->diffForHumans() }}
+                        @endscope
+                        @scope('cell_expires', $row)
+                            {{ $row->expires_at?->diffForHumans() ?? '—' }}
+                        @endscope
+                        @scope('actions', $row)
+                            <x-mary-button icon="o-paper-airplane" wire:click="resendInvitation({{ $row->id }})" class="btn-sm btn-square btn-outline" spinner />
+                            <x-mary-button icon="o-trash" wire:click="deleteInvitation({{ $row->id }})" wire:confirm class="btn-sm btn-square btn-error text-white" spinner />
+                        @endscope
 
-                    <x-slot:empty>
-                        <div class="p-4 text-center">
-                            {{ ucfirst(__('laravel-crm::lang.no_pending_invitations')) }}
-                        </div>
-                    </x-slot:empty>
-                </x-mary-table>
-            </x-mary-card>
-        </x-mary-tab>
+                        <x-slot:empty>
+                            <div class="p-4 text-center">
+                                {{ ucfirst(__('laravel-crm::lang.no_pending_invitations')) }}
+                            </div>
+                        </x-slot:empty>
+                    </x-mary-table>
+                </x-mary-card>
+            </x-mary-tab>
+        @endcan
     </x-mary-tabs>
 
     {{-- FILTERS --}}

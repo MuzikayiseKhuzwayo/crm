@@ -460,11 +460,18 @@ class UserController extends Controller
             }
 
             if (config('laravel-crm.teams') && $invitation->team_id) {
-                DB::table('team_user')->insert([
-                    'team_id' => $invitation->team_id,
-                    'user_id' => $user->id,
-                    'role' => 'editor',
-                ]);
+                $alreadyMember = DB::table('team_user')
+                    ->where('team_id', $invitation->team_id)
+                    ->where('user_id', $user->id)
+                    ->exists();
+
+                if (! $alreadyMember) {
+                    DB::table('team_user')->insert([
+                        'team_id' => $invitation->team_id,
+                        'user_id' => $user->id,
+                        'role' => 'editor',
+                    ]);
+                }
 
                 if (is_null($user->current_team_id)) {
                     $user->forceFill([
@@ -476,9 +483,6 @@ class UserController extends Controller
             $invitation->forceFill(['accepted_at' => now()])->save();
         });
 
-        // php-flasher may not be initialized in every host bootstrap; fall
-        // back to a plain session flash so the success message still lands
-        // in the redirect's session even when the flasher container is absent.
         try {
             flash()->success(ucfirst(trans('laravel-crm::lang.user_invitation_accepted')));
         } catch (\Throwable) {
