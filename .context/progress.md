@@ -30360,3 +30360,163 @@ stories.
   All downstream stories benefit from having both columns in place from
   the start rather than needing to bundle schema changes with feature
   work.
+
+
+## US-002: Set last_sent_at when UserInvite creates a new invitation
+- One-line addition to `src/Livewire/Users/UserInvite.php::save()`: added
+  `'last_sent_at' => now(),` to the `UserInvitation::create([...])` array
+  immediately after `'invited_by' => auth()->id(),`. Now every panel-driven
+  invite creation stamps `last_sent_at` at insert time, so the Pending
+  Invitations tab has an accurate "last sent" timestamp from the moment
+  the invitation is issued.
+- The `last_sent_at` column + Carbon cast were added by US-001 of the
+  invite-users lifecycle series; this story wires the write. Duplicate-
+  invitation validation logic (which checks
+  `whereNull('accepted_at')->where('expires_at' > now())`) is unchanged
+  — Laravel's default global scope already excludes soft-deleted rows
+  from the pending-invitation lookup, so no validation-rule changes were
+  needed even though US-001 added SoftDeletes to the model.
+- Extended `tests/Feature/Livewire/Users/UserInviteTest.php`'s
+  "submitting the form creates an invitation row and queues a notification"
+  happy-path assertion chain with `->and($invitation->last_sent_at)->not->toBeNull()`.
+  Locks the AC-mandated contract at end-to-end level via the same Livewire
+  mount + `UserInvitation::query()->where(...)->first()` fetch already in
+  place.
+- **Quality gates green**:
+  - `./vendor/bin/pint --dirty --test` on the 2 modified files reports
+    `{"tool":"pint","result":"passed"}`.
+  - `pest tests/Feature/Livewire/Users/UserInviteTest.php` → 5 passed
+    (28 assertions, up from 27) in 1.08s. All 5 pre-existing scenarios
+    (validation errors + happy path + duplicate email + pending invitation
+    + role_id validation) remain green.
+
+### Files changed (in `/Users/andrewdrake/.polyscope/clones/66571e70/jolly-cat`)
+- **Modified** `src/Livewire/Users/UserInvite.php` (+1 line: `'last_sent_at' => now(),`
+  in the `UserInvitation::create([...])` array)
+- **Modified** `tests/Feature/Livewire/Users/UserInviteTest.php` (+1 line:
+  `->and($invitation->last_sent_at)->not->toBeNull()` assertion appended to
+  the happy-path scenario's expect chain)
+
+### Learnings for future iterations
+- **The AC's note "the existing duplicate-invitation check already works
+  with soft-delete because Laravel's default global scope excludes
+  trashed rows"** is a valuable correctness observation. When SoftDeletes
+  is added to a model (US-001 of this series), every existing `where(...)`
+  query on that model AUTOMATICALLY filters out `deleted_at IS NOT NULL`
+  rows via Eloquent's global scope — no explicit `->whereNull('deleted_at')`
+  needed. This means validation rules that check "does a pending row exist"
+  don't need updates when soft-delete lands. Reusable insight: whenever
+  a model gains SoftDeletes in a series, audit existing queries for
+  intended behavior (usually the global scope IS the desired behavior:
+  "check for pending only among non-deleted rows"), and skip any
+  reflexive query updates unless the scope's default conflicts with the
+  intended semantics.
+- **The `last_sent_at` timestamp being populated on CREATE (not just on
+  RESEND)** means the Pending Invitations tab can render a stable "last
+  sent" column from the very first fetch after the invite is issued.
+  Distinct from a future resend-invite action that would update
+  `last_sent_at` to `now()` on re-mail. Both writes converge on the same
+  column via a consistent invariant: "last_sent_at is always the timestamp
+  of the most recent email dispatch for this invitation". Reusable
+  discipline for any future "audit-column-for-most-recent-X-action"
+  pattern.
+
+
+## US-003: Add translation keys for tabs and pending-invitations UI (invite-users lifecycle series)
+- Added 9 net-new keys under a new `// User invitations UI (Users index tabs
+  + Pending Invitations list)` section at the tail of
+  `resources/lang/en/lang.php`, immediately after the pre-existing
+  `user_invitation_new_user_intro` key added by US-006 of the invite-users
+  series:
+  - `registered_users` — `'registered users'`
+  - `pending_invitations` — `'pending invitations'`
+  - `no_pending_invitations` — `'no pending invitations'`
+  - `resend_invitation` — `'resend invitation'`
+  - `invitation_resent` — `'invitation resent'`
+  - `invitation_deleted` — `'invitation deleted'`
+  - `last_sent` — `'last sent'`
+  - `expires` — `'expires'`
+  - `invited_by` — `'invited by'`
+- **`sent_at` was NOT added** — grep confirmed the key already exists at
+  line 835 of `lang.php` as `'sent_at' => 'sent at'` from a prior story
+  (the SmsCampaigns/EmailCampaigns scheduled-send timestamp label block).
+  The AC's directive "Add the following keys" enumerates 10 keys total;
+  the pragmatic read is "ensure all 10 keys are present in the file" —
+  with `sent_at` already there, only 9 additions were needed. Same
+  "already-present-key skip" discipline documented across many prior
+  labels-only stories (US-001 of the former sequence for `fields.status`;
+  US-002 of the new sequence for `campaign.delivered` sibling reuse).
+- All 10 AC-named keys are now resolvable via
+  `__('laravel-crm::lang.{key}')` at runtime — the 9 additions land at
+  file tail, the pre-existing `sent_at` remains at line 835.
+- **Placement rationale**: values use the plugin's established lowercase-
+  key convention (labels rendered as-is in the UI OR wrapped with
+  `ucfirst(__('laravel-crm::lang.{key}'))` at the call site — the
+  invite-users series' pre-existing keys like `user_invitation_accepted`
+  = `'invitation accepted'` follow the same lowercase pattern). Contextual
+  grouping in a labelled comment block matches the file's existing
+  organization (see the `// Email templates` / `// SMS templates` /
+  `// User invitation notification` section markers already in place).
+  AC allowed either alphabetical OR contextual placement; contextual
+  grouping reads more cleanly given the file's existing conventions.
+- **Locale parity for fr/es intentionally deferred** per the AC's
+  "Locale parity for other languages can follow later per the codebase
+  convention" clause. This IS the codebase convention: the prior
+  invite-users series stories all landed en-only additions (see US-002
+  through US-006 progress entries). Not a regression; a mature
+  series-wide pattern. Only `laravel-crm-filament` plugin adds fr/es
+  in lockstep — that's a distinct package with a distinct localization
+  contract.
+- **Quality gates green**:
+  - `./vendor/bin/pint --dirty --test` reports
+    `{"tool":"pint","result":"passed"}`.
+  - `php -l resources/lang/en/lang.php` reports "No syntax errors detected".
+  - Targeted `pest --filter='UserInvitation|UserInvite' --no-coverage`
+    → **33 passed (126 assertions)** in 21.45s. All existing
+    invite-users tests remain green — the additive translation keys
+    don't disturb any existing behavior. Same pattern as any
+    labels-only story.
+
+### Files changed (in `/Users/andrewdrake/.polyscope/clones/66571e70/jolly-cat`)
+- **Modified** `resources/lang/en/lang.php` (+11 lines: 1 blank + 1
+  section-marker comment + 9 new key/value pairs appended before the
+  closing `];`)
+
+### Learnings for future iterations
+- **"Add the following keys" wording in an AC applies conditionally when
+  a key already exists.** The AC enumerated 10 keys; 1 (`sent_at`) was
+  pre-existing from a distinct feature area (email/sms campaign
+  scheduled-send timestamps). Reusable rule: when the AC lists N keys
+  and grep reveals K < N are already present, add the missing N-K keys
+  and document the skip in the progress entry. The AC's imperative
+  "Add" is best read as "ensure present" — same discipline established
+  across many prior labels-only verify-and-noop stories.
+- **The core CRM package's `resources/lang/*/lang.php` convention is
+  lowercase keys AND lowercase values** for labels that will be
+  transformed via `ucfirst(...)` at the call site (see
+  `'user_invitation_accepted' => 'invitation accepted'` +
+  `'campaign_stored' => 'campaign saved'` +
+  `'send_now' => 'send now'` throughout the file). Distinct from the
+  plugin `laravel-crm-filament`'s `resources/lang/*/labels.php`
+  convention which uses TitleCase values (e.g. `'Recipients'`,
+  `'Delivered'`) since Filament typically renders labels as-is.
+  Follow the file's own convention when adding new keys — don't
+  mix TitleCase into a lowercase-values file.
+- **Contextual grouping via section-marker comments** (e.g. `// User
+  invitations UI (Users index tabs + Pending Invitations list)`)
+  reads more cleanly than pure alphabetical placement in a file that
+  already has 10+ such section markers. The file's structure isn't
+  strictly alphabetical anyway — it's organized by feature area with
+  comment banners. New keys should slot into their natural feature-
+  area group.
+- **The invite-users lifecycle series is now three stories deep**
+  (US-001 SoftDeletes+last_sent_at schema; US-002 wire last_sent_at
+  write; US-003 translation keys). The keys added here are foundational
+  for downstream stories: a "Pending Invitations" tab needs
+  `pending_invitations` / `no_pending_invitations` / `last_sent` /
+  `expires` / `invited_by` for its column headers + empty state; a
+  resend-invitation row action needs `resend_invitation` /
+  `invitation_resent`; a soft-delete row action needs
+  `invitation_deleted`. Same build-now-wire-later pattern established
+  across many prior series where labels land in one story and the
+  consuming UI wires them in a follow-up.

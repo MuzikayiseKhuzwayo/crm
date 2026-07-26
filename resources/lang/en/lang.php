@@ -984,4 +984,15 @@ return [
     'user_invitation_wrong_user' => 'This invitation is for :email. Please log out and sign back in as :email to accept it.',
     'user_invitation_accepted' => 'invitation accepted',
     'user_invitation_new_user_intro' => 'Set your name and a password to finish creating your account.',
+
+    // User invitations UI (Users index tabs + Pending Invitations list)
+    'registered_users' => 'registered users',
+    'pending_invitations' => 'pending invitations',
+    'no_pending_invitations' => 'no pending invitations',
+    'resend_invitation' => 'resend invitation',
+    'invitation_resent' => 'invitation resent',
+    'invitation_deleted' => 'invitation deleted',
+    'last_sent' => 'last sent',
+    'expires' => 'expires',
+    'invited_by' => 'invited by',
 ];
