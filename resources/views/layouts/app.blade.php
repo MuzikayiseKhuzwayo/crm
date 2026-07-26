@@ -56,6 +56,7 @@
             {{--<x-mary-button label="Messages" icon="o-envelope" link="###" class="btn-ghost btn-sm" responsive />
             <x-mary-button label="Notifications" icon="o-bell" link="###" class="btn-ghost btn-sm" responsive />--}}
             <x-mary-theme-toggle class="btn btn-ghost" />
+            @if (config('laravel-crm.teams'))
             @php
                 $crmUser = Auth::user();
                 $crmCurrentTeam = null;
@@ -122,6 +123,7 @@
                         </li>
                     @endif
                 </x-mary-dropdown>
+            @endif
             @endif
             @if (class_exists('\Laravel\Jetstream\Jetstream') && Laravel\Jetstream\Jetstream::managesProfilePhotos())
                 <x-mary-avatar :image="auth()->user()->profile_photo_url" alt="{{ Auth::user()->name }}" />
