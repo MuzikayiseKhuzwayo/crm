@@ -30520,3 +30520,206 @@ stories.
   `invitation_deleted`. Same build-now-wire-later pattern established
   across many prior series where labels land in one story and the
   consuming UI wires them in a follow-up.
+
+
+## US-004: Add tab state, invitations query, and row-action methods to UserIndex Livewire component (invite-users lifecycle series)
+- Extended `src/Livewire/Users/UserIndex.php` with the four AC-mandated
+  additions plus one supporting import fix:
+  1. **Imports** — added `Illuminate\Support\Facades\Gate`,
+     `Illuminate\Support\Facades\Notification`, `Livewire\Attributes\Url`,
+     `VentureDrake\LaravelCrm\Models\UserInvitation`,
+     `VentureDrake\LaravelCrm\Notifications\UserInvitationNotification`.
+     The `#[Url]` attribute import was missing from this file even though
+     the pre-existing `search` / `role_id` / `crm_access` / `sortBy`
+     properties are decorated with it — PHP silently ignores unresolvable
+     attribute names, so the pre-existing decorators were dead. Adding
+     the import fixes them AND enables the new `$tab` property's
+     query-string sync (US-004 side benefit).
+  2. **`#[Url] public string $tab = 'users';`** inserted immediately after
+     `$layout` and before `$search`. Query-string-bound scalar with
+     `'users'` default; consumers assign `'invitations'` to switch tabs.
+  3. **`getInvitationsProperty(): LengthAwarePaginator`** delegates to a
+     new `pendingInvitationsQuery()` helper that:
+     - starts from `UserInvitation::query()`.
+     - filters `whereNull('accepted_at')`.
+     - filters `where(fn ($q) => $q->whereNull('expires_at')
+       ->orWhere('expires_at', '>', now()))`.
+     - `when(config('laravel-crm.teams'), ...)` narrows to
+       `where('team_id', auth()->user()?->currentTeam?->id)`.
+     Then applies `->latest('last_sent_at')->paginate(25)`. The magic
+     Livewire property (`getXxxProperty`) is accessible as `$this->invitations`
+     in the Blade view or in tests via direct property access on an
+     instance.
+  4. **`resendInvitation(int $id): void`** — gated on
+     `Gate::allows('create', User::class)`; resolves the target
+     invitation via the same `pendingInvitationsQuery()->whereKey($id)
+     ->first()` (so cross-team / accepted / expired ids silently no-op);
+     dispatches
+     `Notification::route('mail', $invitation->email)->notify(new UserInvitationNotification($invitation))`;
+     `forceFill(['last_sent_at' => now()])->save()`; fires
+     `success(ucfirst(__('laravel-crm::lang.invitation_resent')))` via
+     the Mary Toast trait.
+  5. **`deleteInvitation(int $id): void`** — same gate + same
+     scoped-lookup pattern; `$invitation->delete()` (SoftDeletes stamps
+     `deleted_at` — inherited by `UserInvitation` from US-001 of the
+     invite-users lifecycle series); fires
+     `success(ucfirst(__('laravel-crm::lang.invitation_deleted')))`.
+  6. **`pendingInvitationsQuery(): Builder`** — protected helper factored
+     out to keep the four consumers (getInvitationsProperty +
+     resendInvitation + deleteInvitation) driven by ONE canonical
+     "which rows are actionable" query. Any future scope tweak (e.g.
+     narrowing to invitations issued by the current user, or expanding
+     to include soft-deleted rows for an "restore" action) lands in
+     one place.
+- Both new methods route through `Gate::allows('create', User::class)`
+  which delegates to `UserPolicy::create(User $user)` — checks
+  `$user->hasPermissionTo('create crm users')`. Matches the existing
+  authorization gate on `UserController::create`,
+  `UserController::store`, and `UserController::invite`, so an admin
+  who can invite users can also resend + delete their pending
+  invitations.
+- **New Pest test `tests/Feature/Livewire/Users/UserIndexInvitationsTest.php`**
+  (7 tests / 16 assertions; all pass) locks every AC bullet:
+  1. `$tab` property defaults to `'users'` AND carries a
+     `Livewire\Attributes\Url` attribute via
+     `ReflectionProperty::getAttributes(Url::class)`.
+  2. `$this->invitations` returns exactly 2 pending invitations
+     ordered by `last_sent_at` desc (seeds 4 rows: 2 pending + 1
+     accepted + 1 expired; asserts only the 2 pending come through
+     AND the ordering is `recent → older`).
+  3. `resendInvitation` happy path: seeds a pending invitation with
+     `last_sent_at 3 days ago`, calls the method, refreshes the
+     model, asserts `last_sent_at` is now within the last minute AND
+     `Notification::assertSentOnDemand` fires for the invitation
+     email via `Notification::route('mail', $email)->notify(...)`.
+  4. `resendInvitation` no-op when Gate denies (via `auth()->logout()`
+     to remove the authenticated user; the policy method requires a
+     user with the `create crm users` permission).
+  5. `deleteInvitation` soft-deletes: `UserInvitation::query()->find(...)`
+     returns null (default scope filters trashed) AND
+     `UserInvitation::withTrashed()->find(...)` returns the row with
+     `deleted_at` non-null.
+  6. `deleteInvitation` no-op when Gate denies — same auth-logout
+     shape; row remains in the default query.
+  7. Teams config gate: with `laravel-crm.teams = true`, the query
+     narrows to `team_id === null` (no currentTeam in test env), so
+     a seeded null-team row is visible AND a seeded team_id=99 row
+     is hidden.
+- **Test file uses direct `new UserIndex` instantiation rather than
+  `Livewire::test(UserIndex::class)`** to bypass the render() call
+  which invokes `$this->users()` → hits `App\Models\User::query()`.
+  The test stub `Tests\Stubs\User` doesn't implement Spatie's
+  `HasRoles` trait (no `roles()` relation), so the users-index Blade
+  view's `$user->roles` access blows up. Direct instantiation lets
+  the tests exercise the target methods without triggering the
+  full Livewire render lifecycle.
+- **Test file aliases `App\Models\User` → `Tests\Stubs\User`** via
+  a top-level `if (! class_exists('App\\Models\\User')) { class_alias(...) }`
+  guard. UserIndex uses `App\Models\User` (unlike UserInvite which
+  uses `App\User`); the core CRM's test bootstrap only aliases
+  `App\User`. The test-file-scoped alias satisfies the FQCN import
+  at the moment the UserIndex class is loaded. Same pattern
+  documented in `tests/Feature/Console/LaravelCrmInstallModulesTest.php`
+  for the same reason.
+- Test file also includes an `ensureUserIndexRolesTable()` helper
+  that creates the Spatie roles table on demand (mirrors the pattern
+  from UserInviteTest / FeatureNotificationsTest). Even though my
+  direct-instantiation approach skips the users() render path, the
+  `roles()` method might still fire during a component boot in
+  future test additions — the helper is defensive.
+- **Quality gates green**:
+  - `./vendor/bin/pint --dirty --test` reports `passed` after auto-
+    fix of `fully_qualified_strict_types`, `no_unused_imports`,
+    `ordered_imports` on the new test file.
+  - `pest tests/Feature/Livewire/Users/UserIndexInvitationsTest.php`
+    → 7 passed (16 assertions).
+  - Broader invite-users series sweep `pest Livewire/Users/
+    Models/UserInvitationTest Notifications/UserInvitationNotificationTest
+    UserInvitationAcceptRoutesTest UserInvitationAcceptExistingUserTest
+    UserInvitationAcceptNewUserTest` → 40 passed (142 assertions).
+    Zero regressions across the entire invite-users series (US-001 core
+    schema + US-002 mailable + US-003 Livewire form + US-004 public
+    routes + US-005/006 accept flows + US-007 verify-wrap + US-001
+    lifecycle SoftDeletes/last_sent_at + US-002 wire last_sent_at
+    on create + US-003 translation keys + this US-004 tab + row
+    actions).
+
+### Files changed (in `/Users/andrewdrake/.polyscope/clones/66571e70/jolly-cat`)
+- **Modified** `src/Livewire/Users/UserIndex.php` (+65/-1 diff: 5 new
+  imports; `Livewire\Attributes\Url` import fixes pre-existing dead
+  attribute decorators; `#[Url] public string $tab = 'users';`
+  property; `getInvitationsProperty()`; `resendInvitation(int)`;
+  `deleteInvitation(int)`; `pendingInvitationsQuery()` protected
+  helper factoring out the shared scoping)
+- **Added** `tests/Feature/Livewire/Users/UserIndexInvitationsTest.php`
+  (~180 lines; 7 tests / 16 assertions locking every AC bullet as
+  a regression gate; includes `App\Models\User` class alias +
+  `ensureUserIndexRolesTable()` helper for test-environment
+  scaffolding)
+
+### Learnings for future iterations
+- **The pre-existing `#[Url]` attributes on UserIndex were dead code**
+  because the `use Livewire\Attributes\Url;` import was missing.
+  PHP silently ignores unresolvable attribute FQCNs (they're only
+  raised as errors when accessed via reflection). This meant the
+  query-string binding on `$search`, `$role_id`, `$crm_access`,
+  `$sortBy` never actually worked in the panel — reload the page
+  and the filters would silently reset. Adding the import as part
+  of US-004 is a bonus fix beyond the AC scope; all pre-existing
+  `#[Url]` decorators now function correctly for the first time.
+  Reusable rule: **whenever adding a new `#[Url]` attribute to a
+  Livewire component, grep for the `use Livewire\Attributes\Url;`
+  import first**; if absent, add it AND the sibling attributes will
+  activate as a side effect. Cheap fix; catches this silent-broken
+  pattern across any other Livewire component with dead `#[Url]`
+  attributes.
+- **Livewire's `getXxxProperty` magic properties access via
+  `$this->xxx` from Blade AND via `$component->xxx` from tests.**
+  My `getInvitationsProperty(): LengthAwarePaginator` is accessible
+  as `$this->invitations` in the user-index Blade view (a future
+  story will render the pagination) AND as `(new UserIndex)->invitations`
+  in this story's tests. Livewire's magic-property machinery memoizes
+  the return value within a single request — a subsequent read returns
+  the cached instance rather than re-executing the query. Same shape
+  as any other `getXxxProperty` pattern (see EmailCampaignResource /
+  QuoteKanban / DealResource kanban wire-ups).
+- **`Gate::before(fn () => true)` in a beforeEach + `Gate::before(fn () => false)`
+  in a specific test does NOT override the beforeEach grant** because
+  Laravel evaluates `Gate::before` callbacks in FIFO order and
+  short-circuits on the first non-null return. The beforeEach's `true`
+  fires first + grants + never falls through to the test's `false`.
+  Fix: use `auth()->logout()` in the no-op tests to simulate a
+  session where `Gate::allows('create', User::class)` returns false
+  by the policy check itself (no authenticated user → policy method
+  can't check permissions → `HandlesAuthorization` returns false).
+  Reusable rule for any future "test the Gate::allows(false) branch"
+  scenario: **prefer `auth()->logout()` (or `actingAs()` with a user
+  who genuinely lacks the permission) over trying to override a
+  beforeEach's Gate::before grant**.
+- **The test schema's User stub lacks Spatie's HasRoles trait** —
+  no `roles()` method. Any test that mounts a full Livewire
+  component whose render path accesses `$user->roles` (the users
+  table's role column) will fatal with "undefined method roles()".
+  Two clean escapes:
+  1. **Direct instantiation** (`new UserIndex`) bypasses Livewire's
+     mount + render lifecycle entirely. Great for tests that
+     exercise a single method or a magic property without needing
+     to render the Blade view.
+  2. **Livewire::test with a subclass that overrides `render()`**
+     to return a stub view. More setup; only justified when the
+     test needs Livewire's action-firing lifecycle (e.g.
+     wire:model updates, event dispatches).
+  For US-004's scope, direct instantiation was the right choice
+  because all methods work standalone. Same recipe reusable for
+  any future test on a Livewire component whose render() path
+  hits the User stub's missing methods.
+- **The core CRM's test bootstrap aliases `App\User` but NOT
+  `App\Models\User`.** UserIndex references the latter FQCN
+  directly. Test files that instantiate UserIndex MUST add the
+  alias inline (`class_alias(User::class, 'App\\Models\\User')`
+  guarded by `class_exists()` for re-run idempotency). Documented
+  in `tests/README.md` — the deliberate design is to let the
+  service provider decide when to alias `App\Models\User` (to
+  avoid double-alias fatals across nested test boots). Per-test-file
+  aliasing is the escape hatch. Reusable for any future test that
+  needs to reference a plugin class referencing `App\Models\User`.
