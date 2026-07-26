@@ -28,6 +28,16 @@ class UserInvitation extends Model
         return 'code';
     }
 
+    public function role()
+    {
+        return $this->belongsTo(Role::class, 'role_id');
+    }
+
+    public function invitedByUser()
+    {
+        return $this->belongsTo(config('auth.providers.users.model'), 'invited_by');
+    }
+
     public function isAccepted(): bool
     {
         return $this->accepted_at !== null;

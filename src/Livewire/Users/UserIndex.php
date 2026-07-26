@@ -74,6 +74,18 @@ class UserIndex extends Component
         ];
     }
 
+    public function invitationHeaders(): array
+    {
+        return [
+            ['key' => 'email', 'label' => ucfirst(__('laravel-crm::lang.email'))],
+            ['key' => 'role', 'label' => ucfirst(__('laravel-crm::lang.role')), 'sortable' => false],
+            ['key' => 'invited_by', 'label' => ucfirst(__('laravel-crm::lang.invited_by')), 'sortable' => false],
+            ['key' => 'sent_at', 'label' => ucfirst(__('laravel-crm::lang.sent_at')), 'sortable' => false],
+            ['key' => 'last_sent', 'label' => ucfirst(__('laravel-crm::lang.last_sent')), 'sortable' => false],
+            ['key' => 'expires', 'label' => ucfirst(__('laravel-crm::lang.expires')), 'sortable' => false],
+        ];
+    }
+
     public function users(): LengthAwarePaginator
     {
         return User::when($this->search, function (Builder $q) {
@@ -157,6 +169,7 @@ class UserIndex extends Component
             'filterCount' => $this->filterCount(),
             'headers' => $this->headers(),
             'users' => $this->users(),
+            'invitationHeaders' => $this->invitationHeaders(),
         ]);
     }
 }
