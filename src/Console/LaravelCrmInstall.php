@@ -8,6 +8,7 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\File;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Schema;
+use VentureDrake\LaravelCrm\Observers\TeamObserver;
 
 use function Laravel\Prompts\multiselect;
 
@@ -191,6 +192,28 @@ class LaravelCrmInstall extends Command
 
         // Seed default lead sources (idempotent — firstOrCreate)
         $this->callSilent('laravelcrm:lead-sources');
+
+        // When teams are enabled, backfill per-team CRM lookup data + pipelines
+        // for every pre-existing team (e.g. a Jetstream personal team created
+        // before the CRM was installed). Without this, `/leads/create` on a
+        // teams-enabled host renders against an empty per-team pipeline and
+        // trips the null-pipeline bug. Idempotent — safe to re-run.
+        if (config('permission.teams')) {
+            $teamClass = class_exists('App\Models\Team')
+                ? 'App\Models\Team'
+                : (class_exists('App\Team') ? 'App\Team' : null);
+
+            if ($teamClass !== null) {
+                $this->info('Backfilling per-team CRM data for existing teams...');
+
+                foreach ($teamClass::all() as $team) {
+                    TeamObserver::seedCrmDataForTeam($team->id);
+                    TeamObserver::repointCrmRecordsToTeamPipelines($team->id);
+                }
+            } else {
+                $this->warn('Teams enabled but no Team model found at App\Models\Team or App\Team. Skipping per-team backfill.');
+            }
+        }
 
         if ($userClass::where('crm_access', 1)->count() < 1) {
             $this->info('Create your default owner user');
