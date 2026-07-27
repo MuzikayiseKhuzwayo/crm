@@ -5,8 +5,16 @@ namespace VentureDrake\LaravelCrm\Observers;
 use App\Team;
 use Carbon\Carbon;
 use DB;
+use Illuminate\Support\Facades\Schema;
 use Ramsey\Uuid\Uuid;
 use Spatie\Permission\PermissionRegistrar;
+use VentureDrake\LaravelCrm\Models\Deal;
+use VentureDrake\LaravelCrm\Models\Delivery;
+use VentureDrake\LaravelCrm\Models\Invoice;
+use VentureDrake\LaravelCrm\Models\Lead;
+use VentureDrake\LaravelCrm\Models\Order;
+use VentureDrake\LaravelCrm\Models\PurchaseOrder;
+use VentureDrake\LaravelCrm\Models\Quote;
 use VentureDrake\LaravelCrm\Models\Role;
 
 class TeamObserver
@@ -223,6 +231,83 @@ class TeamObserver
                     'created_at' => Carbon::now(),
                     'updated_at' => Carbon::now(),
                 ]);
+            }
+        }
+    }
+
+    /**
+     * Re-point existing lead/deal/quote/order/invoice/delivery/purchase-order
+     * rows whose `pipeline_stage_id` still references a global (team_id = null)
+     * pipeline stage at the matching per-team stage — matched by stage name
+     * within the same pipeline model (Lead-model global stages map only to
+     * Lead-model per-team stages, etc.).
+     *
+     * Only records with `team_id = $teamId` are updated; records from other
+     * teams are untouched. Stages whose name does not appear in the per-team
+     * pipeline are left unchanged (safe no-op — no data loss, documented as a
+     * known limitation so hosts can rename or add the missing stage first
+     * and re-run the helper).
+     *
+     * Running the helper twice is a no-op on the second run because the
+     * matching WHERE clause targets `pipeline_stage_id = global_id` and the
+     * first run has already replaced every match with the per-team id.
+     */
+    public static function repointCrmRecordsToTeamPipelines(int $teamId): void
+    {
+        $prefix = config('laravel-crm.db_table_prefix');
+
+        $models = [
+            Lead::class => $prefix.'leads',
+            Deal::class => $prefix.'deals',
+            Quote::class => $prefix.'quotes',
+            Order::class => $prefix.'orders',
+            Invoice::class => $prefix.'invoices',
+            Delivery::class => $prefix.'deliveries',
+            PurchaseOrder::class => $prefix.'purchase_orders',
+        ];
+
+        foreach ($models as $modelClass => $recordTable) {
+            if (! Schema::hasTable($recordTable) || ! Schema::hasColumn($recordTable, 'pipeline_stage_id')) {
+                continue;
+            }
+
+            $globalPipelineId = DB::table($prefix.'pipelines')
+                ->whereNull('team_id')
+                ->where('model', $modelClass)
+                ->value('id');
+
+            $teamPipelineId = DB::table($prefix.'pipelines')
+                ->where('team_id', $teamId)
+                ->where('model', $modelClass)
+                ->value('id');
+
+            if ($globalPipelineId === null || $teamPipelineId === null) {
+                continue;
+            }
+
+            $globalStages = DB::table($prefix.'pipeline_stages')
+                ->where('pipeline_id', $globalPipelineId)
+                ->whereNull('team_id')
+                ->pluck('id', 'name')
+                ->all();
+
+            $teamStages = DB::table($prefix.'pipeline_stages')
+                ->where('pipeline_id', $teamPipelineId)
+                ->where('team_id', $teamId)
+                ->pluck('id', 'name')
+                ->all();
+
+            foreach ($globalStages as $stageName => $globalStageId) {
+                if (! isset($teamStages[$stageName])) {
+                    continue;
+                }
+
+                $teamStageId = $teamStages[$stageName];
+
+                DB::table($recordTable)
+                    ->where('team_id', $teamId)
+                    ->where('pipeline_stage_id', $globalStageId)
+                    ->update(['pipeline_stage_id' => $teamStageId]);
             }
         }
     }

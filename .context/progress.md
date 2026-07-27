@@ -31206,3 +31206,209 @@ stories.
   Reusable insight for any future "should this lookup be per-tenant or
   shared?" decision: **if the semantic universe is fixed and small,
   share globally; if tenants customize entries, replicate per team**.
+
+
+## US-003: Add repointCrmRecordsToTeamPipelines helper for orphaned records
+- Added `public static function repointCrmRecordsToTeamPipelines(int $teamId): void`
+  to `src/Observers/TeamObserver.php` immediately after `seedCrmDataForTeam()`.
+  Iterates a `[modelClass => recordTable]` map of the 7 entity models
+  (Lead → `crm_leads`, Deal → `crm_deals`, Quote → `crm_quotes`, Order →
+  `crm_orders`, Invoice → `crm_invoices`, Delivery → `crm_deliveries`,
+  PurchaseOrder → `crm_purchase_orders`). For each:
+  1. Looks up the global pipeline id via
+     `DB::table('crm_pipelines')->whereNull('team_id')->where('model', $modelClass)->value('id')`.
+  2. Looks up the per-team pipeline id via
+     `->where('team_id', $teamId)->where('model', $modelClass)->value('id')`.
+  3. Skips the model when either pipeline is missing (no global source →
+     nothing to re-point; no team destination → US-002's
+     `seedCrmDataForTeam` was never run → skip safely).
+  4. Builds `pluck('id', 'name')->all()` maps for global stages
+     (constrained to `pipeline_id = globalPipelineId + whereNull('team_id')`)
+     AND team stages (constrained to `pipeline_id = teamPipelineId +
+     team_id = $teamId`).
+  5. For each `(stageName, globalStageId)` pair in the global map: if
+     the same name exists in the team map, runs `DB::table($recordTable)
+     ->where('team_id', $teamId)->where('pipeline_stage_id', $globalStageId)
+     ->update(['pipeline_stage_id' => $teamStageId])`.
+  6. Unmatched names are silently left alone per AC (safe no-op — no
+     data loss, no exceptions, documented in the method docblock as a
+     known limitation).
+- Added `Illuminate\Support\Facades\Schema` import + guard at the top
+  of the loop body: `if (! Schema::hasTable($recordTable) ||
+  ! Schema::hasColumn($recordTable, 'pipeline_stage_id')) { continue; }`.
+  Defensive tolerance for test-schema-vs-production divergence — the
+  plugin's `tests/TestSchema.php` doesn't ship `crm_deliveries` at all
+  AND doesn't ship `pipeline_stage_id` on `crm_purchase_orders`, so
+  without the guard the helper would throw SQL errors in the test
+  environment while working correctly against production hosts that
+  ship the full 7-table schema. Same "test schema masks columns from
+  production" gotcha documented across many prior stories in this
+  codebase.
+- Added 7 model FQCN imports (`Deal`, `Delivery`, `Invoice`, `Lead`,
+  `Order`, `PurchaseOrder`, `Quote`) alphabetically placed between the
+  pre-existing `Ramsey\Uuid\Uuid` and `Spatie\Permission\PermissionRegistrar`
+  imports. Used as `Lead::class`, `Deal::class`, etc. in the map keys
+  so the query's `where('model', $modelClass)` clause matches the FQCN
+  string stored in `crm_pipelines.model` by `LaravelCrmPipelineTablesSeeder`.
+- Detailed docblock on the new helper explains: (a) the 7 record tables
+  it targets, (b) the AC-mandated "only team_id = $teamId records
+  updated, other teams untouched" contract, (c) the "matched by name
+  within the same pipeline model" constraint, (d) the "unmatched stages
+  left unchanged" invariant, (e) the "running twice is a no-op on the
+  second run" property (guaranteed because the WHERE clause on the
+  UPDATE targets `pipeline_stage_id = global_id` — after the first
+  successful run, no rows still match, so subsequent runs no-op even
+  though the code path executes).
+- New Pest test `tests/Feature/Observers/TeamObserverRepointTest.php`
+  (8 tests / 19 assertions; all pass) locks every AC contract:
+  1. **Signature** — Reflection asserts public + static + `void` return
+     type + 1 required `int` parameter.
+  2. **Happy path re-points lead records** — seeds a global pipeline +
+     matching per-team pipeline with 3 stages (New/Working/Won), creates
+     a lead pointing at the global "Working" stage id with `team_id = 42`,
+     invokes the helper, asserts the record's `pipeline_stage_id` now
+     equals the per-team "Working" stage id.
+  3. **Records from other teams untouched** — seeds two leads pointing
+     at the same global stage id, one with `team_id = 42` (target) and
+     one with `team_id = 99` (control). After helper runs, the target
+     lead moves to the team stage AND the control lead's stage id is
+     unchanged.
+  4. **Model-scoped matching** — seeds separate Lead + Deal pipelines
+     both with a "Won" stage, seeds a lead pointing at the Lead-global
+     "Won" stage, asserts the lead lands on the Lead-team "Won" stage
+     (NOT the Deal-team "Won" stage). Locks the AC's "Lead-model global
+     stages only map to Lead-model per-team stages, etc." contract.
+  5. **Unmatched names left alone** — deletes the per-team "New" stage
+     before invoking the helper, asserts the lead's stage id is
+     unchanged (still the global stage id). Locks the AC's "safe no-op,
+     no null-outs, no exceptions" contract.
+  6. **Idempotency** — invokes the helper twice against the same
+     fixture, asserts both invocations produce the same final stage id.
+     Regression guard against a future refactor that might introduce
+     accidental double-mutation.
+  7. **All 5 test-schema entity tables** — seeds pipelines/stages/records
+     for Lead/Deal/Quote/Order/Invoice (the 5 tables that ship
+     `pipeline_stage_id` in `tests/TestSchema.php`) in a single call,
+     asserts each record's stage id moves to the matching per-team
+     stage id. Delivery + PurchaseOrder are structurally covered by
+     the `Schema::hasTable` / `Schema::hasColumn` guard AND by test 8
+     below; the production migration ships all 7 tables + columns so
+     the code path is complete against real hosts.
+  8. **Schema-divergence tolerance** — invokes the helper with no
+     fixtures against a fresh test schema (which lacks `crm_deliveries`
+     AND lacks `pipeline_stage_id` on `crm_purchase_orders`), asserts
+     no exception is thrown. Locks the AC's implicit "no exceptions"
+     guarantee against the plugin's test-schema-vs-production
+     divergence.
+- Test fixture helpers `seedPipelinePair(string $modelClass, string
+  $pipelineName, array $stageNames, int $teamId): array` and
+  `globalStageId(int $pipelineId, string $name): int` +
+  `teamStageId(int $pipelineId, string $name, int $teamId): int`
+  seed the pipelines + stages directly via `DB::table('crm_pipelines')
+  ->insertGetId(...)` and `DB::table('crm_pipeline_stages')->insert(...)`
+  — bypasses `TeamObserver::seedCrmDataForTeam(42)` which would fail in
+  the test environment because it iterates 6 lookup entity tables
+  (organization_types, address_types, contact_types, industries,
+  tax_rates, labels) that `TestSchema.php` doesn't ship. Same
+  "seed via raw DB, bypass the helper that touches missing tables"
+  discipline documented across many prior test-fixture stories.
+- **Quality gates green**:
+  - `php -l src/Observers/TeamObserver.php` → No syntax errors detected.
+  - `./vendor/bin/pint --dirty --test` → `{"tool":"pint","result":"passed"}`
+    (after auto-fix of `fully_qualified_strict_types` + `ordered_imports`
+    on the new test file — pint moved my inline `\Ramsey\Uuid\Uuid` FQCN
+    references to a proper `use` import).
+  - `pest tests/Feature/Observers/TeamObserverRepointTest.php --no-coverage`
+    → 8 tests (19 assertions), 0 failures in 0.54s.
+  - `php -d memory_limit=512M pest --no-coverage` → 1986 assertions /
+    1 failed / 651 deprecated in 167.39s. The 1 failure is the
+    pre-existing baseline flake `Tests\Feature\Portal\PublicFeatureTest
+    > admin reply renders with…` documented across US-001 and US-002
+    of this shared TeamObserver helper series + every prior invite-users
+    progress entry as unrelated to my scope (grep of that test file
+    returns zero hits for TeamObserver / seedCrmData / repoint / team
+    references). Zero net new failures.
+- **Working-tree discipline**: 1 pre-existing unrelated dirty file at
+  session start (`src/Livewire/Leads/LeadCreate.php`, staged from an
+  earlier commit on this branch — same file noted in US-001 and US-002
+  of this series). Used explicit `git add` on the 2 US-003 files
+  (`src/Observers/TeamObserver.php` + the new test file); post-commit
+  `git status --short` shows the pre-existing dirty file preserved
+  untouched.
+
+### Files changed (in `/Users/andrewdrake/.polyscope/clones/66571e70/cosmic-cat`)
+- **Modified** `src/Observers/TeamObserver.php` (+90/-1 diff: added 8
+  imports (`Illuminate\Support\Facades\Schema` + 7 model FQCNs);
+  added `repointCrmRecordsToTeamPipelines(int $teamId): void` public
+  static helper with 7-model iteration + Schema::hasTable/hasColumn
+  guard + name→id map matching + per-team scoped UPDATE via
+  `DB::table(...)->where('team_id', $teamId)->where('pipeline_stage_id',
+  $globalStageId)->update(...)`)
+- **Added** `tests/Feature/Observers/TeamObserverRepointTest.php`
+  (~245 lines; 8 tests / 19 assertions locking every AC contract as a
+  regression gate; includes 3 file-local fixture helpers
+  (`seedPipelinePair` + `globalStageId` + `teamStageId`) that bypass
+  `seedCrmDataForTeam` to sidestep test-schema-vs-production divergence
+  on 6 lookup entity tables)
+
+### Learnings for future iterations
+- **The AC's "unmatched names left alone by design" contract encodes
+  a valuable safety invariant.** A naive implementation might try to
+  handle missing per-team stages by (a) creating them on-the-fly, (b)
+  NULLing the record's `pipeline_stage_id`, or (c) throwing an
+  exception. All three options carry hidden costs: (a) drifts the
+  per-team pipeline shape away from the tenant's intended layout;
+  (b) breaks kanban queries that filter on non-null stage_id; (c)
+  aborts the whole helper mid-run, potentially leaving records
+  partially migrated. The "no-op on unmatched" behavior is safest
+  because it (a) leaves the record queryable (stage_id still points
+  at a valid row, just a global one), (b) is easily fixable by
+  renaming the stage or adding the missing name to the per-team
+  pipeline and re-running the helper (which is idempotent), (c)
+  doesn't require the caller to worry about partial-run recovery.
+  Reusable insight for any future "backfill" or "migration" helper:
+  **prefer safe-no-op semantics for missing target state over
+  exceptions or best-guess auto-creation**.
+- **`pluck('id', 'name')->all()` returns a `[name => id]` associative
+  array** — reads more naturally than `keyBy('name')->map->id->all()`
+  or `mapWithKeys(...)`. The Laravel Collection method's second
+  argument reverses the default `[key => value]` convention into
+  `[value_column => key_column]`. Reusable for any future "build a
+  lookup map from a table" pattern.
+- **`Schema::hasTable` + `Schema::hasColumn` guards inside a loop
+  body** are the correct defensive pattern for helpers that iterate
+  over N entity tables where some tables might be missing from the
+  test schema OR from a downgraded/upgraded host schema. The alternative
+  (declaring the helper "tested only against production" and marking
+  tests as skipped when the table's missing) works but produces
+  brittle test-runner-only branches. In-body guards let the same
+  code path work correctly across both environments, AND the guard
+  itself becomes a documented contract ("the helper skips entities
+  whose schema isn't complete") that a future test explicitly locks.
+- **Test-schema-vs-production divergence in the core CRM package**:
+  the plugin's `tests/TestSchema.php` (copied from a snapshot of
+  core's TestSchema at some historical point) ships 6 of the 7 entity
+  tables the AC names, AND ships `pipeline_stage_id` on only 5 of
+  those 6 (leads, deals, quotes, orders, invoices). Missing:
+  `crm_deliveries` (whole table absent) and `crm_purchase_orders`
+  (table present but `pipeline_stage_id` column absent). Production
+  migration stubs ship all 7 tables + column. Any future test that
+  needs to exercise records in `crm_deliveries` or read
+  `crm_purchase_orders.pipeline_stage_id` MUST first add the missing
+  schema via a `Schema::table(...)` block in a test-scoped migration
+  patch, OR skip that table in the test's dataset. Same recurring
+  divergence pattern documented across many prior stories in this
+  codebase.
+- **The idempotency guarantee comes from the WHERE clause's shape,
+  not from a separate "already re-pointed" flag column.** After the
+  first run, no records still match `pipeline_stage_id = globalStageId`
+  because they've all been updated to `pipeline_stage_id = teamStageId`.
+  The second run's UPDATE affects zero rows — same effective no-op as
+  if the code path never executed. Distinct from update-flag patterns
+  (adding a `migrated_at` column or similar) which require schema
+  changes AND explicit tracking. The AC's "matching by pre-migration
+  state" enables this stateless-idempotency pattern for free. Reusable
+  insight for any future "backfill records from state X to state Y"
+  helper: **if the update itself changes the matching column, the
+  helper is automatically idempotent** — no separate flag column
+  needed.
