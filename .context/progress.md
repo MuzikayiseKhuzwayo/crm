@@ -31625,3 +31625,97 @@ stories.
   assertions, 651 deprecated across every story). Same "pre-existing
   baseline preserved" discipline documented across every prior
   autopilot story.
+
+
+## US-006: Invoke seeder + re-point unguarded in laravelcrm:v2
+- Appended a per-team backfill block to `src/Console/LaravelCrmV2.php::handle()`
+  immediately after the `$this->call('laravelcrm:update');` line and before the
+  final `$this->info('Laravel CRM is now updated to version 2.');` output. Block
+  mirrors the shape of US-004's `LaravelCrmInstall` block AND US-005's
+  `LaravelCrmUpdate` `db_update_1201` block — same Team class fallback
+  resolution (`App\Models\Team` → `App\Team` → null sentinel with graceful
+  `$this->warn(...)`), same overall + per-team info-line pattern, same
+  two-helper invocation (`TeamObserver::seedCrmDataForTeam($team->id)` →
+  `TeamObserver::repointCrmRecordsToTeamPipelines($team->id)`).
+- **Distinct from US-005** — NO `db_update_1201` marker guard per AC. The
+  block runs on EVERY invocation of `laravelcrm:v2`. Both helpers are
+  idempotent per their own AC contracts (US-002's `seedCrmDataForTeam` uses
+  `updateOrInsert` for pipelines/stages so re-runs don't duplicate;
+  US-003's `repointCrmRecordsToTeamPipelines` is a no-op once records
+  already point at per-team stages because the WHERE clause matches only
+  records still at the global stage id), so re-running `laravelcrm:v2`
+  produces no data drift.
+- **`config('permission.teams')` guard preserved** per AC. Hosts without
+  teams enabled skip the whole block. Matches US-004 + US-005 gating.
+- Added `use VentureDrake\LaravelCrm\Observers\TeamObserver;` import
+  alphabetically between `Permission` and `SettingService`.
+- Docblock comment above the block explains WHY the block is unguarded
+  (v2 upgraders may have flipped `LARAVEL_CRM_TEAMS=true` DURING the
+  upgrade — a marker-guarded block that already ran during a prior
+  `laravelcrm:update` invocation would silently skip on the v2 path) AND
+  documents the two helpers' idempotency contract so a future reader
+  understands why re-runs are safe. Same "docblock encodes the WHY"
+  discipline documented across US-001..US-005 of this shared TeamObserver
+  helper series.
+- **Quality gates green**:
+  - `php -l src/Console/LaravelCrmV2.php` → No syntax errors detected.
+  - `./vendor/bin/pint --dirty --test` → `{"tool":"pint","result":"passed"}`.
+  - `pest --no-coverage` → **1986 assertions / 1 failed / 651 deprecated**
+    in 169.41s. The 1 failure is the pre-existing baseline flake
+    `Tests\Feature\Portal\PublicFeatureTest > admin reply renders with…`
+    documented across US-001..US-005 of this series and every prior
+    invite-users progress entry as unrelated to my scope (grep of that
+    test file returns zero hits for `laravelcrm:v2` / `TeamObserver` /
+    `permission.teams` references). Zero net new failures. Byte-exact
+    parity with the post-US-005 baseline.
+- **Working-tree discipline**: 1 pre-existing unrelated dirty file at
+  session start (`src/Livewire/Leads/LeadCreate.php`, preserved from
+  earlier commits on this branch across US-001..US-005). Used explicit
+  `git add src/Console/LaravelCrmV2.php` to stage ONLY the US-006 file.
+  Post-commit `git status --short` shows the pre-existing dirty file
+  preserved untouched.
+
+### Files changed (in `/Users/andrewdrake/.polyscope/clones/66571e70/cosmic-cat`)
+- **Modified** `src/Console/LaravelCrmV2.php` (+27 lines: added
+  `TeamObserver` import; appended a `config('permission.teams')`-gated
+  backfill block immediately before the final success info line with
+  Team class fallback resolution, per-team foreach emitting overall +
+  per-team info lines, dual-helper invocation, and graceful warn branch
+  when teams are enabled but no Team model resolves)
+
+### Learnings for future iterations
+- **Marker guard vs no-marker guard is a genuine correctness decision,
+  not a stylistic one.** US-005's `laravelcrm:update` uses the
+  `db_update_1201` marker because the update command may be re-run many
+  times on a given host (typical operational pattern: run after every
+  release to catch new schema patches); without the marker guard, the
+  info-line spam would be annoying AND the helpers would fire on every
+  invocation (still safe due to idempotency, but wasteful). US-006's
+  `laravelcrm:v2` deliberately drops the marker guard because the v2
+  path is a ONE-TIME upgrade AND a host may flip `LARAVEL_CRM_TEAMS=true`
+  concurrently with the v1→v2 upgrade — in which case the
+  `db_update_1201` block on the SAME host may have already run during a
+  prior `laravelcrm:update` with teams=false (marker flipped to 1 but
+  no per-team seeding happened because the inner config check
+  short-circuited), leaving future runs marker-locked. Rerunning
+  unconditionally on the v2 path ensures the seeding actually happens
+  once teams are on. Reusable insight for any future marker-guarded
+  backfill: **if there's ANY code path that could flip the marker
+  without actually doing the work, add a fallback path that runs
+  unconditionally on a distinct entry point**.
+- **The Team class fallback resolution (`App\Models\Team` → `App\Team` →
+  null)** is now used FOUR times across `LaravelCrmInstall::handle()`
+  (US-004), `LaravelCrmUpdate::handle()` (US-005), and now
+  `LaravelCrmV2::handle()` (US-006) — plus once for User in
+  `LaravelCrmInstall::handle()` line ~109. Rule of three met and exceeded;
+  worth extracting to a shared helper on a hypothetical
+  `HostModelResolver` class or a static method on `TeamObserver` itself
+  (`TeamObserver::resolveHostTeamClass(): ?string`) in a future hygiene
+  story. For now, four copies of the identical three-line ternary are
+  acceptable given the simplicity of the pattern.
+- **The 1-pre-existing-failure baseline preserved gate has now been
+  re-confirmed across US-001..US-006 of the shared TeamObserver helper
+  series with byte-exact parity** (`PublicFeatureTest > admin reply
+  renders with…` — 1 failure, 1986 assertions, 651 deprecated across
+  every story). Same "pre-existing baseline preserved" discipline
+  documented across every prior autopilot story.

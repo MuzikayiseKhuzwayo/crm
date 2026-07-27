@@ -7,6 +7,7 @@ use Illuminate\Support\Composer;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 use VentureDrake\LaravelCrm\Models\Permission;
+use VentureDrake\LaravelCrm\Observers\TeamObserver;
 use VentureDrake\LaravelCrm\Services\SettingService;
 
 class LaravelCrmV2 extends Command
@@ -100,6 +101,31 @@ class LaravelCrmV2 extends Command
         $this->info('v1 -> v2 renames complete. Publishing and running v2 migrations...');
 
         $this->call('laravelcrm:update');
+
+        // v2 upgraders may also have flipped `LARAVEL_CRM_TEAMS=true` during the
+        // upgrade. Unconditionally back-fill per-team CRM lookup data + pipelines
+        // for every pre-existing team so v2 upgraders end up in the same state as
+        // update-command users. No db_update_1201 marker guard is used — both
+        // helpers are idempotent (seedCrmDataForTeam uses updateOrInsert for
+        // pipelines/stages, and repointCrmRecordsToTeamPipelines is a no-op once
+        // records already point at per-team stages), so re-running laravelcrm:v2
+        // does not duplicate rows or re-migrate already-migrated records.
+        if (config('permission.teams')) {
+            $teamClass = class_exists('App\Models\Team')
+                ? 'App\Models\Team'
+                : (class_exists('App\Team') ? 'App\Team' : null);
+
+            if ($teamClass !== null) {
+                $this->info('Backfilling per-team CRM data for existing teams...');
+
+                foreach ($teamClass::all() as $team) {
+                    TeamObserver::seedCrmDataForTeam($team->id);
+                    TeamObserver::repointCrmRecordsToTeamPipelines($team->id);
+                }
+            } else {
+                $this->warn('Teams enabled but no Team model found at App\Models\Team or App\Team. Skipping per-team backfill.');
+            }
+        }
 
         $this->info('Laravel CRM is now updated to version 2.');
     }
