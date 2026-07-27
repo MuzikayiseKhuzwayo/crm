@@ -31412,3 +31412,216 @@ stories.
   helper: **if the update itself changes the matching column, the
   helper is automatically idempotent** — no separate flag column
   needed.
+
+
+## US-004: Invoke seeder + re-point for existing teams in laravelcrm:install
+- Inserted a new backfill block in `src/Console/LaravelCrmInstall.php::handle()`
+  immediately after the pre-existing `laravelcrm:lead-sources` call (former
+  line 193). Block is guarded by `if (config('permission.teams'))` and
+  resolves the host's Team class via the same `class_exists('App\Models\Team')`
+  / `class_exists('App\Team')` fallback pattern the command already uses at
+  line ~108 for the User model. Falls through to a `null` sentinel that
+  triggers a graceful `$this->warn(...)` when the host has teams enabled
+  but no Team model at either FQCN.
+- Foreach loop over `$teamClass::all()` invokes both helpers per team in
+  order: `TeamObserver::seedCrmDataForTeam($team->id)` (US-002 of the shared
+  TeamObserver helper series) → `TeamObserver::repointCrmRecordsToTeamPipelines($team->id)`
+  (US-003). Both helpers are idempotent per their own AC contracts, so re-
+  running `laravelcrm:install` is safe.
+- **Placement AFTER the `LaravelCrmTablesSeeder` + `laravelcrm:lead-sources`
+  invocations** ensures the global pipelines/stages/lookup rows exist when
+  the helpers copy them per-team. Matches the AC's "around line 193" directive
+  verbatim.
+- Pint's `fully_qualified_strict_types` fixer auto-normalized my inline
+  `\VentureDrake\LaravelCrm\Observers\TeamObserver::` FQCNs to a proper
+  `use VentureDrake\LaravelCrm\Observers\TeamObserver;` import at the top of
+  the file + short-name `TeamObserver::` references in the loop body. Same
+  auto-fix pattern documented across many prior stories.
+- Docblock comment above the block explains WHY the backfill exists: a host
+  may have a Jetstream personal team created BEFORE the CRM was installed;
+  without the backfill, that team has no per-team pipelines, and `/leads/create`
+  renders against an empty pipeline dropdown — the null-pipeline bug this
+  series set out to fix. On a fresh install `Team::all()` is empty and the
+  loop no-ops, so the block is harmless in that case.
+- **Quality gates green**:
+  - `php -l src/Console/LaravelCrmInstall.php` → No syntax errors detected.
+  - `./vendor/bin/pint --dirty --test` → `{"tool":"pint","result":"passed"}`.
+  - `pest --no-coverage` → **1986 assertions / 1 failed / 651 deprecated** in
+    169.25s. The 1 failure is the pre-existing baseline flake
+    `Tests\Feature\Portal\PublicFeatureTest > admin reply renders with…`
+    documented across US-001..US-003 of the shared TeamObserver helper
+    series and every prior invite-users progress entry as unrelated (grep
+    of that test returns zero hits for `laravelcrm:install` / `TeamObserver`
+    / `permission.teams` / `Team::all` references). Zero net new failures.
+- **Working-tree discipline**: 1 pre-existing unrelated dirty file at session
+  start (`src/Livewire/Leads/LeadCreate.php`, staged from an earlier commit
+  on this branch — same file preserved across US-001, US-002, and US-003 of
+  this series). Used explicit `git add src/Console/LaravelCrmInstall.php` to
+  stage ONLY the US-004 file; post-commit `git status --short` shows the
+  pre-existing dirty file preserved untouched. Commit `844280d9` on
+  `fix-lead-create-null-pipeline` branch — 1 file changed / 23 insertions.
+
+### Files changed (in `/Users/andrewdrake/.polyscope/clones/66571e70/cosmic-cat`)
+- **Modified** `src/Console/LaravelCrmInstall.php` (+23 lines: added
+  `use VentureDrake\LaravelCrm\Observers\TeamObserver;` import (via pint
+  auto-fix); added a 22-line backfill block after `laravelcrm:lead-sources`
+  invocation guarded by `config('permission.teams')`, resolving Team class
+  via `App\Models\Team` → `App\Team` fallback, iterating `$teamClass::all()`,
+  and calling both `seedCrmDataForTeam` + `repointCrmRecordsToTeamPipelines`
+  static helpers on `TeamObserver` per team; warns gracefully when teams
+  are enabled but no Team model is available)
+
+### Learnings for future iterations
+- **The `App\Models\Team` / `App\Team` fallback pattern** is now used TWICE
+  in `LaravelCrmInstall.php` — once for User (line ~109) and now for Team
+  (my block). Both use the identical
+  `class_exists('App\Models\X') ? 'App\Models\X' : (class_exists('App\X') ? 'App\X' : null)`
+  ternary chain. Reusable pattern for any future core CRM console command
+  that needs to resolve a host-provided model class without hardcoding a
+  specific FQCN. Distinct from `config('auth.providers.users.model')` which
+  only works for User AND requires the host to have registered the correct
+  provider — the class_exists fallback works for ANY model the host might
+  place at either canonical path AND doesn't require a config lookup.
+- **The null sentinel + graceful warn branch** (`if ($teamClass !== null) {
+  loop } else { $this->warn('...') }`) is defensible when the host has
+  `config('permission.teams') === true` but no Team model at either
+  canonical path. Distinct from `throw` (aborts the whole install) OR
+  silent no-op (leaves the admin wondering why the teams-enabled install
+  didn't backfill). The warn output tells the admin exactly what went
+  wrong AND what to fix (add a Team model at `App\Models\Team`). Reusable
+  pattern for any future install-time guard whose failure isn't fatal
+  enough to abort but is worth surfacing.
+- **The foreach-over-`class::all()` + static-helper-with-id-only pattern**
+  works cleanly because both helpers take a bare `int $teamId` (not a Team
+  model instance). Distinct from an Eloquent-observer-driven approach where
+  each team save fires the `created` handler — that's the mechanism for
+  NEW teams created after install, but doesn't backfill PRE-EXISTING teams.
+  Two complementary mechanisms: (a) `created` observer for new teams, (b)
+  install-command backfill for pre-existing teams. Same posture as many
+  prior "seed OR backfill on install" patterns.
+- **The pest baseline of 1 pre-existing failure + N deprecated** has now
+  been re-confirmed across US-001..US-004 of the shared TeamObserver
+  helper series with byte-exact parity on the failure count. Same
+  "pre-existing baseline preserved" discipline documented across every
+  prior autopilot story.
+
+
+## US-005: Add db_update_1201 back-fill block to laravelcrm:update
+- Added a new guarded update block to `src/Console/LaravelCrmUpdate.php::handle()`
+  immediately after the pre-existing `db_update_1200` block (former lines 311–341)
+  and before the final `$this->info('Laravel CRM is now updated.');` line.
+  Block is guarded by `if ($this->settingService->get('db_update_1201') == 0)`
+  so it runs exactly once per host.
+- **Block structure per AC**:
+  1. Outer guard on the marker (runs once total, regardless of teams config).
+  2. Inner `if (config('permission.teams'))` guard determines whether the
+     per-team iteration executes. When false, the block still flips the
+     marker to `1` so subsequent invocations skip the check.
+  3. When teams are enabled: emits `$this->info('Back-filling per-team CRM
+     data for existing teams')` as the overall step announcement (AC's
+     "info line per team plus overall").
+  4. Resolves `$teamClass` via the same
+     `class_exists('App\Models\Team') ? 'App\Models\Team' : (class_exists('App\Team') ? 'App\Team' : null)`
+     fallback used in `LaravelCrmInstall::handle()` (US-004 of this
+     shared TeamObserver helper series). Falls through to a graceful
+     `$this->warn(...)` when teams are enabled but no Team model resolves.
+  5. Foreach over `$teamClass::all()` emits a per-team info line
+     (`'Back-filling per-team CRM data for team #'.$team->id`) then
+     invokes both helpers in order: `TeamObserver::seedCrmDataForTeam($team->id)`
+     (US-002 of this series) → `TeamObserver::repointCrmRecordsToTeamPipelines($team->id)`
+     (US-003). Both helpers are idempotent per their own AC contracts, so
+     re-running the update command against a fully-migrated host is safe
+     even without the marker guard.
+  6. Emits `$this->info('Back-filling per-team CRM data complete.')` at
+     the end of the inner block.
+  7. `$this->settingService->set('db_update_1201', 1)` fires OUTSIDE the
+     teams-config gate but INSIDE the marker guard — so the marker flips
+     unconditionally on first run, matching the AC's "match existing
+     patterns in this file" directive (verified against `db_update_0199`
+     and `db_update_1200` which both set the marker inside their outer
+     guard regardless of any inner conditions).
+- Added `use VentureDrake\LaravelCrm\Observers\TeamObserver;` import
+  alphabetically between `Setting` and `SettingService`.
+- **Neighbouring blocks verified**: read `db_update_0199` (lines 227-309)
+  and `db_update_1200` (lines 311-341) to confirm the marker-set pattern
+  fires unconditionally at the end of each outer-guarded block. Both
+  emit an "updating..." info line at start, run their work, then
+  `settingService->set(...)` + final "complete" info line. My block
+  mirrors this shape with the added teams-config inner guard AND the
+  per-team foreach.
+- **Quality gates green**:
+  - `php -l src/Console/LaravelCrmUpdate.php` → No syntax errors detected.
+  - `./vendor/bin/pint --dirty --test` → `{"tool":"pint","result":"passed"}`.
+  - `pest --no-coverage` → **1986 assertions / 1 failed / 651 deprecated**
+    in 168.58s. The 1 failure is the pre-existing baseline flake
+    `Tests\Feature\Portal\PublicFeatureTest > admin reply renders with…`
+    documented across US-001..US-004 of this shared TeamObserver helper
+    series (grep of that test file returns zero hits for
+    `laravelcrm:update` / `db_update_1201` / `TeamObserver` references).
+    Zero net new failures. Byte-exact parity with the post-US-004
+    baseline.
+- **Working-tree discipline**: 1 pre-existing unrelated dirty file at
+  session start (`src/Livewire/Leads/LeadCreate.php`, preserved from
+  earlier commits on this branch across US-001, US-002, US-003, US-004).
+  Used explicit `git add src/Console/LaravelCrmUpdate.php` to stage
+  ONLY the US-005 file. Post-commit `git status --short` shows the
+  pre-existing dirty file preserved untouched.
+
+### Files changed (in `/Users/andrewdrake/.polyscope/clones/66571e70/cosmic-cat`)
+- **Modified** `src/Console/LaravelCrmUpdate.php` (+32 lines: added
+  `TeamObserver` import; added the AC-mandated `db_update_1201` guarded
+  block after `db_update_1200` with inner teams-config gate, Team class
+  fallback resolution, per-team foreach emitting overall + per-team info
+  lines, dual-helper invocation, and unconditional marker-set on first
+  run)
+
+### Learnings for future iterations
+- **The `db_update_NNNN` marker pattern in `LaravelCrmUpdate::handle()`**
+  encodes a "run this block once per host, ever" contract via
+  `SettingService::get($marker) == 0` on the outer guard. The block's
+  final line ALWAYS flips the marker to `1`, so subsequent invocations
+  short-circuit before touching any of the block's logic. This is
+  distinct from the idempotency of the helpers INSIDE the block (which
+  can safely re-run without duplicating data) — the marker guard is
+  additional insurance that the info-line spam AND the observer helper
+  calls don't fire on every `php artisan laravelcrm:update`. Reusable
+  pattern for any future core-CRM back-fill migration: pick the next
+  marker number (`db_update_1202`, etc.), wrap the block in the
+  identical shape, always flip the marker at the end regardless of
+  any inner branches.
+- **The AC's "match existing patterns in this file — verify against
+  neighbouring blocks first"** directive is genuine guidance, not
+  boilerplate. Reading `db_update_0199` + `db_update_1200` before
+  writing my block surfaced two contract details that a copy-paste
+  from a different context would have missed:
+  1. **Marker set is UNCONDITIONAL** — neither existing block skips
+     the marker-set based on inner conditions. My block honors this:
+     the marker flips even when teams are off (block does nothing but
+     still runs), even when teams are on but no Team model resolves
+     (warn-and-continue), and even when teams are on with 0 teams (
+     `foreach` no-ops). This encodes the AC's explicit "marker should
+     still be set to 1 to prevent re-checking on future runs" contract.
+  2. **Info-line style** — both existing blocks emit an "Updating
+     Laravel CRM X" start line + a "complete." end line. My block
+     mirrors this with "Back-filling per-team CRM data for existing
+     teams" + "Back-filling per-team CRM data complete." — same
+     symmetric bracket pattern. Skipping either line would break the
+     visual consistency of the command's output.
+- **The `App\Models\Team` / `App\Team` class-detection fallback** is
+  now used THREE times in this codebase: `LaravelCrmInstall::handle()`
+  (line ~109 for User model, and line ~202 for Team via US-004 of
+  this series) AND now `LaravelCrmUpdate::handle()` (US-005). The
+  recurring three-line ternary chain
+  `class_exists('App\Models\X') ? 'App\Models\X' : (class_exists('App\X') ? 'App\X' : null)`
+  should be extracted to a shared helper if a fourth call site
+  appears — for now, three is below the "rule of three" threshold
+  for premature abstraction. Reusable pattern for any future console
+  command that needs to resolve a host-provided model class without
+  hardcoding a specific FQCN.
+- **The 1-pre-existing-failure baseline preserved gate has now been
+  re-confirmed across US-001..US-005 of the shared TeamObserver
+  helper series with byte-exact parity on the failure count**
+  (`PublicFeatureTest > admin reply renders with…` — 1 failure, 1986
+  assertions, 651 deprecated across every story). Same "pre-existing
+  baseline preserved" discipline documented across every prior
+  autopilot story.

@@ -15,6 +15,7 @@ use VentureDrake\LaravelCrm\Models\Person;
 use VentureDrake\LaravelCrm\Models\Quote;
 use VentureDrake\LaravelCrm\Models\QuoteProduct;
 use VentureDrake\LaravelCrm\Models\Setting;
+use VentureDrake\LaravelCrm\Observers\TeamObserver;
 use VentureDrake\LaravelCrm\Services\SettingService;
 
 class LaravelCrmUpdate extends Command
@@ -338,6 +339,36 @@ class LaravelCrmUpdate extends Command
 
             $this->settingService->set('db_update_1200', 1);
             $this->info('Updating Laravel CRM pipeline tables complete.');
+        }
+
+        if ($this->settingService->get('db_update_1201') == 0) {
+            // Back-fill per-team CRM lookup data + pipelines for every pre-existing
+            // team (e.g. a Jetstream personal team created before the CRM was
+            // installed). Without this, `/leads/create` on a teams-enabled host
+            // renders against an empty per-team pipeline and trips the null-pipeline
+            // bug. Idempotent — safe to re-run. Skipped entirely when teams are off,
+            // but the marker still flips so subsequent runs don't re-check.
+            if (config('permission.teams')) {
+                $this->info('Back-filling per-team CRM data for existing teams');
+
+                $teamClass = class_exists('App\Models\Team')
+                    ? 'App\Models\Team'
+                    : (class_exists('App\Team') ? 'App\Team' : null);
+
+                if ($teamClass !== null) {
+                    foreach ($teamClass::all() as $team) {
+                        $this->info('Back-filling per-team CRM data for team #'.$team->id);
+                        TeamObserver::seedCrmDataForTeam($team->id);
+                        TeamObserver::repointCrmRecordsToTeamPipelines($team->id);
+                    }
+                } else {
+                    $this->warn('Teams enabled but no Team model found at App\Models\Team or App\Team. Skipping per-team back-fill.');
+                }
+
+                $this->info('Back-filling per-team CRM data complete.');
+            }
+
+            $this->settingService->set('db_update_1201', 1);
         }
 
         $this->info('Laravel CRM is now updated.');
