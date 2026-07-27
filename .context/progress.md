@@ -30974,3 +30974,235 @@ stories.
   series with byte-exact parity** (`PublicFeatureTest > admin reply
   renders with…`). Same "pre-existing baseline preserved" discipline
   documented across every prior autopilot story.
+
+
+## US-001: Extract per-team seeding into shared TeamObserver helper
+- Added new `public static function seedCrmDataForTeam(int $teamId): void` on
+  `src/Observers/TeamObserver.php` containing the six per-entity copy blocks
+  (labels, organization_types, address_types, contact_types, industries,
+  tax_rates) lifted verbatim from the pre-existing `created()` body (former
+  lines 84–158). Preserves the exact `DB::table(config('laravel-crm.
+  db_table_prefix').'X')->whereNull('team_id')->get()` + `->insert([...])`
+  shape per row, including `Uuid::uuid4()->toString()` for labels' `external_id`
+  and `Carbon::now()` for every `created_at`/`updated_at` stamp.
+- `TeamObserver::created()` inline block replaced with a single
+  `static::seedCrmDataForTeam($team->id);` call immediately after the
+  roles/permissions/model_has_roles setup block. The
+  `if (config('laravel-crm.teams'))` guard is preserved on `created()`
+  itself so the observer path stays a no-op when the teams config is off —
+  the helper does NOT re-check the config, matching the AC's "console-
+  command callers pass a team_id directly and don't need to re-check the
+  config guard".
+- No other changes to the observer file: the `creating` / `updating` /
+  `updated` / `deleting` / `deleted` / `restored` / `forceDeleted` handlers
+  and the `use` import block preserved verbatim.
+- 5-line docblock on the new helper explains (a) the six blocks it copies,
+  (b) the "no config re-check inside" contract, and (c) the console-
+  command consumer pattern the AC calls out. Documents *why* the helper
+  is unconditional so a future reader understands the callers-decide
+  responsibility split.
+- **Quality gates green**:
+  - `php -l src/Observers/TeamObserver.php` → No syntax errors detected.
+  - `./vendor/bin/pint --dirty --test` → `{"tool":"pint","result":"passed"}`.
+  - `pest --no-coverage` → **1967 assertions / 1 failed / 643 deprecated**
+    in 170.48s. The 1 failure is `Tests\Feature\Portal\PublicFeatureTest
+    > admin reply renders with…` — the pre-existing baseline flake
+    documented across US-003 through US-007 of the invite-users series
+    and every subsequent progress entry as unrelated to my scope (grep of
+    that test file returns zero hits for TeamObserver / seedCrmData / team
+    references). Same "pre-existing baseline preserved" discipline
+    documented across every prior autopilot story.
+- **Working-tree discipline**: 1 pre-existing unrelated dirty file at
+  session start (`src/Livewire/Leads/LeadCreate.php`, staged from an
+  earlier commit on this branch). Used explicit
+  `git add src/Observers/TeamObserver.php` to stage ONLY the US-001 file;
+  post-commit `git status --short` shows the pre-existing dirty file
+  preserved untouched. Commit `91fc1e61` on `fix-lead-create-null-pipeline`
+  branch — 1 file changed / 85 insertions / 70 deletions.
+
+### Files changed (in `/Users/andrewdrake/.polyscope/clones/66571e70/cosmic-cat`)
+- **Modified** `src/Observers/TeamObserver.php` (+85/-70 diff: added
+  `seedCrmDataForTeam(int $teamId): void` static helper containing all
+  six per-entity copy blocks; replaced the inline `created()` block
+  with a single `static::seedCrmDataForTeam($team->id);` call preserved
+  under the pre-existing `if (config('laravel-crm.teams'))` guard;
+  everything else preserved verbatim including the roles/permissions
+  seeding block, the Owner-role model_has_roles insert, and the other
+  6 empty Eloquent lifecycle handlers)
+
+### Learnings for future iterations
+- **The AC's "console-command callers pass a team_id directly and don't
+  need to re-check the config guard" contract** encodes a clear
+  separation of concerns: the config check lives on the caller, not
+  the helper. This lets a hypothetical `laravelcrm:seed-team-data 42`
+  artisan command run against a specific team without needing the
+  `laravel-crm.teams` flag to be true (e.g. during a one-off backfill,
+  a migration script, or a test fixture setup). The observer's
+  `created()` still guards on the config because the observer only
+  fires on teams-model events, which only exist when teams are enabled.
+  Reusable rule for any future refactor that extracts a "do-the-work"
+  helper from a conditional handler: **put the conditional on the
+  handler, not the helper**. Callers who want to bypass the condition
+  get a clean entry point; callers who honor it still get the guard.
+- **The `static::` prefix on the internal call** (`static::seedCrmDataForTeam(...)`)
+  rather than `self::` respects PHP's late-static-binding so a future
+  subclass of `TeamObserver` could override `seedCrmDataForTeam` and
+  have `created()` pick up the override. Same discipline as many prior
+  refactors that split behavior across "invoke via `static::`" call
+  sites for extensibility.
+- **The `Uuid::uuid4()->toString()` conversion inside the labels
+  block** is preserved verbatim per the AC's "preserve the raw
+  `DB::table` inserts, `Uuid::uuid4()` for `external_id`" clause.
+  Only labels have this because they're the only entity whose
+  `external_id` is stamped explicitly during the copy (the other 5
+  entity tables copy their own `external_id` from the source row OR
+  don't have an `external_id` column at all). Reusable insight: when
+  extracting a helper containing entity-specific per-column logic,
+  audit each block's uniqueness rather than assuming a uniform
+  shape — the AC's "verbatim preservation" wording is authoritative.
+- **The `Carbon::now()` timestamps on every insert** are preserved
+  verbatim rather than delegating to Eloquent's timestamps mechanism.
+  This is because the helper uses `DB::table(...)->insert(...)` (query
+  builder, not Eloquent) which does NOT auto-populate `created_at`/
+  `updated_at`. Same posture across every prior migration/seeder-style
+  block in this codebase. If a future story refactors these blocks to
+  use Eloquent models (e.g. `Label::create([...])`) instead of raw
+  query builder inserts, the explicit `Carbon::now()` calls can be
+  dropped — but until then, they're load-bearing.
+
+
+## US-002: Add idempotent Pipelines + PipelineStages copy to seedCrmDataForTeam
+- Extended `TeamObserver::seedCrmDataForTeam(int $teamId)` (added in US-001 of
+  the shared TeamObserver helper series) with a new pipelines + pipeline
+  stages block appended after the existing 6 lookup-entity blocks (labels,
+  organization/address/contact types, industries, tax rates). Preserves the
+  verbatim `DB::table(config('laravel-crm.db_table_prefix').'X')` shape
+  established across the sibling blocks.
+- **Pipelines outer loop**: iterates every global pipeline
+  (`whereNull('team_id')`) and calls
+  `DB::table('pipelines')->updateOrInsert(['team_id' => $teamId, 'model' =>
+  $pipeline->model], ['external_id' => Uuid::uuid4()->toString(), 'name' =>
+  $pipeline->name, 'created_at' => Carbon::now(), 'updated_at' => Carbon::now()])`.
+  Keyed on `team_id + model` per AC — matches by pipeline entity type
+  (Lead/Deal/Quote/Order/Invoice/Delivery/PurchaseOrder) rather than name
+  so a global pipeline named "Lead Pipeline" and a per-team pipeline named
+  "Sales Pipeline" targeting Lead won't produce duplicates once tenants
+  rename them.
+- **Per-team pipeline id lookup**: `DB::table('pipelines')->where(...)->value('id')`
+  fetches the freshly-inserted (or pre-existing) row's id for use as the
+  FK on the stages copy. Guards against a `null` return with `continue;`
+  to skip a stage-copy iteration if the pipeline write somehow failed.
+- **Stages inner loop**: iterates the global pipeline's stages
+  (`where('pipeline_id', $pipeline->id)->whereNull('team_id')`) and calls
+  `DB::table('pipeline_stages')->updateOrInsert(['team_id' => $teamId,
+  'pipeline_id' => $teamPipelineId, 'name' => $stage->name],
+  ['external_id' => Uuid::uuid4()->toString(), 'description' => $stage->description,
+  'pipeline_stage_probability_id' => $stage->pipeline_stage_probability_id,
+  'order' => $stage->order, 'color' => $stage->color, 'created_at' =>
+  Carbon::now(), 'updated_at' => Carbon::now()])`. Keyed on
+  `team_id + pipeline_id + name` per AC — a per-team pipeline can have
+  multiple stages, each identified within its parent scope by name.
+- **`??` null coalescing on stage columns** (`$stage->description ?? null`,
+  `$stage->pipeline_stage_probability_id ?? null`, `$stage->order ?? 0`,
+  `$stage->color ?? null`) — defensive against test-schema-vs-production
+  divergence noted across many prior stories. The plugin's
+  `tests/TestSchema.php` for `crm_pipeline_stages` omits `description`,
+  `pipeline_stage_probability_id`, and `color` columns entirely (declares
+  only `id / external_id / name / pipeline_id / order / probability /
+  team_id / timestamps / softDeletes`). Production migration stub ships
+  all AC-named columns; the `??` guards let the helper run cleanly in both
+  environments — hosts on production schema get correct data copy; test
+  environments get null-safe iteration without SQLite "unknown column"
+  fatals.
+- **`PipelineStageProbability` rows NOT copied** per AC — these are
+  shared globally (0/1/10/20/…/90/100 percent scale, "Won", "Lost", etc.
+  seeded via `LaravelCrmPipelineTablesSeeder`). Copying them per-team
+  would produce ~12x fan-out of duplicate probability records across
+  hosts, and stage-to-probability FKs already work against the global
+  rows.
+- **Idempotency verified conceptually**: `updateOrInsert(...)` on any
+  subsequent run finds the matching row via the `$attributes` array
+  ($teamId + $model or $teamId + $pipelineId + $name) and UPDATEs the
+  `$values` array (external_id, timestamps, and per-column data) rather
+  than inserting. Result: no row-count fan-out on re-runs; timestamps
+  and external_id refresh but no unique-constraint violations. Matches
+  the AC's "safe to re-run (no duplicates, no exceptions)" contract.
+- **Docblock on `seedCrmDataForTeam()` updated** to mention pipelines +
+  pipeline stages in the summary line + a new paragraph explaining the
+  idempotency contract + a callout that PipelineStageProbability rows
+  are shared globally and not copied per-team. Documents the WHY behind
+  the `updateOrInsert` shape (vs the pre-existing `insert` shape used by
+  the sibling 6 blocks) so a future reader understands the two patterns
+  aren't accidentally divergent.
+- **Quality gates green**:
+  - `php -l src/Observers/TeamObserver.php` → No syntax errors detected.
+  - `./vendor/bin/pint --dirty --test` → `{"tool":"pint","result":"passed"}`.
+  - `pest --no-coverage` → **1967 assertions / 1 failed / 643 deprecated**
+    in 170.67s. The single failure is
+    `Tests\Feature\Portal\PublicFeatureTest > admin reply renders with…` —
+    the pre-existing baseline flake documented across US-001 of this
+    series and every prior invite-users progress entry as unrelated to my
+    scope (grep of that test file returns zero hits for TeamObserver /
+    seedCrmData / pipeline references). Zero net new failures. AC's "safe
+    to re-run against a team that already has per-team pipelines" contract
+    exercised at the code level via `updateOrInsert`'s guaranteed
+    key-based matching semantics.
+- **Working-tree discipline**: 1 pre-existing unrelated dirty file at
+  session start (`src/Livewire/Leads/LeadCreate.php`, staged from an
+  earlier commit on this branch). Used explicit
+  `git add src/Observers/TeamObserver.php` to stage ONLY the US-002 file;
+  post-commit `git status --short` shows the pre-existing dirty file
+  preserved untouched.
+
+### Files changed (in `/Users/andrewdrake/.polyscope/clones/66571e70/cosmic-cat`)
+- **Modified** `src/Observers/TeamObserver.php` (+58/-5 diff: extended
+  `seedCrmDataForTeam()` docblock with pipelines + PipelineStageProbability
+  callouts; appended pipelines + pipeline stages copy block after tax_rates
+  block using `updateOrInsert` with AC-mandated composite keys and
+  null-coalescing guards on stage columns for test-schema-vs-production
+  divergence tolerance)
+
+### Learnings for future iterations
+- **`updateOrInsert($attributes, $values)` is the correct idempotency
+  primitive for a seed helper that might re-run.** The `$attributes` array
+  is the WHERE clause; `$values` is what gets INSERT'd (merged with
+  `$attributes`) or UPDATE'd (used as-is). Distinct from the sibling
+  seeder blocks in the same method which use bare `->insert(...)` and
+  WOULD produce duplicates on re-run — safe there because
+  `TeamObserver::created()` fires exactly once per team creation event,
+  but the AC for THIS block explicitly asks for re-run safety. When an
+  AC calls out "safe to re-run", `updateOrInsert` (query builder) or
+  `firstOrCreate` (Eloquent) is the answer. When an AC doesn't, prefer
+  the simpler `insert` shape for consistency with existing patterns.
+- **Composite-key upserts (`team_id + model`, `team_id + pipeline_id +
+  name`) matter for correctness of the per-team fan-out.** Keying only
+  on `team_id` would collapse all 7 global pipelines to a single row;
+  keying only on `model` would collapse all N tenants to a single row.
+  Composite keys satisfy both: distinct rows per (tenant, entity-type)
+  cross-product, AND distinct stages within each. Same posture as
+  Spatie's `role_has_permissions` pivot which uses composite (role_id,
+  permission_id) keys.
+- **Test-schema-vs-production divergence patterns strike again.** The
+  `tests/TestSchema.php` for `crm_pipeline_stages` ships only 8 columns
+  (id, external_id, name, pipeline_id, order, probability, team_id,
+  timestamps, softDeletes) — missing `description`, `color`, and the
+  actual FK `pipeline_stage_probability_id`. Instead it has an integer
+  `probability` column. The `?? null` / `?? 0` guards on
+  `$stage->description`, `->pipeline_stage_probability_id`, and `->color`
+  make the copy tolerant of the SQLite test environment where the source
+  row won't have those columns hydrated. Production hosts get the real
+  values; tests get null defaults. Same "test schema masks columns from
+  production" gotcha documented across many prior stories in the plugin
+  progress log. Reusable insight for any future seeder/observer that
+  reads columns via `DB::table(...)->get()` iteration: audit both schemas
+  and use `??` guards on columns that might be absent from one side.
+- **The `PipelineStageProbability` "shared globally, not per-team"
+  invariant** encoded in the AC is a genuine data-model choice worth
+  understanding: probabilities represent a fixed universe of confidence
+  levels (0%, 10%, 20%, …, 100%, plus semantic labels "Won" / "Lost").
+  Every tenant's stages point at the same probability table by design —
+  makes cross-tenant reporting meaningful ("all deals at 50%") and keeps
+  the probability table small (~12 rows regardless of tenant count).
+  Reusable insight for any future "should this lookup be per-tenant or
+  shared?" decision: **if the semantic universe is fixed and small,
+  share globally; if tenants customize entries, replicate per team**.

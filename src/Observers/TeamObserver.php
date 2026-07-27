@@ -87,13 +87,20 @@ class TeamObserver
 
     /**
      * Seed the per-team CRM lookup data (labels, organization/address/contact
-     * types, industries, tax rates) by copying the global (team_id = null)
-     * rows into the target team.
+     * types, industries, tax rates, pipelines + pipeline stages) by copying
+     * the global (team_id = null) rows into the target team.
      *
      * Callers are expected to decide whether teams are enabled; this helper
-     * unconditionally copies the six per-entity blocks so console commands
-     * can invoke it directly for a specific team without re-checking the
+     * unconditionally copies the per-entity blocks so console commands can
+     * invoke it directly for a specific team without re-checking the
      * `laravel-crm.teams` config guard.
+     *
+     * Pipelines + pipeline stages are copied via `updateOrInsert` keyed on
+     * `team_id + model` (pipelines) and `team_id + pipeline_id + name`
+     * (stages) so the block is safe to re-run against a team that already
+     * has per-team pipelines — no duplicates, no exceptions.
+     * `PipelineStageProbability` rows are shared globally and are NOT
+     * copied per team.
      */
     public static function seedCrmDataForTeam(int $teamId): void
     {
@@ -171,6 +178,52 @@ class TeamObserver
                 'created_at' => Carbon::now(),
                 'updated_at' => Carbon::now(),
             ]);
+        }
+
+        // Pipelines + pipeline stages. `updateOrInsert` keeps this block
+        // idempotent so re-running against a team that already has per-team
+        // pipelines produces no duplicates. `PipelineStageProbability` rows
+        // are shared globally and are NOT copied per team.
+        foreach (DB::table(config('laravel-crm.db_table_prefix').'pipelines')
+            ->whereNull('team_id')
+            ->get() as $pipeline) {
+            DB::table(config('laravel-crm.db_table_prefix').'pipelines')->updateOrInsert([
+                'team_id' => $teamId,
+                'model' => $pipeline->model,
+            ], [
+                'external_id' => Uuid::uuid4()->toString(),
+                'name' => $pipeline->name,
+                'created_at' => Carbon::now(),
+                'updated_at' => Carbon::now(),
+            ]);
+
+            $teamPipelineId = DB::table(config('laravel-crm.db_table_prefix').'pipelines')
+                ->where('team_id', $teamId)
+                ->where('model', $pipeline->model)
+                ->value('id');
+
+            if ($teamPipelineId === null) {
+                continue;
+            }
+
+            foreach (DB::table(config('laravel-crm.db_table_prefix').'pipeline_stages')
+                ->where('pipeline_id', $pipeline->id)
+                ->whereNull('team_id')
+                ->get() as $stage) {
+                DB::table(config('laravel-crm.db_table_prefix').'pipeline_stages')->updateOrInsert([
+                    'team_id' => $teamId,
+                    'pipeline_id' => $teamPipelineId,
+                    'name' => $stage->name,
+                ], [
+                    'external_id' => Uuid::uuid4()->toString(),
+                    'description' => $stage->description ?? null,
+                    'pipeline_stage_probability_id' => $stage->pipeline_stage_probability_id ?? null,
+                    'order' => $stage->order ?? 0,
+                    'color' => $stage->color ?? null,
+                    'created_at' => Carbon::now(),
+                    'updated_at' => Carbon::now(),
+                ]);
+            }
         }
     }
 
