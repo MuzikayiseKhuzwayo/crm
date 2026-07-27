@@ -28,7 +28,7 @@ class LeadCreate extends Component
     {
         $this->currency = Setting::currency()->value ?? 'USD';
         $this->pipeline = Pipeline::where('model', get_class(new Lead))->first();
-        $this->pipeline_stage_id = $this->pipeline->pipelineStages->first()->id ?? null;
+        $this->pipeline_stage_id = $this->pipeline?->pipelineStages->first()?->id;
         $this->user_owner_id = auth()->user()->id;
 
         switch ($this->fromModelType) {
