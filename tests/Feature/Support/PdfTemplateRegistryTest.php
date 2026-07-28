@@ -12,7 +12,7 @@ test('all() returns 5 template entries with slug label description thumbnail', f
     expect($templates)
         ->toBeArray()
         ->toHaveCount(5)
-        ->toHaveKeys(['modern', 'classic', 'minimal', 'compact', 'professional']);
+        ->toHaveKeys(['modern', 'classic', 'bold', 'compact', 'professional']);
 
     foreach ($templates as $slug => $entry) {
         expect($entry)
@@ -45,7 +45,7 @@ test('viewFor falls back to defaultSlug when the slug is unknown', function () {
 });
 
 test('translation keys resolve to non-empty strings for every template', function () {
-    foreach (['modern', 'classic', 'minimal', 'compact', 'professional'] as $slug) {
+    foreach (['modern', 'classic', 'bold', 'compact', 'professional'] as $slug) {
         expect(__('laravel-crm::lang.pdf_template_'.$slug))
             ->toBeString()
             ->not->toBe('laravel-crm::lang.pdf_template_'.$slug)

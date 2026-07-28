@@ -52,7 +52,7 @@ class PdfTemplateRegistry
     {
         $entries = [];
 
-        foreach (['modern', 'classic', 'minimal', 'compact', 'professional'] as $slug) {
+        foreach (['modern', 'classic', 'bold', 'compact', 'professional'] as $slug) {
             $entries[$slug] = [
                 'slug' => $slug,
                 'label' => ucfirst(__('laravel-crm::lang.pdf_template_'.$slug)),

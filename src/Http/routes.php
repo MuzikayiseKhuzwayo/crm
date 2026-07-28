@@ -1234,6 +1234,14 @@ Route::group(['prefix' => 'settings', 'middleware' => 'auth.laravel-crm'], funct
     Route::post('', 'VentureDrake\LaravelCrm\Http\Controllers\SettingController@update')
         ->name('laravel-crm.settings.update')
         ->middleware(['can:update,VentureDrake\LaravelCrm\Models\Setting']);
+
+    /* PDF Template Preview — streams a live PDF for any (docType × slug)
+       pair against fabricated sample data. Gated on the same settings-
+       edit permission as the rest of the settings surface so only users
+       who can change the persisted template preference can preview one. */
+    Route::get('templates/preview/{docType}/{slug}', 'VentureDrake\LaravelCrm\Http\Controllers\TemplatePreviewController@show')
+        ->name('laravel-crm.settings.templates.preview')
+        ->middleware(['can:update,VentureDrake\LaravelCrm\Models\Setting']);
 });
 
 /* Profile */
