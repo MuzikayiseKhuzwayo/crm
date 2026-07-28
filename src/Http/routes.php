@@ -1242,6 +1242,14 @@ Route::group(['prefix' => 'settings', 'middleware' => 'auth.laravel-crm'], funct
     Route::get('templates/preview/{docType}/{slug}', 'VentureDrake\LaravelCrm\Http\Controllers\TemplatePreviewController@show')
         ->name('laravel-crm.settings.templates.preview')
         ->middleware(['can:update,VentureDrake\LaravelCrm\Models\Setting']);
+
+    /* Templates settings — the admin picker for per-doc-type template
+       preference. Same settings-edit permission gate as General Settings
+       AND the preview route above so all three surfaces are governed by
+       one uniform permission. */
+    Route::get('templates', 'VentureDrake\LaravelCrm\Http\Controllers\TemplateSettingsController@edit')
+        ->name('laravel-crm.settings.templates.edit')
+        ->middleware(['can:update,VentureDrake\LaravelCrm\Models\Setting']);
 });
 
 /* Profile */

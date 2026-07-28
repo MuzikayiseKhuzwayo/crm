@@ -2,6 +2,7 @@
     <x-mary-menu activate-by-route class="p-0">
         @can('view crm settings')
             <x-mary-menu-item link="{{ url(route('laravel-crm.settings.edit')) }}" title="{{ ucwords(__('laravel-crm::lang.general_settings')) }}"  />
+            <x-mary-menu-item link="{{ url(route('laravel-crm.settings.templates.edit')) }}" title="{{ ucwords(__('laravel-crm::lang.templates')) }}"  />
         @endcan
         @can('view crm roles')
             <x-mary-menu-item link="{{ url(route('laravel-crm.roles.index')) }}" title="{{ new \Illuminate\Support\HtmlString(ucwords(__('laravel-crm::lang.roles_and_permissions'))) }}"  />

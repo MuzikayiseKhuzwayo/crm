@@ -248,6 +248,7 @@ use VentureDrake\LaravelCrm\Livewire\Settings\TaxRates\TaxRateCreate;
 use VentureDrake\LaravelCrm\Livewire\Settings\TaxRates\TaxRateEdit;
 use VentureDrake\LaravelCrm\Livewire\Settings\TaxRates\TaxRateIndex;
 use VentureDrake\LaravelCrm\Livewire\Settings\TaxRates\TaxRateShow;
+use VentureDrake\LaravelCrm\Livewire\Settings\TemplateSettings;
 use VentureDrake\LaravelCrm\Livewire\SmsCampaigns\SmsCampaignCreate;
 use VentureDrake\LaravelCrm\Livewire\SmsCampaigns\SmsCampaignEdit;
 use VentureDrake\LaravelCrm\Livewire\SmsCampaigns\SmsCampaignIndex;
@@ -1062,6 +1063,7 @@ class LaravelCrmServiceProvider extends ServiceProvider
         Livewire::component('crm-related-deals', RelatedDeals::class);
 
         Livewire::component('crm-settings-edit', SettingEdit::class);
+        Livewire::component('crm-template-settings', TemplateSettings::class);
 
         Livewire::component('crm-profile-update-information', UpdateProfileInformationForm::class);
         Livewire::component('crm-profile-update-password', UpdatePasswordForm::class);
