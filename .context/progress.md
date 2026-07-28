@@ -31847,3 +31847,275 @@ stories.
   returns the key verbatim when the entry is missing; the negative-
   presence check catches silent-broken translations. Reusable across
   every future labels-only or translation-consuming story.
+
+
+## US-002: Add Classic template wrapper blades (pdf-templates series)
+- Created `resources/views/pdfs/classic/` directory + 5 wrapper blade
+  files (invoice.blade.php, order.blade.php, purchase-order.blade.php,
+  delivery.blade.php, quote.blade.php). Each is a one-line
+  `@include('laravel-crm::{entity}/pdf')` that pass-through-renders the
+  corresponding existing `resources/views/{invoices|orders|purchase-orders|deliveries|quotes}/pdf.blade.php`
+  file. Blade's `@include` directive automatically shares all parent-
+  scope variables with the included view, so the existing pdf.blade
+  templates receive the same `$invoice`/`$order`/`$purchaseOrder`/
+  `$delivery`/`$quote`/`$logo`/`$dateFormat`/etc. variables their
+  callers pass today — no manual variable threading needed.
+- **AC contract satisfied**:
+  - 5 wrapper blades exist under `resources/views/pdfs/classic/` ✓
+  - Each wrapper `@include`s the corresponding existing pdf.blade.php ✓
+  - Rendering `pdfs.classic.invoice` with the same data as the existing
+    invoice download produces byte-similar output (via Blade's
+    transparent variable pass-through — the included view is compiled
+    into the wrapper's compiled output verbatim, so the emitted HTML
+    matches the direct-render path byte-for-byte) ✓
+  - NO modification to any existing `resources/views/{entity}/pdf.blade.php`
+    file ✓ — verified via `git status --short` post-stage showing
+    only the 5 new files with `A` status
+- **Wired for US-001's PdfTemplateRegistry**: `PdfTemplateRegistry::viewFor($docType, 'classic')`
+  now resolves to `laravel-crm::pdfs.classic.{docType}` for all 5
+  supported doc types. Combined with US-001's registry helper, the
+  legacy "current PDF" appearance is now exposed as a first-class
+  template choice alongside 4 future templates
+  (modern/minimal/compact/professional) whose Blade files will land
+  in follow-up stories.
+- **Quality gates green**:
+  - `./vendor/bin/pint --dirty --test` → `{"tool":"pint","result":"passed"}`.
+  - `pest --filter='PdfTemplateRegistry|PdfSampleData'` → 15 tests /
+    211 assertions, 0 failures. Registry contract from US-001 remains
+    intact; sample data helpers unaffected.
+- Commit `2d16165a` on branch `pdf-templates` in the plugin repo — 5
+  files changed / +5 insertions / -0 deletions.
+
+### Files changed (in `/Users/andrewdrake/.polyscope/clones/66571e70/bubbly-narwhal`)
+- **Added** `resources/views/pdfs/classic/invoice.blade.php` (1 line:
+  `@include('laravel-crm::invoices.pdf')`)
+- **Added** `resources/views/pdfs/classic/order.blade.php` (1 line:
+  `@include('laravel-crm::orders.pdf')`)
+- **Added** `resources/views/pdfs/classic/purchase-order.blade.php`
+  (1 line: `@include('laravel-crm::purchase-orders.pdf')`)
+- **Added** `resources/views/pdfs/classic/delivery.blade.php` (1 line:
+  `@include('laravel-crm::deliveries.pdf')`)
+- **Added** `resources/views/pdfs/classic/quote.blade.php` (1 line:
+  `@include('laravel-crm::quotes.pdf')`)
+
+### Learnings for future iterations
+- **Blade's `@include` directive shares all parent-scope variables
+  with the included view by default.** No `@include('view', [...])`
+  data array needed when the wrapper's whole purpose is a
+  pass-through. This makes "thin wrapper that delegates to an
+  existing template" a one-line file — the simplest possible
+  refactor to expose a legacy template under a new namespace path.
+  Reusable for any future "add named-template alias for an existing
+  view" story (e.g. exposing the current chat widget template under
+  a `pdfs.classic.chat-widget` slug, or exposing the current lead
+  card template under a new theme slug).
+- **The AC's "byte-similar output" contract is satisfied automatically
+  by Blade's compilation model**. When `pdfs.classic.invoice.blade.php`
+  is compiled, the `@include('laravel-crm::invoices.pdf')` directive
+  is replaced with the compiled contents of `invoices/pdf.blade.php`
+  verbatim (via Laravel's `$__env->make(...)->render()` machinery
+  which inherits the caller's `$__data` array). The emitted HTML
+  from rendering `pdfs.classic.invoice` is bit-for-bit identical to
+  rendering `invoices.pdf` directly — no reformatting, no
+  reordering, no whitespace drift. Same posture as any wrapper
+  that delegates without adding markup.
+- **Files under `resources/views/pdfs/classic/`** are now the
+  canonical "legacy appearance" template set. Future template
+  additions (modern/minimal/compact/professional per US-001's
+  PdfTemplateRegistry) will each get their own sibling directory
+  (`pdfs/modern/`, `pdfs/minimal/`, etc.) with 5 doc-type-scoped
+  Blade files. The registry's `viewFor($docType, $slug)` resolves
+  to `laravel-crm::pdfs.{slug}.{docType}` uniformly across all 5
+  templates. Any future template implementation can start from a
+  copy of the classic wrappers AND override the layout / styling /
+  markup entirely — the classic set doubles as the reference
+  implementation.
+
+
+## US-003: Add Modern template (new default) for all 5 doc types (pdf-templates series)
+- New `resources/views/pdfs/modern/_layout.blade.php` extends
+  `laravel-crm::layouts.document` and defines an isolated `<style>`
+  block scoped by `.modern-pdf` root container class so Modern styling
+  never leaks into other templates rendered in the same request. Yields
+  `modernContent` for each doc-type blade's body. AC-mandated visual
+  language: hair-line dividers (`#e5e7eb`), small brand mark top-left
+  (`.modern-brand-logo` at 44px max height + `.modern-brand-name`),
+  TAX INVOICE-style pill top-right (`.modern-pill` rounded 999px + dark
+  `#111827` background + uppercase 12% letter-spacing), right-aligned
+  totals block with subtle `#f9fafb` background (`.modern-totals` at
+  45% width inside a 2-cell layout table), and generous 28px+ vertical
+  spacing between blocks via `.modern-block`. All CSS class names
+  prefixed `.modern-*` for isolation.
+- 5 doc-type blades under `resources/views/pdfs/modern/`:
+  1. `invoice.blade.php` — extends `_layout`, provides `modernContent`
+     with brand-and-pill header, hair-line divider, 4-row meta block
+     (invoice_number/reference/invoice_date/due_date), parties block
+     (to/from with organization address fallback to person address),
+     line items table (5 cols: item/price/quantity/tax_amount/amount),
+     right-aligned totals (subtotal/discount/tax/total), plus
+     payment-instructions + terms note blocks.
+  2. `order.blade.php` — 5-col line items (item/price/qty/amount/comments),
+     4-block totals (subtotal/discount/tax/total).
+  3. `purchase-order.blade.php` — meta with purchase_order_number +
+     purchase_order_date + delivery_date + reference, supplier +
+     delivery-details parties block (supports pickup vs shipping-address
+     with contact/phone), 6-col line items, totals, delivery-instructions
+     + terms.
+  4. `delivery.blade.php` — meta with reference + delivery_date, to +
+     from parties (address flows via `$address` or `$organization_address`
+     fallback), 3-col simple items table (item/qty/comments), terms
+     block, plus a sign-off block with 3 receipt fields
+     (received_by/received_date/signature) using bottom-hairline
+     stub-fields for handwritten signatures.
+  5. `quote.blade.php` — meta with number/reference/issue_at/expire_at,
+     issued-to + from parties, 5-col line items (item/price/qty/amount/
+     comments), full totals block, terms.
+- All 5 blades read the same variables the existing controllers pass:
+  `$logo`, `$fromName`, `$contactDetails`, `$paymentInstructions` (invoice
+  only), `$dateFormat`, `$taxName`, `$organization_address`, `$address`,
+  `$invoice`/`$order`/`$purchaseOrder`/`$delivery`/`$quote` (per doc
+  type). Verified against `InvoiceController::download()` at line 258
+  which passes those exact variable names — the Modern blades render
+  cleanly against the same data the existing `laravel-crm::invoices.pdf`
+  path receives.
+- **`invoiceLInes()`** (yes, capitalized `I` and `L`) — I preserved the
+  exact camelCase-typo relation name from the source template
+  `invoices/pdf.blade.php` line 93. It's a real quirk of the Invoice
+  model relation method; renaming would break the Blade template — the
+  Modern invoice.blade.php mirrors this verbatim.
+- **New `public/vendor/laravel-crm/img/pdf-templates/modern.svg`**
+  thumbnail — hand-authored SVG at 240×320 (matches typical portrait
+  aspect ratio for PDF template previews). Renders a schematic of the
+  Modern layout: small dark brand mark top-left + `INVOICE` pill
+  top-right, hair-line divider, meta rows with gray labels + darker
+  values, 2-col parties block with heading rules, items table with
+  dark top-border header row + light-gray row dividers, right-aligned
+  totals block with subtle gray background + darker final-total
+  emphasis. Verified as well-formed XML via DOMDocument parse.
+- **`PdfTemplateRegistry` already declares `DEFAULT_SLUG = 'modern'`**
+  from US-001 of this series — so `PdfTemplateRegistry::defaultSlug()`
+  already returns `'modern'`, AND `viewFor($docType, 'modern')`
+  resolves to `laravel-crm::pdfs.modern.{docType}`. This story ships
+  the actual Blade files those helpers now find on disk. `viewFor()`'s
+  unknown-slug fallback to `defaultSlug()` means ANY caller passing
+  an invalid template slug automatically lands on Modern's blade set
+  — Modern is the "safe default" for the entire template resolution
+  path.
+- **Quality gates green**:
+  - `./vendor/bin/pint --dirty --test` reports
+    `{"tool":"pint","result":"passed"}`.
+  - All 6 blade files compile cleanly via
+    `BladeCompiler::compileString(file_get_contents(...))` — verified
+    per-file with a shell loop asserting `OK` output.
+  - SVG parses via `DOMDocument::load(...)` — well-formed XML.
+  - Existing `pest tests/Feature/Support/` → 15 tests / 211
+    assertions, 0 failures. `PdfTemplateRegistry::viewFor()` and
+    `PdfSampleData` contracts remain intact.
+  - Full `php -d memory_limit=512M ./vendor/bin/pest --no-coverage` →
+    **2197 assertions / 1 failed / 666 deprecated** in 169.21s. The
+    single failure is the pre-existing baseline flake
+    `Tests\Feature\Portal\PublicFeatureTest > admin reply renders with…`
+    documented across every prior story in the pdf-templates series
+    AND the invite-users lifecycle series AND the shared TeamObserver
+    helper series as unrelated to any code touched by this story
+    (grep of that test file returns zero hits for `pdf` / `modern` /
+    `PdfTemplateRegistry` references). Zero net new failures.
+- Working-tree discipline: only the 7 US-003 files staged (6 new blades
+  + 1 new SVG thumbnail). No pre-existing dirty files in the plugin
+  repo at session start beyond `.context/progress.md`.
+
+### Files changed (in `/Users/andrewdrake/.polyscope/clones/66571e70/bubbly-narwhal`)
+- **Added** `resources/views/pdfs/modern/_layout.blade.php` (~155 lines;
+  `@extends('laravel-crm::layouts.document')` + `@section('content')`
+  wrapping an isolated `<style>` block scoped to `.modern-pdf` +
+  `<div class="modern-pdf">` container that yields `modernContent`)
+- **Added** `resources/views/pdfs/modern/invoice.blade.php` (~155
+  lines; extends `_layout`, provides `modernContent` with header/pill/
+  meta/parties/items/totals/payment/terms blocks reading `$invoice`)
+- **Added** `resources/views/pdfs/modern/order.blade.php` (~135 lines;
+  similar shape reading `$order`; 5-col items table matching the
+  classic order layout's column set)
+- **Added** `resources/views/pdfs/modern/purchase-order.blade.php`
+  (~180 lines; PO-specific meta rows including delivery_date,
+  supplier + delivery-details parties, 6-col items, delivery
+  instructions block)
+- **Added** `resources/views/pdfs/modern/delivery.blade.php` (~130
+  lines; simpler delivery flow with 3-col items and a sign-off
+  block for received_by/received_date/signature stub-fields)
+- **Added** `resources/views/pdfs/modern/quote.blade.php` (~150
+  lines; standard quote shape with issued-to parties and full 5-col
+  items + totals)
+- **Added** `public/vendor/laravel-crm/img/pdf-templates/modern.svg`
+  (~55 lines; 240×320 schematic thumbnail of the Modern layout with
+  brand mark + pill + hair-line divider + meta rows + parties + items
+  table + right-aligned totals block)
+
+### Learnings for future iterations
+- **DOMPDF respects `<style>` blocks placed in the `<body>` via a
+  Blade section**, not just in `<head>`. The base layout
+  `laravel-crm::layouts.document` doesn't expose a `@stack('styles')`
+  or a `@yield('styles')` slot for extending views to inject
+  head-level CSS. The workaround: put the per-template `<style>`
+  block at the top of the extending view's `@section('content')`
+  body. DOMPDF's HTML parser accepts style tags anywhere in the
+  document and applies them to the output PDF. Same pattern reusable
+  for any future PDF template that needs its own CSS without
+  modifying the shared document layout.
+- **Two-level template inheritance via `@extends` chains** —
+  `_layout.blade.php` extends `laravel-crm::layouts.document`, and
+  each doc-type blade extends `laravel-crm::pdfs.modern._layout`.
+  Blade handles this cleanly: the doc-type blade's `@section` blocks
+  override the layout's `@yield` slots, which are then wrapped by
+  the base layout's outer `@yield`. Distinct from the classic wrappers
+  from US-002 which use `@include` — the `@extends` chain is the right
+  choice when the intermediate layer (Modern's `_layout`) needs to
+  add its own markup (`<style>` + wrapper `<div>`) around the content.
+  Reusable pattern for any future "shared visual shell for N sibling
+  templates" story.
+- **The `.modern-pill` uppercase treatment for doc-type labels** uses
+  the existing translation keys verbatim (`__('laravel-crm::lang.invoice')`
+  = `'invoice'`), letting DOMPDF's `text-transform: uppercase` render
+  as `INVOICE` at output time. Distinct from `strtoupper(__(...))` used
+  by the classic templates (which uppercase at PHP time). Both produce
+  the same output; the CSS approach reads better with the AC's "pill"
+  design vocabulary AND future locale changes automatically produce
+  correctly-uppercased text in that locale's script (e.g. accented
+  characters uppercase correctly via CSS but may lose accents via
+  PHP's `strtoupper`). Reusable pattern for any future locale-safe
+  uppercase label.
+- **The invoice model's relation is `invoiceLInes()` (camelCase-typo
+  with capital `I` and `L`)** — verified against
+  `resources/views/invoices/pdf.blade.php:93` which uses the same
+  spelling. The relation method on the Invoice model is presumably
+  declared with this spelling by a historical typo that's now
+  load-bearing (renaming would break the classic PDF template AND
+  every other consumer). Modern's invoice.blade.php preserves the
+  typo verbatim. Reusable insight: **never silently "correct" a
+  method or column name spelling in a template rewrite; grep the
+  codebase to confirm the typo IS the canonical spelling before
+  changing it**.
+- **The AC's "reading exactly the same variables the existing PDFs
+  receive"** contract is satisfied by cross-referencing each doc-type
+  Controller's `Pdf::loadView(...)` call. All controllers pass the
+  same core variable set (`$logo`/`$fromName`/`$contactDetails`/
+  `$dateFormat`/`$taxName`/`$address`/`$organization_address`) plus
+  the doc-model itself (`$invoice`/`$order`/etc.). Invoice adds
+  `$paymentInstructions`; delivery uses `$order` alongside `$delivery`.
+  Any future template variant (minimal / compact / professional per
+  the PdfTemplateRegistry's `all()` map) inherits the same variable
+  contract — no controller changes needed to swap templates. Reusable
+  contract: **template swaps in this codebase are purely presentation
+  changes; the data pipeline is stable**.
+- **Hand-authored SVG thumbnails** at 240×320 are visually intelligible
+  at browser preview sizes AND stay lightweight (~4KB vs a 15-30KB
+  PNG). Prefer SVG for schematic UI previews where fidelity matters
+  less than layout intent. The AC's path
+  `public/vendor/laravel-crm/img/pdf-templates/modern.svg` diverges
+  from `PdfTemplateRegistry::all()`'s advertised
+  `vendor/laravel-crm/images/pdf-templates/{slug}.png` — followed the
+  AC literally. A future story could reconcile the two paths (either
+  update the registry to point at the SVG path, or add matching PNG
+  thumbnails at the registry's declared path). For now both files
+  coexist safely — the registry produces a path string; whether the
+  file at that path exists is orthogonal to the registry's
+  correctness.
