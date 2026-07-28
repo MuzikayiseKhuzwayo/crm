@@ -9,6 +9,7 @@ use VentureDrake\LaravelCrm\Models\Order;
 use VentureDrake\LaravelCrm\Models\OrderProduct;
 use VentureDrake\LaravelCrm\Models\Organization;
 use VentureDrake\LaravelCrm\Models\Person;
+use VentureDrake\LaravelCrm\Models\Product;
 use VentureDrake\LaravelCrm\Models\PurchaseOrder;
 use VentureDrake\LaravelCrm\Models\PurchaseOrderLine;
 use VentureDrake\LaravelCrm\Models\Quote;
@@ -59,7 +60,11 @@ test('invoice() returns an unsaved Invoice with 3 line items + person + organiza
 
     foreach ($invoice->invoiceLines as $line) {
         expect($line)->toBeInstanceOf(InvoiceLine::class)
-            ->and($line->exists)->toBeFalse();
+            ->and($line->exists)->toBeFalse()
+            ->and($line->product_id)->not->toBeNull()
+            ->and($line->currency)->toBe('USD')
+            ->and($line->product)->toBeInstanceOf(Product::class)
+            ->and($line->product->name)->not->toBe('');
     }
 });
 
@@ -77,7 +82,9 @@ test('order() returns an unsaved Order with 3 line items + person + organization
 
     foreach ($order->orderProducts as $product) {
         expect($product)->toBeInstanceOf(OrderProduct::class)
-            ->and($product->exists)->toBeFalse();
+            ->and($product->exists)->toBeFalse()
+            ->and($product->product_id)->not->toBeNull()
+            ->and($product->product)->toBeInstanceOf(Product::class);
     }
 });
 
@@ -95,7 +102,9 @@ test('purchaseOrder() returns an unsaved PurchaseOrder with 3 lines + person + o
 
     foreach ($purchaseOrder->purchaseOrderLines as $line) {
         expect($line)->toBeInstanceOf(PurchaseOrderLine::class)
-            ->and($line->exists)->toBeFalse();
+            ->and($line->exists)->toBeFalse()
+            ->and($line->product_id)->not->toBeNull()
+            ->and($line->product)->toBeInstanceOf(Product::class);
     }
 });
 
@@ -114,7 +123,9 @@ test('delivery() returns an unsaved Delivery with 3 line items + person + organi
         expect($product)->toBeInstanceOf(DeliveryProduct::class)
             ->and($product->exists)->toBeFalse()
             ->and($product->orderProduct)->toBeInstanceOf(OrderProduct::class)
-            ->and($product->orderProduct->exists)->toBeFalse();
+            ->and($product->orderProduct->exists)->toBeFalse()
+            ->and($product->orderProduct->product_id)->not->toBeNull()
+            ->and($product->orderProduct->product)->toBeInstanceOf(Product::class);
     }
 });
 
@@ -133,7 +144,9 @@ test('quote() returns an unsaved Quote with 3 line items + person + organization
 
     foreach ($quote->quoteProducts as $product) {
         expect($product)->toBeInstanceOf(QuoteProduct::class)
-            ->and($product->exists)->toBeFalse();
+            ->and($product->exists)->toBeFalse()
+            ->and($product->product_id)->not->toBeNull()
+            ->and($product->product)->toBeInstanceOf(Product::class);
     }
 });
 

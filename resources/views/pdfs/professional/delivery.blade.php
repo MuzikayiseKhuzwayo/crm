@@ -93,7 +93,7 @@
             </tr>
         </thead>
         <tbody>
-            @foreach($delivery->deliveryProducts()->where('quantity', '>', 0)->orderBy('order', 'asc')->orderBy('created_at', 'asc')->get() as $deliveryProduct)
+            @foreach($delivery->deliveryProducts->where('quantity', '>', 0)->sortBy([['order', 'asc'], ['created_at', 'asc']]) as $deliveryProduct)
                 <tr>
                     <td>{{ $deliveryProduct->orderProduct->product->name }}</td>
                     <td class="prof-num">{{ $deliveryProduct->quantity }}</td>

@@ -104,7 +104,7 @@
             </tr>
         </thead>
         <tbody>
-            @foreach($purchaseOrder->purchaseOrderLines()->whereNotNull('product_id')->get() as $purchaseOrderLine)
+            @foreach($purchaseOrder->purchaseOrderLines->whereNotNull('product_id') as $purchaseOrderLine)
                 <tr>
                     <td>{{ $purchaseOrderLine->product->name ?? null }}</td>
                     <td class="prof-num">{{ money($purchaseOrderLine->price ?? null, $purchaseOrderLine->currency) }}</td>

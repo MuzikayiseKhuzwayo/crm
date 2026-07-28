@@ -12,6 +12,7 @@ use VentureDrake\LaravelCrm\Models\Order;
 use VentureDrake\LaravelCrm\Models\OrderProduct;
 use VentureDrake\LaravelCrm\Models\Organization;
 use VentureDrake\LaravelCrm\Models\Person;
+use VentureDrake\LaravelCrm\Models\Product;
 use VentureDrake\LaravelCrm\Models\PurchaseOrder;
 use VentureDrake\LaravelCrm\Models\PurchaseOrderLine;
 use VentureDrake\LaravelCrm\Models\Quote;
@@ -54,6 +55,20 @@ class PdfSampleData
     }
 
     /**
+     * A fabricated Product for use as the line-item product relation.
+     * Templates render `$line->product->name`, so every fabricated line
+     * needs a Product attached via setRelation to keep previews non-blank.
+     */
+    public static function product(string $name = 'Sample product'): Product
+    {
+        $product = new Product;
+        $product->id = 1;
+        $product->name = $name;
+
+        return $product;
+    }
+
+    /**
      * A fabricated Address suitable for use as billing/shipping on any doc.
      */
     public static function address(): Address
@@ -92,10 +107,14 @@ class PdfSampleData
             $line = new InvoiceLine;
             $line->name = $seed['name'];
             $line->description = $seed['description'];
+            $line->comments = $seed['description'];
             $line->quantity = $seed['quantity'];
             $line->price = $seed['price'];
             $line->tax_amount = $seed['tax_amount'];
             $line->amount = $seed['amount'];
+            $line->currency = 'USD';
+            $line->product_id = 1;
+            $line->setRelation('product', self::product($seed['name']));
             $lines->push($line);
         }
 
@@ -130,6 +149,9 @@ class PdfSampleData
             $product->quantity = $seed['quantity'];
             $product->price = $seed['price'];
             $product->amount = $seed['amount'];
+            $product->currency = 'USD';
+            $product->product_id = 1;
+            $product->setRelation('product', self::product($seed['name']));
             $products->push($product);
         }
 
@@ -161,10 +183,14 @@ class PdfSampleData
             $line = new PurchaseOrderLine;
             $line->name = $seed['name'];
             $line->description = $seed['description'];
+            $line->comments = $seed['description'];
             $line->quantity = $seed['quantity'];
             $line->price = $seed['price'];
             $line->tax_amount = $seed['tax_amount'];
             $line->amount = $seed['amount'];
+            $line->currency = 'USD';
+            $line->product_id = 1;
+            $line->setRelation('product', self::product($seed['name']));
             $lines->push($line);
         }
 
@@ -194,6 +220,9 @@ class PdfSampleData
             $orderProduct->quantity = $seed['quantity'];
             $orderProduct->price = $seed['price'];
             $orderProduct->amount = $seed['amount'];
+            $orderProduct->currency = 'USD';
+            $orderProduct->product_id = 1;
+            $orderProduct->setRelation('product', self::product($seed['name']));
 
             $deliveryProduct = new DeliveryProduct;
             $deliveryProduct->quantity = $seed['quantity'];
@@ -236,6 +265,9 @@ class PdfSampleData
             $product->quantity = $seed['quantity'];
             $product->price = $seed['price'];
             $product->amount = $seed['amount'];
+            $product->currency = 'USD';
+            $product->product_id = 1;
+            $product->setRelation('product', self::product($seed['name']));
             $products->push($product);
         }
 

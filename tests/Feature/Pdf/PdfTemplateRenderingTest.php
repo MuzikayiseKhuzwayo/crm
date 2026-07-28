@@ -132,6 +132,52 @@ test('default template slug is `modern` when no setting is persisted', function 
     }
 });
 
+test('every new template renders sample line items — guards against the empty-table regression', function () {
+    // Locks that PdfSampleData's fabricated line items actually surface
+    // in each new template's rendered HTML. Renders via View::make (not
+    // through DomPDF) so the assertion runs against readable HTML rather
+    // than opaque PDF bytes — the DomPDF path is covered separately by
+    // the (docType × slug) parametric test above.
+    $newSlugs = ['modern', 'bold', 'compact', 'professional'];
+
+    $perDocType = [
+        'invoice' => [
+            'invoice' => PdfSampleData::invoice(),
+        ],
+        'order' => [
+            'order' => PdfSampleData::order(),
+        ],
+        'purchase-order' => [
+            'purchaseOrder' => PdfSampleData::purchaseOrder(),
+        ],
+        'quote' => [
+            'quote' => PdfSampleData::quote(),
+        ],
+    ];
+
+    $common = [
+        'dateFormat' => 'M j, Y',
+        'taxName' => 'Tax',
+        'contactDetails' => null,
+        'paymentInstructions' => null,
+        'fromName' => 'Sample Organization',
+        'logo' => null,
+        'email' => null,
+        'phone' => null,
+        'address' => PdfSampleData::address(),
+        'organization_address' => PdfSampleData::address(),
+    ];
+
+    foreach ($perDocType as $docType => $entity) {
+        foreach ($newSlugs as $slug) {
+            $html = View::make('laravel-crm::pdfs.'.$slug.'.'.$docType, array_merge($common, $entity))->render();
+
+            expect($html)->toContain('Sample product A');
+            expect($html)->toContain('Sample product B');
+        }
+    }
+});
+
 test('classic template renders the existing pdf.blade.php content via @include pass-through', function () {
     // The Classic wrappers are one-line
     // `@include('laravel-crm::{entity}/pdf')` blades (US-002 of the

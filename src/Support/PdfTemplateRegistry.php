@@ -57,7 +57,7 @@ class PdfTemplateRegistry
                 'slug' => $slug,
                 'label' => ucfirst(__('laravel-crm::lang.pdf_template_'.$slug)),
                 'description' => __('laravel-crm::lang.pdf_template_'.$slug.'_description'),
-                'thumbnail' => 'vendor/laravel-crm/images/pdf-templates/'.$slug.'.png',
+                'thumbnail' => 'vendor/laravel-crm/img/pdf-templates/'.$slug.'.svg',
             ];
         }
 

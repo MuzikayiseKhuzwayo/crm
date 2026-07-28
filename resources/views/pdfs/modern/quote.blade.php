@@ -103,7 +103,7 @@
             </tr>
         </thead>
         <tbody>
-            @foreach($quote->quoteProducts()->whereNotNull('product_id')->orderBy('order', 'asc')->orderBy('created_at', 'asc')->get() as $quoteProduct)
+            @foreach($quote->quoteProducts->whereNotNull('product_id')->sortBy([['order', 'asc'], ['created_at', 'asc']]) as $quoteProduct)
                 <tr>
                     <td>{{ $quoteProduct->product->name }}</td>
                     <td class="modern-num">{{ money($quoteProduct->price ?? null, $quoteProduct->currency) }}</td>
