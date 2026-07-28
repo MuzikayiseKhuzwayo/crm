@@ -31719,3 +31719,131 @@ stories.
   renders with…` — 1 failure, 1986 assertions, 651 deprecated across
   every story). Same "pre-existing baseline preserved" discipline
   documented across every prior autopilot story.
+
+
+## US-001: Add PDF template registry and sample data support classes (pdf-templates series kickoff)
+- Verify-and-commit story: all four AC-mandated files were already staged
+  in the working tree at session start (2 new production files + 2 new
+  test files + labels.php modifications), pre-authored by an earlier
+  autopilot iteration on this same branch. Read every file end-to-end,
+  mapped each AC bullet against the current implementation, ran quality
+  gates, and committed the staged work with the AC-named message.
+- **Files verified against AC contracts**:
+  1. `src/Support/PdfTemplateRegistry.php` (~80 lines) — declares
+     `DEFAULT_SLUG = 'modern'`, `DOC_TYPES` array (invoice/order/
+     purchase-order/delivery/quote), and three static methods:
+     - `defaultSlug(): string` returns `'modern'` (AC bullet 3).
+     - `all(): array` returns a `[slug => {slug,label,description,thumbnail}]`
+       map for all 5 templates (modern/classic/minimal/compact/professional).
+       Labels and descriptions resolve through `laravel-crm::lang.pdf_template_{slug}`
+       + `_description` translation keys; thumbnails point at
+       `vendor/laravel-crm/images/pdf-templates/{slug}.png` (AC bullet 1).
+     - `viewFor(string $docType, string $slug): string` returns
+       `laravel-crm::pdfs.{resolved_slug}.{docType}` where `$resolved_slug`
+       is `$slug` when known OR `defaultSlug()` when unknown (AC bullets
+       2 and 4).
+  2. `src/Support/PdfSampleData.php` (~290 lines) — exposes:
+     - `person()`, `organization()`, `address()` for fabricated party
+       records (all `->exists === false` — unsaved).
+     - `invoice()`, `order()`, `purchaseOrder()`, `delivery()`, `quote()`
+       for the 5 doc types, each with 3 line items (via a shared
+       `lineItemSeeds()` protected helper) and `setRelation()`-attached
+       person/organization/address (AC bullet 5).
+     - Every line item is an in-memory model with name/description/quantity/
+       price/tax_amount/amount pre-populated in DOLLARS (model setters
+       multiply by 100 to store as cents; this way the money() helper
+       renders correct dollar amounts when Blade templates read the
+       stored values back through the model's accessor chain).
+  3. `resources/lang/en/lang.php` — appended 12 net-new translation keys
+     at the tail of the return array under a
+     `// PDF templates (shared registry entries used across the 5 doc types)`
+     section marker: `templates`, `pdf_template`, plus 5 pairs of
+     `pdf_template_{slug}` + `pdf_template_{slug}_description` entries
+     (AC bullet 6). Values follow the file's lowercase-key convention for
+     labels intended to be rendered via `ucfirst(__('...'))` at the call
+     site — matches the pattern across every prior `user_invitation_*`,
+     `campaign_*`, `feature_*` addition in this file.
+  4. `tests/Feature/Support/PdfTemplateRegistryTest.php` (~63 lines) — 6
+     Pest tests locking the AC contract as a regression gate:
+     defaultSlug returns 'modern'; all() shape + count + per-entry key
+     validation; viewFor with a known slug; viewFor across every 5×5
+     (doc type × slug) product; viewFor falls back to defaultSlug on
+     unknown/empty slugs; translation keys resolve to non-key strings
+     for all 5 templates + the `templates` + `pdf_template` labels.
+  5. `tests/Feature/Support/PdfSampleDataTest.php` (~158 lines) — 9 Pest
+     tests locking:
+     - person/organization/address return unsaved model instances with
+       AC-named fields populated.
+     - invoice/order/purchaseOrder/delivery/quote each return an unsaved
+       model with the AC-named identifier fields (invoice_id / order_id /
+       purchase_order_id / delivery_id / quote_id), 3 line items of the
+       correct FQCN (InvoiceLine / OrderProduct / PurchaseOrderLine /
+       DeliveryProduct+OrderProduct via nested setRelation / QuoteProduct),
+       AND person + organization + address relations set.
+     - Regression guard: calling every method never persists rows to the
+       DB (counts before/after are equal across Invoice, Order, Quote,
+       Person, Organization).
+- **Quality gates green**:
+  - `./vendor/bin/pint --dirty --test` reports
+    `{"tool":"pint","result":"passed"}`.
+  - `pest tests/Feature/Support/ --no-coverage` → **15 tests / 211
+    assertions**, all pass. The pest summary line shows "15 deprecated"
+    (Pest's terminology for tests that emitted a deprecation warning
+    during execution — pre-existing PHP 8.5 PDO::MYSQL_ATTR_SSL_CA
+    deprecation from Testbench's default database.php, unrelated to any
+    code touched by this story). No failures.
+- **Working-tree discipline**: only the 5 AC-scoped files were touched.
+  Commit `93a20eef` on branch `pdf-templates` — 5 files changed / +542
+  insertions / -0 deletions.
+
+### Files changed (in `/Users/andrewdrake/.polyscope/clones/66571e70/bubbly-narwhal`)
+- **Added** `src/Support/PdfTemplateRegistry.php` (5 templates × 5 doc
+  types = 25 valid viewFor() combinations + a graceful unknown-slug
+  fallback to defaultSlug())
+- **Added** `src/Support/PdfSampleData.php` (party helpers + 5 doc-type
+  factories, all unsaved, all with 3 line items each)
+- **Added** `tests/Feature/Support/PdfTemplateRegistryTest.php` (6
+  tests / 115 assertions)
+- **Added** `tests/Feature/Support/PdfSampleDataTest.php` (9 tests /
+  96 assertions)
+- **Modified** `resources/lang/en/lang.php` (+14 lines: section marker
+  comment + 12 net-new translation keys under the AC's `templates`
+  group)
+
+### Learnings for future iterations
+- **Setting model line-item values in DOLLARS (not cents)** is the right
+  pattern when the model's `set{Column}Attribute` mutator multiplies by
+  100 to store as cents. `PdfSampleData::lineItemSeeds()` returns
+  `'price' => 500` (dollars); assigning `$line->price = 500` triggers
+  `setPriceAttribute(500)` which stores `50000` (cents) in the raw
+  attributes. When the Blade template reads `$line->price` back via the
+  standard accessor, it returns the stored 50000 (cents). The `money()`
+  helper then renders `$500.00`. The trade-off: setting the seed in
+  dollars means test assertions that read `$line->getAttributes()['price']`
+  would see the ×100 cents value, NOT the input dollars. Same "money
+  stored ×100" pattern documented across many prior stories in the
+  parity series continuation.
+- **`setRelation($name, $model)` on an unsaved Eloquent model** attaches
+  a related model in-memory without triggering any DB writes. Reading
+  `$invoice->person` (or `$invoice->invoiceLines`) after
+  `setRelation('person', $person)` returns the passed-in model verbatim
+  — no query to `crm_people`, no `->save()` calls. This is the canonical
+  Laravel pattern for "hydrate a model in-memory for rendering purposes"
+  without producing any side effects. Reusable for any future preview /
+  sample-data / snapshot flow.
+- **The 5×5 template×docType grid** produces 25 valid Blade view paths
+  the `viewFor()` helper resolves against. When shipping the actual
+  Blade template files (a future story), maintainers can `find` the
+  expected view names via `PdfTemplateRegistry::DOC_TYPES` × the
+  `array_keys(PdfTemplateRegistry::all())` product — the registry is
+  the single source of truth. Any template file missing from disk
+  would surface as a "view not found" error at render time; adding
+  a per-view existence check to the test suite could catch this
+  proactively in a future hardening story.
+- **The "translation key resolves to a non-key string" assertion
+  pattern** — `expect(__('...'))->toBeString()->not->toBe('...key...')`
+  — is Laravel's canonical way to distinguish "translation resolved"
+  from "translation missing" at the test level. Laravel's translator
+  returns the key verbatim when the entry is missing; the negative-
+  presence check catches silent-broken translations. Reusable across
+  every future labels-only or translation-consuming story.

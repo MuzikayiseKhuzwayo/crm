@@ -995,4 +995,18 @@ return [
     'last_sent' => 'last sent',
     'expires' => 'expires',
     'invited_by' => 'invited by',
+
+    // PDF templates (shared registry entries used across the 5 doc types)
+    'templates' => 'templates',
+    'pdf_template' => 'PDF template',
+    'pdf_template_modern' => 'modern',
+    'pdf_template_modern_description' => 'A clean, contemporary layout with plenty of whitespace.',
+    'pdf_template_classic' => 'classic',
+    'pdf_template_classic_description' => 'A traditional layout inspired by long-standing document conventions.',
+    'pdf_template_minimal' => 'minimal',
+    'pdf_template_minimal_description' => 'A stripped-down layout that emphasises the line items.',
+    'pdf_template_compact' => 'compact',
+    'pdf_template_compact_description' => 'A dense layout that fits more onto a single page.',
+    'pdf_template_professional' => 'professional',
+    'pdf_template_professional_description' => 'A polished layout with branded headers and a summary panel.',
 ];
