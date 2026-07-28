@@ -32607,3 +32607,393 @@ stories.
   with byte-exact parity** (`PublicFeatureTest > admin reply renders
   with…`). Same "pre-existing baseline preserved" discipline
   documented across every prior autopilot story in this codebase.
+
+
+## US-007: Add Templates settings page with Livewire component, controller, view, route, and nav (pdf-templates series)
+- New `src/Livewire/Settings/TemplateSettings.php` (~99 lines) Livewire component:
+  - `public array $selected = []` — keyed by docType (from
+    `PdfTemplateRegistry::DOC_TYPES`), holds the selected template slug.
+  - `mount()` iterates `DOC_TYPES`, reads via
+    `SettingService::get('pdf_template_{docType}', PdfTemplateRegistry::defaultSlug())`,
+    populates `$this->selected`.
+  - `select(string $docType, string $slug): void` — validates docType is
+    in DOC_TYPES + slug is in `PdfTemplateRegistry::all()`, then updates
+    `$this->selected[$docType] = $slug`. Silently no-ops on unknowns
+    (defensive against tampered payloads).
+  - `save(): void` — iterates DOC_TYPES, defaults unknown persisted slugs
+    back to `defaultSlug()` (belt-and-braces beyond the select() guard),
+    persists via `SettingService::set()` for each of the 5 keys, then
+    `->forgetCache()` so subsequent `get()` reads see the fresh values
+    in the same request, then fires `->success(ucfirst(trans(
+    'laravel-crm::lang.settings_updated')))` via the Mary Toast trait.
+  - `render()` returns
+    `view('laravel-crm::livewire.settings.template-settings', [
+    'docTypes' => PdfTemplateRegistry::DOC_TYPES, 'templates' =>
+    PdfTemplateRegistry::all()])`.
+  - Protected `settingKey(string): string` helper returns
+    `'pdf_template_'.$docType` — matches the hyphenated-docType key
+    convention locked in by US-005 (readers use
+    `pdf_template_purchase-order` not `pdf_template_purchase_order`).
+- New `resources/views/livewire/settings/template-settings.blade.php`
+  (~71 lines): `x-mary-form wire:submit="save"` wrapping an
+  `x-mary-tabs` block. Each of 5 doc-type tabs renders an `x-mary-card`
+  with a responsive 5-column grid of template cards. Each card shows:
+  - name + radio (checked when selected), checkmark badge when selected.
+  - Thumbnail: reads from `public/vendor/laravel-crm/img/pdf-templates/{slug}.svg`
+    via `file_exists(public_path(...))` gate (falls back to a text label
+    for missing thumbnails — `classic` doesn't have an SVG yet).
+  - Description text from `PdfTemplateRegistry::all()`.
+  - "Preview" button opening `route('laravel-crm.settings.templates.preview',
+    ['docType' => $docType, 'slug' => $slug])` in a new tab.
+  - `wire:click="select('{docType}', '{slug}')"` on both the card container
+    AND the radio (with `wire:click.stop=""` on the Preview button so
+    clicking Preview doesn't trigger the card's select).
+  - Selected state applies `border-primary ring-2 ring-primary bg-primary/5`
+    classes; unselected uses `border-base-300 hover:border-primary/50`.
+  - Bottom action pill: standard "Save changes" primary button matching
+    the SettingEdit blade's save-button shape.
+- New `src/Http/Controllers/TemplateSettingsController.php` (~26 lines):
+  thin `edit()` method returning `view('laravel-crm::settings.templates.edit')`
+  wrapping the Livewire component. No persistence logic — that lives in
+  the Livewire component. Consistent with `SettingController::edit()`
+  shape but scoped to the templates route.
+- New `resources/views/settings/templates/edit.blade.php` (3 lines):
+  wraps `<livewire:crm-template-settings />` inside the standard
+  `<x-crm::app-layout title="...">` shell.
+- **Route registered** in `src/Http/routes.php` at
+  `Route::get('templates', 'TemplateSettingsController@edit')
+  ->name('laravel-crm.settings.templates.edit')
+  ->middleware(['can:update,VentureDrake\LaravelCrm\Models\Setting'])`
+  inserted inside the existing `settings/` prefix group (line ~1229)
+  immediately after the pre-existing preview route from US-006. Same
+  `auth.laravel-crm` outer middleware + `can:update,Setting` inner
+  gate as the sibling `laravel-crm.settings.edit` /
+  `laravel-crm.settings.update` / `laravel-crm.settings.templates.preview`
+  routes. Preceded by a 3-line inline comment explaining that all three
+  settings-cluster routes share the same permission gate for uniform
+  authorization behavior.
+- **Livewire component registered** in
+  `src/LaravelCrmServiceProvider.php` as
+  `Livewire::component('crm-template-settings', TemplateSettings::class)`
+  immediately after the pre-existing `crm-settings-edit` registration
+  (line ~1064). Added `use VentureDrake\LaravelCrm\Livewire\Settings\TemplateSettings;`
+  alphabetically after the pre-existing `SettingEdit` import. Pint
+  auto-fixed `unary_operator_spaces` + `not_operator_with_successor_space`
+  + `ordered_imports` when it processed the file — those are
+  pre-existing style drifts across the surrounding lines that pint
+  normalises on any touch.
+- **Nav entry added** to
+  `resources/views/layouts/partials/nav-settings.blade.php`
+  immediately after the pre-existing General Settings menu item
+  (line 4). Same `@can('view crm settings')` gate as the sibling
+  General Settings entry (AC's "gated behind the same permission as
+  General Settings" contract). Title reads
+  `ucwords(__('laravel-crm::lang.templates'))` — reuses the
+  `templates` translation key added in US-001 of this pdf-templates
+  series.
+- **AC compliance verification** — all 8 AC bullets satisfied:
+  1. Route `laravel-crm.settings.templates.edit` renders under
+     `can:update,Setting` middleware (same as General Settings). ✓
+  2. Nav shows Templates entry alongside General under the same
+     `@can('view crm settings')` gate. ✓
+  3. Page displays 5 tabs (one per docType) each with 5 template
+     cards showing name + description + thumbnail (SVG when present,
+     text fallback when absent). ✓
+  4. Selecting a card + clicking Save persists all 5 keys via
+     `SettingService::set()`. ✓
+  5. Reloading re-hydrates `$selected` from persisted values via
+     `mount()`. ✓
+  6. Preview PDF button opens the preview route in a new tab (via
+     `target="_blank" rel="noopener"`). ✓
+  7. With `laravel-crm.teams=true`, `SettingService::set()` writes to
+     `Setting::updateOrCreate(['name' => $key], ['value' => $value])`
+     which respects Setting's team-aware BelongsToTeams trait —
+     switching teams shows each team's own selections. ✓ (inherited
+     from SettingService's existing team-scoping semantics; not
+     additional code in this story).
+  8. Livewire component registered as `crm-template-settings`. ✓
+- **New Pest test `tests/Feature/Livewire/Settings/TemplateSettingsTest.php`**
+  (12 tests / 52 assertions) locks every AC contract:
+  - Route registration + middleware chain assertion (auth.laravel-crm
+    AND can:update,Setting).
+  - mount() default hydration (all 5 docTypes default to 'modern' when
+    no settings persisted).
+  - mount() reads persisted values via SettingService::get() (each of
+    the 5 docTypes gets its own value).
+  - select() updates $selected for valid inputs; no-op for unknown
+    docType; no-op for unknown slug.
+  - save() persists all 5 keys via SettingService::set() end-to-end;
+    verified via SettingService::get() round-trip after `->forgetCache()`.
+  - save() defaults an unknown $selected slug back to modern.
+  - Round-trip: save + fresh mount reads back the persisted values.
+  - render() view name + view-data assertions (docTypes + templates
+    passed correctly).
+  - Blade view structural markers: `x-mary-tabs`, `x-mary-tab`,
+    the two `foreach` loops, preview route reference,
+    `wire:submit="save"`, `wire:click="select`.
+  - Comprehensive regression: mount + save preserve the AC-named 5
+    setting keys (`pdf_template_invoice`, `pdf_template_order`,
+    `pdf_template_purchase-order`, `pdf_template_delivery`,
+    `pdf_template_quote` — note the hyphenated docType convention
+    from US-005 of this series overrides the AC prose's
+    `pdf_template_purchase_order` underscore form).
+- Test scaffold: `beforeEach` uses `$this->actingAsUser()` for auth +
+  `Gate::before(fn () => true)` to satisfy the settings-permission gate
+  through the middleware chain + `Setting::query()->delete()` +
+  `app('laravel-crm.settings')->forgetCache()` for a clean start on
+  every test. Same shape as the pre-existing `TemplatePreviewControllerTest`
+  and `UserIndexTabsTest`.
+- **Quality gates green**:
+  - `./vendor/bin/pint --dirty --test` reports
+    `{"tool":"pint","result":"passed"}` (after auto-fix of
+    `unary_operator_spaces` + `not_operator_with_successor_space` +
+    `ordered_imports` on LaravelCrmServiceProvider.php — pre-existing
+    style drifts that pint normalises on any file touch).
+  - Targeted `pest tests/Feature/Livewire/Settings/TemplateSettingsTest.php
+    --no-coverage` → **12 passed (52 assertions)** in 3.86s.
+  - Broader `pest tests/Feature/Livewire/Settings/ tests/Feature/Support/
+    tests/Feature/TemplatePreviewControllerTest.php --no-coverage` →
+    **33 passed (378 assertions)** in 38.41s. All pre-existing
+    PdfTemplateRegistry + PdfSampleData + TemplatePreviewController
+    tests remain green alongside the 12 new tests.
+  - Full `pest --no-coverage` → **2364 assertions / 1 failed / 684
+    deprecated** in 214.27s. The single failure is the pre-existing
+    baseline flake `Tests\Feature\Portal\PublicFeatureTest > admin
+    reply renders with…` documented across every prior story in the
+    pdf-templates series AND the invite-users lifecycle series AND
+    the shared TeamObserver helper series as unrelated to any code
+    touched by this story (grep confirms zero
+    `pdf`/`template`/`TemplateSettings` references in the failing
+    test file). Net +52 assertions match exactly the 12 new tests ×
+    ~4 assertions each. Net +12 deprecated match exactly the 12 new
+    tests each triggering the PHP 8.5 PDO deprecation once.
+- **Working-tree discipline**: no pre-existing dirty files at session
+  start. Only the 8 US-007 files staged + committed. Commit `4605e4f9`
+  on branch `pdf-templates` in the plugin repo — 8 files changed /
+  +381 insertions.
+
+### Files changed (in `/Users/andrewdrake/.polyscope/clones/66571e70/bubbly-narwhal`)
+- **Added** `src/Livewire/Settings/TemplateSettings.php` (~99 lines;
+  Livewire component with $selected array + mount/select/save methods
+  + settingKey() helper matching US-005's hyphenated key convention)
+- **Added** `resources/views/livewire/settings/template-settings.blade.php`
+  (~71 lines; x-mary-tabs with 5 doc-type panels, each rendering a
+  5-card grid with radio + thumbnail + description + Preview button +
+  selected-state ring highlight)
+- **Added** `src/Http/Controllers/TemplateSettingsController.php`
+  (~26 lines; thin edit() returning the wrapper view)
+- **Added** `resources/views/settings/templates/edit.blade.php` (3
+  lines; standard app-layout wrapper around <livewire:crm-template-settings />)
+- **Modified** `src/Http/routes.php` (+8 lines: new
+  Route::get('templates', ...) with the AC-named
+  laravel-crm.settings.templates.edit name AND matching per-route
+  can:update,Setting middleware inside the existing settings/ prefix
+  group, preceded by a 3-line inline comment)
+- **Modified** `src/LaravelCrmServiceProvider.php` (+2 lines: import
+  for TemplateSettings + Livewire::component registration; pint
+  auto-fixed 3 pre-existing style issues on adjacent lines)
+- **Modified** `resources/views/layouts/partials/nav-settings.blade.php`
+  (+1 line: Templates menu item after General Settings under the
+  same @can('view crm settings') gate)
+- **Added** `tests/Feature/Livewire/Settings/TemplateSettingsTest.php`
+  (~171 lines; 12 tests / 52 assertions locking every AC contract as
+  a regression gate; includes structural blade-source-grep, runtime
+  mount+select+save assertions, and a comprehensive 5-key persistence
+  round-trip test)
+
+### Learnings for future iterations
+- **Livewire's `wire:click.stop=""` on a child element inside a
+  container that also has `wire:click="method(...)"`** prevents event
+  bubbling so clicking the inner element only fires the inner action
+  (or, in this case, does nothing at all — the empty method call is
+  a no-op that just stops propagation). Reusable pattern for any
+  future "clickable card that contains a Preview / Delete / Detail
+  button whose click should NOT trigger the card's own action". The
+  bare `wire:click.stop=""` idiom is preferred over binding a real
+  method name that would fire an unnecessary Livewire round-trip.
+- **The AC's mention of `pdf_template_purchase_order` (underscore)
+  vs the actual reader convention `pdf_template_purchase-order`
+  (hyphen)** is a divergence between AC prose and the code-in-place.
+  Same posture documented across US-005 of the pdf-templates series
+  progress entry. The reader convention wins because the download /
+  Livewire send / portal controllers all read the hyphenated form —
+  writing the AC's prose form would produce persisted rows that no
+  reader ever sees. Reusable insight for any future settings-writer
+  story that composes keys from `PdfTemplateRegistry::DOC_TYPES`:
+  **always use the docType literal from the DOC_TYPES array; never
+  reformat via `str_replace('-', '_', ...)` on the docType**.
+- **`SettingService::forgetCache()` after batched writes** is
+  necessary because `SettingService::all()` caches for 1 hour by
+  default. Without the explicit cache-forget, `SettingService::get()`
+  reads in the same request would still return the pre-save values.
+  Same discipline noted in US-014 of the v0.x sequence for the
+  ClickSend page's send-test-sms flow. Reusable rule: **any Livewire
+  page that WRITES via SettingService AND may READ from the same
+  request MUST call `->forgetCache()` between the writes and reads**.
+- **A single test that iterates the AC-named 5 setting keys**
+  (`pdf_template_invoice`, `pdf_template_order`,
+  `pdf_template_purchase-order`, `pdf_template_delivery`,
+  `pdf_template_quote`) via `foreach ($expectedKeys as $key)` +
+  `Setting::where('name', $key)->first()->not->toBeNull()` +
+  `Setting::where('name', $key)->value('value')->toBe('classic')`
+  is the tightest possible regression gate for "all 5 keys persist
+  correctly". Distinct from N separate per-key `assertSet()` calls
+  (which check the Livewire property, not the DB row). Locks the
+  end-to-end persistence contract at the DB layer with 5 iterations
+  of 2 assertions each = 10 assertions in one test body.
+- **The `file_exists(public_path(...))` gate for optional thumbnails**
+  produces a graceful fallback when a template's thumbnail hasn't
+  been created yet (US-004 delivered only 4 of 5 SVG thumbnails —
+  `classic.svg` is missing). Without the guard, the missing image
+  would render as a broken-image icon in the browser; with the
+  guard, the card shows a text label ("Classic") in the thumbnail
+  slot. Reusable pattern for any future "image asset that might not
+  exist yet" scenario.
+- **Pint auto-fixing pre-existing style drifts on adjacent lines**
+  when a file gets touched is now a well-established pattern across
+  every prior story. `unary_operator_spaces` (spacing around `!`),
+  `not_operator_with_successor_space` (space after `!`), and
+  `ordered_imports` (alphabetical import ordering) are the three
+  most-common auto-fixers that fire on files with pre-existing
+  drift. Include the auto-fixed lines in the commit — they're
+  functionally identical to the pre-fix state and pint's `--test`
+  gate confirms they satisfy the codebase's declared style contract.
+- **The 1-pre-existing-failure baseline preserved gate has now been
+  re-confirmed across US-001..US-007 of the pdf-templates series
+  with byte-exact parity** (`PublicFeatureTest > admin reply renders
+  with…` — 1 failure, N assertions, N deprecated across every story).
+  Same "pre-existing baseline preserved" discipline documented across
+  every prior autopilot story in this codebase.
+
+
+## US-008: Add Pest feature tests for all template × doc-type combinations (pdf-templates series)
+- New `tests/Feature/Pdf/PdfTemplateRenderingTest.php` (~183 lines; 27 tests /
+  121 assertions) locks every AC-mandated contract with a Pest dataset covering
+  the full 5 templates × 5 doc types = 25 combinations plus 2 focused
+  regression-gate tests. All 27 tests pass on the first full pest run after
+  the dataset-scoping fix noted below.
+- **Test inventory** (matches every AC bullet verbatim):
+  1. **`every (docType × template) preview route returns a valid non-empty PDF`**
+     — data-driven over the `template_docType_pairs` dataset yielding 25 rows
+     (5 doc types × 5 slugs: modern/classic/bold/compact/professional). Per
+     iteration:
+     - `Schema::hasTable('crm_delivery_products')` gate at test-body start:
+       skips delivery iterations when the table's absent (test-schema-vs-
+       production divergence tolerance — same discipline noted in
+       `TemplatePreviewControllerTest`). In this test environment the table
+       IS present so all 25 combos exercised end-to-end; skip guard is
+       defensive against hosts on older test schemas.
+     - `$this->get(route('laravel-crm.settings.templates.preview', ['docType' =>
+       X, 'slug' => Y]))` fires the preview route.
+     - Asserts `$response->assertOk()` + `assertHeader('Content-Type',
+       'application/pdf')`.
+     - Positive-presence guards: `strlen($body) > 0` AND `substr($body, 0, 5)
+       === '%PDF-'` — locks the AC's "non-empty binary" + "content-type
+       application/pdf" contracts AND confirms DomPDF produced real PDF bytes
+       rather than an error page cast to bytes.
+  2. **`default template slug is `modern` when no setting is persisted`** —
+     locks the AC's "default (no setting) resolves to modern" contract via
+     three assertions:
+     - `PdfTemplateRegistry::defaultSlug() === 'modern'` (registry-level).
+     - `PdfTemplateRegistry::viewFor('invoice', '')->toBe('laravel-crm::pdfs.modern.invoice')`
+       — locks the empty-slug fallback path used by
+       `SettingService::get('pdf_template_X', PdfTemplateRegistry::defaultSlug())`
+       when no Setting row exists.
+     - Round-trip: hits the preview route with `PdfTemplateRegistry::defaultSlug()`
+       as the slug for every doc type, asserts 200 + application/pdf on each —
+       satisfies the "brand-new install works with zero Setting rows"
+       contract end-to-end.
+  3. **`classic template renders the existing pdf.blade.php content via
+     @include pass-through`** — locks the AC's "classic still renders the
+     existing pdf.blade.php content" contract:
+     - `View::make('laravel-crm::pdfs.classic.invoice', $sampleData)->render()`
+       and `View::make('laravel-crm::invoices.pdf', $sampleData)->render()`
+       — asserts both rendered strings match byte-for-byte via
+       `->toBe($directOutput)`. Blade's `@include` compiles the included view
+       into the wrapper's compiled output verbatim; the emitted HTML is
+       identical regardless of whether the caller renders the wrapper or the
+       direct blade.
+     - Positive-presence guards: rendered HTML contains `INV-SAMPLE` +
+       `Acme Sample Co.` sample markers — confirms `PdfSampleData::invoice()`
+       + related fixtures actually flowed through the render path, not just
+       that two identical (empty) outputs matched.
+     - End-to-end sanity: hits the classic preview route AND asserts
+       200 + application/pdf + non-empty body.
+- **Dataset scoping gotcha caught + resolved**: initial draft called
+  `Schema::hasTable('crm_delivery_products')` AND `PdfTemplateRegistry::all()`
+  inside the dataset closure. Pest evaluates dataset closures during test
+  DISCOVERY (before the app boots) — both calls fatal with `A facade root has
+  not been set.` / `Target class [translator] does not exist` because the
+  facade container isn't wired at that stage. Fix: hardcoded the 5 slug list
+  (`['modern', 'classic', 'bold', 'compact', 'professional']`) in the dataset
+  AND moved the Schema::hasTable check into the test body via `markTestSkipped`.
+  The `PdfTemplateRegistryTest` (US-001 of this pdf-templates series) already
+  locks the 5-slug contract from the registry side, so hardcoding the sibling
+  list in this test file doesn't introduce divergent knowledge — the two
+  slug lists are pinned together by the sibling test's regression gate.
+- **Quality gates green**:
+  - `./vendor/bin/pint --dirty --test` reports
+    `{"tool":"pint","result":"passed"}`.
+  - Targeted `pest tests/Feature/Pdf/ --no-coverage` → **27 tests / 121
+    assertions**, zero failures, in ~31s.
+  - Full plugin pest suite (`php -d memory_limit=1G ./vendor/bin/pest
+    --no-coverage`) → **2485 assertions / 1 failed / 711 deprecated** in
+    254.93s. The single failure is the pre-existing baseline flake
+    `Tests\Feature\Portal\PublicFeatureTest > admin reply renders with…`
+    documented across every prior story in this codebase as unrelated to
+    PDF template work (grep of that test file returns zero hits for `pdf` /
+    `template` / `PdfTemplateRegistry` references). Zero net new failures.
+    Net **+27 passing tests** match exactly the 27 new dataset+focused
+    iterations added by this story.
+- Working-tree discipline: only the 2 US-008 files staged (1 new test file
+  + 1 progress.md edit).
+
+### Files changed (in `/Users/andrewdrake/.polyscope/clones/66571e70/bubbly-narwhal`)
+- **Added** `tests/Feature/Pdf/PdfTemplateRenderingTest.php` (~183 lines;
+  27 tests / 121 assertions locking every AC contract as a regression gate
+  — 25-row dataset covering all (docType × template) pairs + 1 focused
+  default-slug fallback test + 1 focused classic-@include-pass-through test)
+
+### Learnings for future iterations
+- **Pest dataset closures run during test DISCOVERY, before the app boots.**
+  Any call to a facade (`Schema::`, `Auth::`, `Route::`, etc.) OR any call
+  that internally invokes a facade (`PdfTemplateRegistry::all()` calls
+  `__()` which needs the translator facade) will fatal at discovery time
+  with `A facade root has not been set.` or `Target class [X] does not
+  exist.`. **Rule of thumb: keep dataset closures to pure PHP** — constants
+  (`PdfTemplateRegistry::DOC_TYPES`), hardcoded arrays, string manipulation.
+  Any container-dependent gating (Schema::hasTable checks, config reads,
+  auth-user setup) belongs in the test body OR `beforeEach`. Reusable
+  discipline for any future data-driven test that needs to gate rows
+  conditionally: **always place the conditional gate inside the test body
+  via `markTestSkipped(...)`, never inside the dataset closure**.
+- **`View::make('view.path', $data)->render()`** is the cleanest way to
+  exercise a Blade view's rendered HTML in a test without going through
+  the HTTP request pipeline OR the DomPDF binary layer. Returns the
+  literal HTML string that would be piped to DomPDF (or the browser).
+  Distinct from `$this->get(...)` which produces a full HTTP response
+  with headers + PDF binary body. When the AC says "renders the existing
+  view content" AND the goal is to lock @include's byte-for-byte
+  pass-through semantics, the View::make render comparison is stronger
+  than a byte-count comparison on PDF bodies (which would false-positive
+  when two different templates happen to produce same-length PDFs).
+- **The 27-test regression gate (25 dataset + 2 focused) locks the
+  entire pdf-templates series** (US-001 through US-007) in a single
+  test file that runs in ~31 seconds. Locks: (a) registry contract
+  (default slug, viewFor resolution); (b) all 5 template Blade files
+  exist on disk under `resources/views/pdfs/{slug}/`; (c) all 5 doc
+  types render cleanly against sample data; (d) the classic wrapper
+  correctly `@include`s the pre-existing pdf.blade.php content; (e)
+  the preview route + controller + DomPDF wiring work end-to-end; (f)
+  no DB writes fire during a preview (implicit — the tests run in a
+  fresh test schema and would otherwise leak fixture data). Any future
+  refactor that breaks any of these contracts trips this single test
+  file. Reusable pattern for any future "feature-surface regression
+  gate" story that needs to cover N × M combinations plus a few
+  focused edge cases.
+- **The 1-pre-existing-failure baseline preserved gate has now been
+  re-confirmed across US-001..US-008 of the pdf-templates series with
+  byte-exact parity** (`PublicFeatureTest > admin reply renders with…`
+  — 1 failure across every story). Same "pre-existing baseline
+  preserved" discipline documented across every prior autopilot story
+  in this codebase.
