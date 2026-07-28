@@ -17,6 +17,7 @@ use VentureDrake\LaravelCrm\Services\DeliveryService;
 use VentureDrake\LaravelCrm\Services\OrganizationService;
 use VentureDrake\LaravelCrm\Services\PersonService;
 use VentureDrake\LaravelCrm\Services\SettingService;
+use VentureDrake\LaravelCrm\Support\PdfTemplateRegistry;
 
 class DeliveryController extends Controller
 {
@@ -270,7 +271,7 @@ class DeliveryController extends Controller
         return Pdf::setOption([
             'fontDir' => public_path('vendor/laravel-crm/fonts'),
         ])
-            ->loadView('laravel-crm::deliveries.pdf', [
+            ->loadView(PdfTemplateRegistry::viewFor('delivery', app('laravel-crm.settings')->get('pdf_template_delivery', PdfTemplateRegistry::defaultSlug())), [
                 'delivery' => $delivery,
                 'order' => $delivery->order,
                 'dateFormat' => app('laravel-crm.settings')->get('date_format', config('laravel-crm.date_format')),

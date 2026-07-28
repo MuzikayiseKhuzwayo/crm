@@ -17,6 +17,7 @@ use VentureDrake\LaravelCrm\Services\OrganizationService;
 use VentureDrake\LaravelCrm\Services\PersonService;
 use VentureDrake\LaravelCrm\Services\PurchaseOrderService;
 use VentureDrake\LaravelCrm\Services\SettingService;
+use VentureDrake\LaravelCrm\Support\PdfTemplateRegistry;
 
 class PurchaseOrderController extends Controller
 {
@@ -316,7 +317,7 @@ class PurchaseOrderController extends Controller
         return Pdf::setOption([
             'fontDir' => public_path('vendor/laravel-crm/fonts'),
         ])
-            ->loadView('laravel-crm::purchase-orders.pdf', [
+            ->loadView(PdfTemplateRegistry::viewFor('purchase-order', app('laravel-crm.settings')->get('pdf_template_purchase-order', PdfTemplateRegistry::defaultSlug())), [
                 'purchaseOrder' => $purchaseOrder,
                 'dateFormat' => app('laravel-crm.settings')->get('date_format', config('laravel-crm.date_format')),
                 'taxName' => app('laravel-crm.settings')->get('tax_name', 'Tax'),

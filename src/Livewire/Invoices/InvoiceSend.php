@@ -10,6 +10,7 @@ use Livewire\Component;
 use Mary\Traits\Toast;
 use VentureDrake\LaravelCrm\Mail\SendInvoice;
 use VentureDrake\LaravelCrm\Models\Invoice;
+use VentureDrake\LaravelCrm\Support\PdfTemplateRegistry;
 
 class InvoiceSend extends Component
 {
@@ -78,7 +79,7 @@ class InvoiceSend extends Component
         Pdf::setOption([
             'fontDir' => public_path('vendor/laravel-crm/fonts'),
         ])
-            ->loadView('laravel-crm::invoices.pdf', [
+            ->loadView(PdfTemplateRegistry::viewFor('invoice', app('laravel-crm.settings')->get('pdf_template_invoice', PdfTemplateRegistry::defaultSlug())), [
                 'invoice' => $this->invoice,
                 'dateFormat' => app('laravel-crm.settings')->get('date_format', config('laravel-crm.date_format')),
                 'taxName' => app('laravel-crm.settings')->get('tax_name', 'Tax'),

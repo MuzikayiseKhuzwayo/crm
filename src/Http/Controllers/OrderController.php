@@ -22,6 +22,7 @@ use VentureDrake\LaravelCrm\Services\OrderService;
 use VentureDrake\LaravelCrm\Services\OrganizationService;
 use VentureDrake\LaravelCrm\Services\PersonService;
 use VentureDrake\LaravelCrm\Services\SettingService;
+use VentureDrake\LaravelCrm\Support\PdfTemplateRegistry;
 
 class OrderController extends Controller
 {
@@ -412,7 +413,7 @@ class OrderController extends Controller
             Storage::makeDirectory($pdfLocation);
         }*/
 
-        /*return view('laravel-crm::orders.pdf', [
+        /*return view(PdfTemplateRegistry::viewFor('order', app('laravel-crm.settings')->get('pdf_template_order', PdfTemplateRegistry::defaultSlug())), [
             'order' => $order,
             'email' => $email ?? null,
             'phone' => $phone ?? null,
@@ -425,7 +426,7 @@ class OrderController extends Controller
         return Pdf::setOption([
             'fontDir' => public_path('vendor/laravel-crm/fonts'),
         ])
-            ->loadView('laravel-crm::orders.pdf', [
+            ->loadView(PdfTemplateRegistry::viewFor('order', app('laravel-crm.settings')->get('pdf_template_order', PdfTemplateRegistry::defaultSlug())), [
                 'order' => $order,
                 'dateFormat' => app('laravel-crm.settings')->get('date_format', config('laravel-crm.date_format')),
                 'email' => $email ?? null,

@@ -32119,3 +32119,279 @@ stories.
   coexist safely — the registry produces a path string; whether the
   file at that path exists is orthogonal to the registry's
   correctness.
+
+
+## US-004: Add Professional, Bold, and Compact templates (pdf-templates series)
+- Added 3 new PDF template families (Professional / Bold / Compact) each with
+  a scoped `_layout.blade.php` + 5 doc-type blades (invoice / order /
+  purchase-order / delivery / quote) mirroring the Modern template shape
+  from US-003 with entirely distinct visual language per AC:
+  1. **Professional (Xero-inspired)** — large document title text left,
+     small brand mark top-right, stacked meta rows with thin gray underlines
+     beneath each row, parties block bordered top+bottom with vertical
+     divider between To/From, items table with single thin bottom border
+     on the header row, totals stack right-aligned with thin underlines
+     between each value + heavy 2px final total top border. All CSS scoped
+     to `.professional-pdf` container class.
+  2. **Bold** — full-width `#05b3a9` primary-colour header band with white
+     `strtoupper(...)` title text inside, brand mark/logo top-right of the
+     band, primary-colour section headings + meta labels, primary-colour
+     items table header row with white text, tinted `#e6f7f6` totals box
+     with `#b7e5e1` border + primary-colour "final total" strip at bottom.
+     All CSS scoped to `.bold-pdf`.
+  3. **Compact** — 9.5px base font (vs Modern's 11px), 4-6px row padding
+     (vs Modern's 8-10px), pure black text on white with only gray dividers,
+     dense two-column meta rows (4 label+value pairs across 2 rows), single
+     `border-top: 1px solid black` header rule, `border-top + border-bottom`
+     black rules on items table header, footer note area (single-column
+     stacked terms/payment/description with a top black rule) instead of
+     inline notes. All CSS scoped to `.compact-pdf`.
+- All 15 doc-type blades read the SAME variables their controllers pass
+  (`$logo`/`$fromName`/`$contactDetails`/`$dateFormat`/`$taxName`/
+  `$organization_address`/`$address`/`$paymentInstructions` for invoice/
+  `$order`/`$purchaseOrder`/`$delivery`/`$quote`/`$invoice`). Same data
+  pipeline as Modern/Classic — swap contract works purely at
+  presentation-layer.
+- Each layout uses two-level template inheritance:
+  `@extends('laravel-crm::layouts.document')` at the family `_layout` +
+  `@yield('{family}Content')` slot, then each doc-type blade
+  `@extends('laravel-crm::pdfs.{family}._layout')` + `@section('{family}Content')`
+  wrapping its content. Same shape as Modern from US-003.
+- **3 new SVG thumbnails** at `public/vendor/laravel-crm/img/pdf-templates/`:
+  - `professional.svg` (240×320) — schematic showing large title block +
+    small brand mark + stacked underlined meta + bordered parties + items
+    table + right-aligned totals with hair-line dividers and heavy final-
+    total top border.
+  - `bold.svg` (240×320) — full-width primary-colour header band across
+    the top with white "INVOICE" text, primary-colour meta labels, filled
+    primary-colour items header row, tinted totals box with primary-colour
+    final-total pill at bottom.
+  - `compact.svg` (240×320) — small brand mark + small right-aligned title,
+    thin black rule, dense two-column meta grid, tight parties block, items
+    table with black top+bottom rules on header, minimal padding rows with
+    subtle gray dividers, right-aligned totals with black final-total top
+    border, footer note area with black top rule showing 2 stacked notes.
+- **AC contracts fully satisfied**:
+  - 3 layouts with ISOLATED `<style>` blocks (`.professional-pdf` /
+    `.bold-pdf` / `.compact-pdf` prefix on every selector — no CSS bleed
+    between templates rendered in same request).
+  - 15 doc-type blades (3 × 5) each extending their template layout via
+    `@extends('laravel-crm::pdfs.{slug}._layout')`.
+  - Every blade compiles cleanly via `BladeCompiler::compileString(file_get_contents(...))`
+    — verified per-file with a shell loop returning `OK` for all 18 new
+    Blade files.
+  - Visual styles match specs — Professional's stacked meta + thin
+    underlines + Xero-style large title left / logo right, Bold's primary
+    coloured header band + tinted totals, Compact's smaller type + tight
+    rows + monochrome + footer note area.
+  - All 3 SVG thumbnails parse cleanly via `DOMDocument::load(...)`.
+- **Quality gates**:
+  - `./vendor/bin/pint --dirty --test` → `{"tool":"pint","result":"passed"}`.
+  - `pest tests/Feature/Support/ --no-coverage` → 15 tests / 211 assertions,
+    zero regressions across `PdfTemplateRegistryTest` +
+    `PdfSampleDataTest` (US-001 registry + sample data support classes
+    remain intact).
+- **PdfTemplateRegistry from US-001 now resolves all 5 templates × 5 doc
+  types = 25 valid Blade paths**: `viewFor($docType, 'professional')`,
+  `viewFor($docType, 'bold')`, `viewFor($docType, 'compact')` all resolve
+  to Blade files that exist on disk. Combined with US-002 (Classic) +
+  US-003 (Modern), the plugin now ships 4 first-class templates + the
+  unknown-slug fallback to Modern.
+
+### Files changed (in `/Users/andrewdrake/.polyscope/clones/66571e70/bubbly-narwhal`)
+- **Added** 3 template `_layout.blade.php` files:
+  `resources/views/pdfs/{professional,bold,compact}/_layout.blade.php`
+- **Added** 15 doc-type blades: 3 × 5 = 15 files under
+  `resources/views/pdfs/{professional,bold,compact}/{invoice,order,purchase-order,delivery,quote}.blade.php`
+- **Added** 3 SVG thumbnails:
+  `public/vendor/laravel-crm/img/pdf-templates/{professional,bold,compact}.svg`
+
+### Learnings for future iterations
+- **Three-template shipping in a single story** benefits from a mechanical
+  copy-and-swap discipline — each family shares the same 5-doc-type Blade
+  shape (Modern serves as the reference implementation from US-003);
+  only the CSS-in-layout + class prefixes + doc-title styling vary per
+  family. Total delivery: 3 layouts × ~150-200 lines + 15 doc-type
+  blades × ~120-160 lines + 3 SVGs × ~60-80 lines ≈ 2500 lines across
+  21 files in one session. The AC's "isolated `<style>` blocks" contract
+  is critical — without the container-class prefix on every selector,
+  rendering Bold's `#05b3a9` header band inside a request that also
+  renders Professional would bleed the primary-colour background onto
+  the Professional layout's brand mark. Every CSS rule prefixed with
+  `.{family}-pdf .{class}` guarantees the browser/dompdf renderer
+  applies each family's styles to only its own container `<div>`.
+- **`strtoupper(__('laravel-crm::lang.invoice'))` in the Bold template's
+  header band title** produces `'INVOICE'` at PHP time, matching the
+  Bold family's uppercase-heavy visual language. Distinct from
+  Modern's `.modern-pill` CSS `text-transform: uppercase` which
+  uppercases at render time. Both approaches work; PHP-time uppercase
+  is simpler when the text is a scalar (not a badge with padding/
+  borders that depend on the browser's rendering). Use CSS transform
+  when a badge shape needs uppercase visual + locale-safe rendering;
+  use `strtoupper()` when the text is standalone.
+- **The "footer note area" pattern in Compact** consolidates
+  description / payment instructions / terms / signature into a single
+  single-column region at the bottom of the document, separated by a
+  thin black top rule. Distinct from Modern/Professional/Bold which
+  render each note inline (each with its own heading). This matches
+  the AC's "footer note area" directive AND reads more cleanly for
+  dense/compact documents where every millimetre of vertical space
+  matters — the reader scans top-to-bottom AND at the end finds a
+  clearly-delineated notes area rather than notes scattered inline.
+  Reusable pattern for any future space-constrained template variant.
+- **Continuing to preserve `invoiceLInes()` (camelCase-typo)** — same
+  discipline noted in US-003. The three new templates all use the
+  same relation name because it's the load-bearing typo on the Invoice
+  model. Never silently "correct" — the tests would break AND the
+  classic template would render nothing.
+- **The 21-file 3-template delivery per story** is at the upper edge
+  of what fits comfortably in a single autopilot session. The
+  copy-and-swap approach with per-template CSS prefix (`.{family}-pdf`)
+  is the right level of abstraction — a shared partial across all 3
+  families would trade line count for coupling (a Modern-shape change
+  would ripple through all 3 families simultaneously). Keeping them
+  distinct means each template can evolve independently based on
+  future design feedback without touching the others. Reusable rule
+  for any multi-variant UI shipping story.
+
+
+## US-005: Wire download controllers, Livewire send components, and portal controllers to registry (pdf-templates series)
+- Replaced 11 hard-coded `->loadView('laravel-crm::{entity}.pdf', [...])` call
+  sites with `->loadView(PdfTemplateRegistry::viewFor($docType,
+  app('laravel-crm.settings')->get('pdf_template_{docType}',
+  PdfTemplateRegistry::defaultSlug())), [...])` across:
+  - **5 download controllers**: `Http/Controllers/InvoiceController.php`
+    (line 259), `OrderController.php` (line 429), `PurchaseOrderController.php`
+    (line 320), `DeliveryController.php` (line 274), `QuoteController.php`
+    (line 245).
+  - **3 Livewire send components**: `Livewire/Invoices/InvoiceSend.php`
+    (line 82), `Livewire/PurchaseOrders/PurchaseOrderSend.php` (line 82),
+    `Livewire/Quotes/QuoteSend.php` (line 92).
+  - **3 portal controllers**: `Http/Controllers/Portal/InvoiceController.php`
+    (line 100), `Portal/QuoteController.php` (line 117),
+    `Portal/PurchaseOrderController.php` (line 75).
+- Each file also gained `use VentureDrake\LaravelCrm\Support\PdfTemplateRegistry;`
+  inserted after the last existing `use VentureDrake\LaravelCrm\...` import.
+- **AC contracts satisfied**:
+  - Every download controller resolves the view through the registry.
+  - Every Livewire send component uses the registry for PDF attachment
+    generation (matches the email-attach path).
+  - Every portal controller uses the registry for public/signed-URL
+    downloads.
+  - `PdfTemplateRegistry::viewFor()` (from US-001 of this series) falls
+    back to `defaultSlug()` (= `'modern'`) when the setting is absent,
+    unknown, or empty — so unset hosts render the new Modern default.
+  - When `pdf_template_{docType} = 'classic'`, the registry resolves to
+    `laravel-crm::pdfs.classic.{docType}` which is the US-002 wrapper
+    that `@include`s the pre-existing `{entity}/pdf.blade.php`.
+    Byte-similar output preserved.
+  - **NO changes to the `[...]` data payload** in any of the 11
+    `loadView(...)` calls. Verified via `git diff --unified=0` showing
+    only the view-name argument line + the new import line per file.
+- **Bonus edit** in `OrderController.php` line 416 — a pre-existing
+  commented-out `/*return view('laravel-crm::orders.pdf', [ ... ])*/`
+  block also got the registry substitution because the anchor matched
+  the same literal. The commented block remains commented; if ever
+  uncommented in a future story, it'll route through the registry too
+  — keeps the two `view/loadView` shapes consistent when parsed side
+  by side.
+- Used a one-shot `php /tmp/us005_wire_registry.php` heredoc script with:
+  - `str_contains($src, $newCall)` idempotency guard so re-runs are a
+    safe no-op (verified via double-run — second run reported
+    "SKIP (already wired)" for all 11 files with zero file modifications).
+  - `str_replace($oldLiteral, $newCall, $src)` for the view-name swap.
+  - Alphabetical import insertion after the last `use VentureDrake\LaravelCrm\...`
+    line so the new import lands between Services\SettingService (or
+    equivalent last import) and the class declaration.
+  - `exit(1)` on missing anchor to fail loudly rather than silently
+    no-op'ing.
+- **Quality gates green**:
+  - `php -l` on all 11 modified files → "No syntax errors detected".
+  - `./vendor/bin/pint --dirty --test` → `{"tool":"pint","result":"passed"}`.
+  - `pest tests/Feature/Support/ --no-coverage` → 15 tests / 211
+    assertions (all pass; the PdfTemplateRegistry + PdfSampleData
+    contracts from US-001 remain intact).
+  - `php -d memory_limit=512M ./vendor/bin/pest --no-coverage` →
+    **2197 assertions / 1 failed / 666 deprecated** in 173.91s. The 1
+    failure is the pre-existing baseline flake
+    `Tests\Feature\Portal\PublicFeatureTest > admin reply renders with…`
+    documented across every prior story in this codebase as unrelated
+    to any PDF template work (grep of that test file returns zero hits
+    for `pdf`/`registry`/`loadView` references). Zero net new failures.
+    Assertion count matches the post-US-004 baseline byte-for-byte.
+- Working-tree discipline: only the 11 US-005 files staged (plus
+  `.context/progress.md`). Commit lands on branch `pdf-templates` in
+  the plugin repo.
+
+### Files changed (in `/Users/andrewdrake/.polyscope/clones/66571e70/bubbly-narwhal`)
+- **Modified** `src/Http/Controllers/InvoiceController.php` (+2/-1)
+- **Modified** `src/Http/Controllers/OrderController.php` (+3/-2 —
+  registry substitution applied to BOTH the active `loadView` call site
+  AND a pre-existing commented `/*return view(...)*/` block anchored on
+  the same string literal)
+- **Modified** `src/Http/Controllers/PurchaseOrderController.php` (+2/-1)
+- **Modified** `src/Http/Controllers/DeliveryController.php` (+2/-1)
+- **Modified** `src/Http/Controllers/QuoteController.php` (+2/-1)
+- **Modified** `src/Http/Controllers/Portal/InvoiceController.php` (+2/-1)
+- **Modified** `src/Http/Controllers/Portal/QuoteController.php` (+2/-1)
+- **Modified** `src/Http/Controllers/Portal/PurchaseOrderController.php` (+2/-1)
+- **Modified** `src/Livewire/Invoices/InvoiceSend.php` (+2/-1)
+- **Modified** `src/Livewire/PurchaseOrders/PurchaseOrderSend.php` (+2/-1)
+- **Modified** `src/Livewire/Quotes/QuoteSend.php` (+2/-1)
+
+### Learnings for future iterations
+- **`SettingService::get(string, $default)` returns a plain scalar
+  (or the default)** rather than a Setting model — verified via
+  `SettingService.php:23` where `get()` delegates to
+  `Arr::get($this->all(), $name, $default)` and `all()` returns
+  `Setting::pluck('value', 'name')->toArray()`. So the registry call
+  `->viewFor($docType, app('laravel-crm.settings')->get(...))` gets
+  a string slug directly — no `->value` access needed. Distinct from
+  `SettingService::first(string)` which returns the whole Model.
+  Reusable insight for any future consumer of the SettingService
+  API: use `get()` for the raw value; use `first()` when the Model
+  metadata (created_at, label, etc.) matters.
+- **The AC's "Pass the exact same view data as today" contract** is
+  satisfied trivially by leaving the `[...]` data payload argument
+  untouched during the view-name substitution. `str_replace($oldLiteral,
+  $newCall, $src)` on the exact `'laravel-crm::X.pdf'` literal only
+  changes the first argument to `loadView()`; the array of data
+  passed as the second argument is preserved byte-for-byte. Confirmed
+  via `git diff --unified=0` per file showing only the view-name
+  argument line + the import line change. Reusable pattern for any
+  future "swap a single argument in an N-argument call" rewrite: use
+  `str_replace` on the exact argument literal rather than a regex
+  targeting the whole call.
+- **The AC's setting key convention `pdf_template_<docType>`** uses
+  the LITERAL docType name from `PdfTemplateRegistry::DOC_TYPES`
+  including the hyphenated form `pdf_template_purchase-order`. Not
+  `pdf_template_purchase_order` (snake_case swap). Follows the AC
+  literally — a future story that adds a `PdfTemplatesPage` for the
+  settings UI would use the same hyphenated key names when reading /
+  writing settings via `SettingService::set(...)`. Same posture
+  established across the 3 doc-type slugs that contain hyphens
+  (currently only `purchase-order`).
+- **Consistency of the exact call shape across 11 files** benefits
+  from a single-script substitution rather than 11 manual edits.
+  Any future story that changes the registry's calling convention
+  (e.g. adds a `PdfTemplateRegistry::viewFor($docType)` signature
+  variant that reads the setting internally) can grep for the exact
+  8-word literal `PdfTemplateRegistry::viewFor(...)` string and
+  replace all 11 sites in one pass. The verbose repetition is
+  intentional — the setting lookup is inlined at each call site so
+  the registry stays a pure stateless helper (no coupling to
+  `laravel-crm.settings` service).
+- **The commented-out `/*return view(...)*/` block in OrderController**
+  demonstrates that string-anchored substitution catches ALL literal
+  occurrences including inside comments. This is usually desirable
+  (keeps commented-out code consistent with active code so a
+  maintainer uncommenting later gets the current pattern), but worth
+  flagging as a discipline: **when using `str_replace` on a source
+  file, be aware it substitutes inside comments AND strings AND
+  active code**. Same rule applies to any future refactor where the
+  anchor might also appear in commented sections.
+- **The 1-pre-existing-failure baseline preserved gate has now been
+  re-confirmed across US-001..US-005 of the pdf-templates series
+  with byte-exact parity** (`PublicFeatureTest > admin reply renders
+  with…`). Same "pre-existing baseline preserved" discipline
+  documented across every prior autopilot story in this codebase.

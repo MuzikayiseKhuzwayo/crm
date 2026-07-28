@@ -16,6 +16,7 @@ use VentureDrake\LaravelCrm\Services\InvoiceService;
 use VentureDrake\LaravelCrm\Services\OrganizationService;
 use VentureDrake\LaravelCrm\Services\PersonService;
 use VentureDrake\LaravelCrm\Services\SettingService;
+use VentureDrake\LaravelCrm\Support\PdfTemplateRegistry;
 
 class InvoiceController extends Controller
 {
@@ -255,7 +256,7 @@ class InvoiceController extends Controller
         $pdf = Pdf::setOption([
             'fontDir' => public_path('vendor/laravel-crm/fonts'),
         ])
-            ->loadView('laravel-crm::invoices.pdf', [
+            ->loadView(PdfTemplateRegistry::viewFor('invoice', app('laravel-crm.settings')->get('pdf_template_invoice', PdfTemplateRegistry::defaultSlug())), [
                 'invoice' => $invoice,
                 'dateFormat' => app('laravel-crm.settings')->get('date_format', config('laravel-crm.date_format')),
                 'taxName' => app('laravel-crm.settings')->get('tax_name', 'Tax'),

@@ -10,6 +10,7 @@ use Livewire\Component;
 use Mary\Traits\Toast;
 use VentureDrake\LaravelCrm\Mail\SendPurchaseOrder;
 use VentureDrake\LaravelCrm\Models\PurchaseOrder;
+use VentureDrake\LaravelCrm\Support\PdfTemplateRegistry;
 
 class PurchaseOrderSend extends Component
 {
@@ -78,7 +79,7 @@ class PurchaseOrderSend extends Component
         Pdf::setOption([
             'fontDir' => public_path('vendor/laravel-crm/fonts'),
         ])
-            ->loadView('laravel-crm::purchase-orders.pdf', [
+            ->loadView(PdfTemplateRegistry::viewFor('purchase-order', app('laravel-crm.settings')->get('pdf_template_purchase-order', PdfTemplateRegistry::defaultSlug())), [
                 'purchaseOrder' => $this->purchaseOrder,
                 'dateFormat' => app('laravel-crm.settings')->get('date_format', config('laravel-crm.date_format')),
                 'taxName' => app('laravel-crm.settings')->get('tax_name', 'Tax'),
