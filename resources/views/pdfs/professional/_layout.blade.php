@@ -20,7 +20,7 @@
     .professional-pdf {
         font-family: 'Nunito', 'Helvetica', sans-serif;
         color: #2b2b2b;
-        font-size: 11px;
+        font-size: 12px;
         line-height: 1.5;
     }
 
@@ -54,7 +54,7 @@
     }
 
     .professional-pdf .prof-brand-name {
-        font-size: 12px;
+        font-size: 13px;
         font-weight: 500;
         color: #2b2b2b;
         text-align: right;
@@ -64,7 +64,7 @@
     .professional-pdf .prof-meta td {
         padding: 6px 0;
         border-bottom: 1px solid #d9d9d9;
-        font-size: 10.5px;
+        font-size: 11.5px;
     }
 
     .professional-pdf .prof-meta .prof-meta-label {
@@ -97,7 +97,7 @@
 
     .professional-pdf .prof-party-heading {
         color: #7a7a7a;
-        font-size: 10px;
+        font-size: 11px;
         text-transform: uppercase;
         letter-spacing: 0.08em;
         margin-bottom: 6px;
@@ -117,7 +117,7 @@
         border-bottom: 1px solid #2b2b2b;
         color: #2b2b2b;
         font-weight: 500;
-        font-size: 10.5px;
+        font-size: 11.5px;
     }
 
     .professional-pdf .prof-items tbody td {
@@ -150,7 +150,7 @@
     .professional-pdf .prof-totals td {
         padding: 8px 4px;
         border-bottom: 1px solid #d9d9d9;
-        font-size: 11px;
+        font-size: 12px;
     }
 
     .professional-pdf .prof-totals .prof-totals-label {
@@ -170,7 +170,7 @@
         border-bottom: 0;
         font-weight: 600;
         color: #2b2b2b;
-        font-size: 12.5px;
+        font-size: 13.5px;
     }
 
     .professional-pdf .prof-note {
@@ -179,7 +179,7 @@
 
     .professional-pdf .prof-note-heading {
         color: #7a7a7a;
-        font-size: 10px;
+        font-size: 11px;
         text-transform: uppercase;
         letter-spacing: 0.08em;
         margin-bottom: 4px;

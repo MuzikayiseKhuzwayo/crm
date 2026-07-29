@@ -116,15 +116,15 @@
         <table style="margin-top: 8px">
             <tr>
                 <td style="border-bottom: 1px solid #2b2b2b; width: 33%; padding: 24px 8px 4px 8px">
-                    <span style="color:#7a7a7a; font-size:9.5px">{{ ucfirst(__('laravel-crm::lang.received_by')) }}</span>
+                    <span style="color:#7a7a7a; font-size:10.5px">{{ ucfirst(__('laravel-crm::lang.received_by')) }}</span>
                 </td>
                 <td style="width: 8px"></td>
                 <td style="border-bottom: 1px solid #2b2b2b; width: 33%; padding: 24px 8px 4px 8px">
-                    <span style="color:#7a7a7a; font-size:9.5px">{{ ucfirst(__('laravel-crm::lang.received_date')) }}</span>
+                    <span style="color:#7a7a7a; font-size:10.5px">{{ ucfirst(__('laravel-crm::lang.received_date')) }}</span>
                 </td>
                 <td style="width: 8px"></td>
                 <td style="border-bottom: 1px solid #2b2b2b; width: 33%; padding: 24px 8px 4px 8px">
-                    <span style="color:#7a7a7a; font-size:9.5px">{{ ucfirst(__('laravel-crm::lang.signature')) }}</span>
+                    <span style="color:#7a7a7a; font-size:10.5px">{{ ucfirst(__('laravel-crm::lang.signature')) }}</span>
                 </td>
             </tr>
         </table>

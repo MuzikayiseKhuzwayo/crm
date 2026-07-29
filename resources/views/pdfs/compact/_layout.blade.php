@@ -19,7 +19,7 @@
     .compact-pdf {
         font-family: 'Nunito', 'Helvetica', sans-serif;
         color: #000000;
-        font-size: 9.5px;
+        font-size: 10.5px;
         line-height: 1.4;
     }
 
@@ -45,13 +45,13 @@
     }
 
     .compact-pdf .compact-brand-name {
-        font-size: 10.5px;
+        font-size: 11.5px;
         font-weight: 600;
         color: #000000;
     }
 
     .compact-pdf .compact-doc-title {
-        font-size: 14px;
+        font-size: 15px;
         font-weight: 700;
         color: #000000;
         text-align: right;
@@ -68,7 +68,7 @@
 
     .compact-pdf .compact-meta td {
         padding: 2px 6px 2px 0;
-        font-size: 9.5px;
+        font-size: 10.5px;
         vertical-align: top;
     }
 
@@ -95,7 +95,7 @@
 
     .compact-pdf .compact-party-heading {
         color: #000000;
-        font-size: 9px;
+        font-size: 10px;
         font-weight: 700;
         text-transform: uppercase;
         letter-spacing: 0.06em;
@@ -117,7 +117,7 @@
         border-bottom: 1px solid #000000;
         color: #000000;
         font-weight: 700;
-        font-size: 9px;
+        font-size: 10px;
         text-transform: uppercase;
         letter-spacing: 0.04em;
     }
@@ -151,7 +151,7 @@
 
     .compact-pdf .compact-totals td {
         padding: 3px 6px;
-        font-size: 9.5px;
+        font-size: 10.5px;
     }
 
     .compact-pdf .compact-totals .compact-totals-label {
@@ -170,7 +170,7 @@
         border-top: 1px solid #000000;
         font-weight: 700;
         color: #000000;
-        font-size: 10.5px;
+        font-size: 11.5px;
     }
 
     .compact-pdf .compact-footer {
@@ -185,7 +185,7 @@
 
     .compact-pdf .compact-footer-heading {
         color: #000000;
-        font-size: 9px;
+        font-size: 10px;
         font-weight: 700;
         text-transform: uppercase;
         letter-spacing: 0.04em;

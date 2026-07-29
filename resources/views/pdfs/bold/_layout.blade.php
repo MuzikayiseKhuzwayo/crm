@@ -18,7 +18,7 @@
     .bold-pdf {
         font-family: 'Nunito', 'Helvetica', sans-serif;
         color: #1f2937;
-        font-size: 11px;
+        font-size: 12px;
         line-height: 1.5;
     }
 
@@ -65,13 +65,13 @@
 
     .bold-pdf .bold-band-brand-name {
         color: #ffffff;
-        font-size: 12px;
+        font-size: 13px;
         font-weight: 600;
     }
 
     .bold-pdf .bold-meta td {
         padding: 4px 0;
-        font-size: 10.5px;
+        font-size: 11.5px;
         color: #374151;
     }
 
@@ -79,7 +79,7 @@
         color: #05b3a9;
         text-transform: uppercase;
         letter-spacing: 0.08em;
-        font-size: 10px;
+        font-size: 11px;
         font-weight: 600;
         width: 42%;
     }
@@ -103,7 +103,7 @@
         color: #05b3a9;
         text-transform: uppercase;
         letter-spacing: 0.08em;
-        font-size: 10px;
+        font-size: 11px;
         font-weight: 700;
         margin-bottom: 6px;
     }
@@ -122,7 +122,7 @@
         padding: 10px 8px;
         text-align: left;
         font-weight: 600;
-        font-size: 10.5px;
+        font-size: 11.5px;
         letter-spacing: 0.04em;
     }
 
@@ -158,7 +158,7 @@
 
     .bold-pdf .bold-totals td {
         padding: 8px 14px;
-        font-size: 11px;
+        font-size: 12px;
     }
 
     .bold-pdf .bold-totals .bold-totals-label {
@@ -178,7 +178,7 @@
         background: #05b3a9;
         color: #ffffff;
         font-weight: 700;
-        font-size: 13px;
+        font-size: 14px;
     }
 
     .bold-pdf .bold-note {
@@ -189,7 +189,7 @@
         color: #05b3a9;
         text-transform: uppercase;
         letter-spacing: 0.08em;
-        font-size: 10px;
+        font-size: 11px;
         font-weight: 700;
         margin-bottom: 4px;
     }

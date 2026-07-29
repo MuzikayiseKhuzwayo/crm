@@ -22,7 +22,7 @@
     .modern-pdf {
         font-family: 'Nunito', 'Helvetica', sans-serif;
         color: #1f2937;
-        font-size: 11px;
+        font-size: 12px;
         line-height: 1.5;
     }
 
@@ -58,7 +58,7 @@
     }
 
     .modern-pdf .modern-brand-name {
-        font-size: 13px;
+        font-size: 14px;
         font-weight: 500;
         color: #111827;
     }
@@ -68,7 +68,7 @@
         padding: 6px 14px;
         background: #111827;
         color: #ffffff;
-        font-size: 11px;
+        font-size: 12px;
         font-weight: 500;
         letter-spacing: 0.12em;
         text-transform: uppercase;
@@ -81,7 +81,7 @@
 
     .modern-pdf .modern-meta td {
         padding: 3px 0;
-        font-size: 10.5px;
+        font-size: 11.5px;
         color: #374151;
     }
 
@@ -89,7 +89,7 @@
         color: #6b7280;
         text-transform: uppercase;
         letter-spacing: 0.08em;
-        font-size: 9.5px;
+        font-size: 10.5px;
         width: 130px;
     }
 
@@ -107,7 +107,7 @@
         text-transform: uppercase;
         letter-spacing: 0.1em;
         color: #6b7280;
-        font-size: 9.5px;
+        font-size: 10.5px;
         margin-bottom: 6px;
     }
 
@@ -126,7 +126,7 @@
         color: #6b7280;
         text-transform: uppercase;
         letter-spacing: 0.08em;
-        font-size: 9.5px;
+        font-size: 10.5px;
         font-weight: 500;
     }
 
@@ -161,7 +161,7 @@
 
     .modern-pdf .modern-totals td {
         padding: 8px 14px;
-        font-size: 11px;
+        font-size: 12px;
     }
 
     .modern-pdf .modern-totals .modern-totals-label {
@@ -180,7 +180,7 @@
         border-top: 1px solid #d1d5db;
         font-weight: 500;
         color: #111827;
-        font-size: 12px;
+        font-size: 13px;
     }
 
     .modern-pdf .modern-note {
@@ -191,7 +191,7 @@
         text-transform: uppercase;
         letter-spacing: 0.1em;
         color: #6b7280;
-        font-size: 9.5px;
+        font-size: 10.5px;
         margin-bottom: 6px;
     }
 
