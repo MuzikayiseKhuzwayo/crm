@@ -40,7 +40,8 @@
         }
 
         .container-document{
-            width:18.6cm
+            width:18.6cm;
+            margin:0 auto;
         }
     </style>
 </head>

@@ -58,9 +58,16 @@ class TemplatePreviewController extends Controller
 
         $data = $this->sampleData($docType);
 
+        // Lock paper to A4 portrait so the container-document's fixed
+        // 18.6cm width (declared in layouts/document.blade.php) fills the
+        // printable area edge-to-edge. Without an explicit setPaper()
+        // call DomPDF falls through to its default paper (usually Letter
+        // portrait in landscape rendering) which leaves ~40% of the page
+        // width empty because the fixed-cm container hugs the left edge.
         $pdf = Pdf::setOption([
             'fontDir' => public_path('vendor/laravel-crm/fonts'),
-        ])->loadView(PdfTemplateRegistry::viewFor($docType, $slug), $data);
+        ])->setPaper('a4', 'portrait')
+            ->loadView(PdfTemplateRegistry::viewFor($docType, $slug), $data);
 
         return $pdf->stream('preview-'.$docType.'-'.$slug.'.pdf');
     }
