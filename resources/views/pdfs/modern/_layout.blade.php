@@ -23,17 +23,17 @@
         font-family: 'Nunito', 'Helvetica', sans-serif;
         color: #1f2937;
         font-size: 12px;
-        line-height: 1.5;
+        line-height: 1.3;
     }
 
     .modern-pdf .modern-block {
-        margin-bottom: 28px;
+        margin-bottom: 16px;
     }
 
     .modern-pdf .modern-hair {
         border: 0;
         border-top: 1px solid #e5e7eb;
-        margin: 24px 0;
+        margin: 14px 0;
     }
 
     .modern-pdf table {
@@ -46,7 +46,7 @@
     }
 
     .modern-pdf .modern-header td {
-        vertical-align: top;
+        vertical-align: middle;
         padding: 0;
     }
 
@@ -65,10 +65,10 @@
 
     .modern-pdf .modern-pill {
         display: inline-block;
-        padding: 6px 14px;
+        padding: 8px 18px;
         background: #111827;
         color: #ffffff;
-        font-size: 12px;
+        font-size: 18px;
         font-weight: 500;
         letter-spacing: 0.12em;
         text-transform: uppercase;

@@ -20,7 +20,7 @@
         font-family: 'Nunito', 'Helvetica', sans-serif;
         color: #000000;
         font-size: 10.5px;
-        line-height: 1.4;
+        line-height: 1.25;
     }
 
     .compact-pdf .compact-block {

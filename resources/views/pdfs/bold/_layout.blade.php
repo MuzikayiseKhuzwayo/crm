@@ -19,11 +19,11 @@
         font-family: 'Nunito', 'Helvetica', sans-serif;
         color: #1f2937;
         font-size: 12px;
-        line-height: 1.5;
+        line-height: 1.3;
     }
 
     .bold-pdf .bold-block {
-        margin-bottom: 22px;
+        margin-bottom: 14px;
     }
 
     .bold-pdf table {

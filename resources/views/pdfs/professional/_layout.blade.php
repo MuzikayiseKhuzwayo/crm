@@ -21,11 +21,11 @@
         font-family: 'Nunito', 'Helvetica', sans-serif;
         color: #2b2b2b;
         font-size: 12px;
-        line-height: 1.5;
+        line-height: 1.3;
     }
 
     .professional-pdf .prof-block {
-        margin-bottom: 22px;
+        margin-bottom: 14px;
     }
 
     .professional-pdf table {
