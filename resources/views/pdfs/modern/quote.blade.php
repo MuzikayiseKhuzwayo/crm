@@ -5,7 +5,7 @@
         <tr>
             <td width="60%">
                 @if($logo)
-                    <img class="modern-brand-logo" src="{{ asset('storage/'.$logo) }}" alt="" />
+                    <img class="modern-brand-logo" src="{{ str_starts_with($logo, 'data:') ? $logo : asset('storage/'.$logo) }}" alt="" />
                 @endif
                 @if($fromName)
                     <div class="modern-brand-name">{{ $fromName }}</div>

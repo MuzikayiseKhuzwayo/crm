@@ -8,7 +8,7 @@
             </td>
             <td width="40%">
                 @if($logo)
-                    <img class="prof-brand-logo" src="{{ asset('storage/'.$logo) }}" alt="" />
+                    <img class="prof-brand-logo" src="{{ str_starts_with($logo, 'data:') ? $logo : asset('storage/'.$logo) }}" alt="" />
                 @endif
                 @if($fromName)
                     <div class="prof-brand-name">{{ $fromName }}</div>
