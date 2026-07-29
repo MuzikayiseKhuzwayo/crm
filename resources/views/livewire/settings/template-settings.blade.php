@@ -12,6 +12,7 @@
                        class="tab"
                        aria-label="{{ $tabLabel }}"
                        value="{{ $docType }}"
+                       @checked($tab === $docType)
                        wire:model.live="tab" />
                 <div role="tabpanel" class="tab-content bg-base-100 border-base-300 p-6">
                     <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-5 gap-4">
