@@ -30,6 +30,11 @@
         }
 
         @page {
+            /* Xero-tight A4 margins so PDFs fill the printable area
+               edge-to-edge rather than sitting inside DomPDF's default
+               ~0.75in white gutter. */
+            margin: 1.2cm 1.2cm 1.6cm 1.2cm;
+
             @bottom-right {
                 content: counter(page) " of " counter(pages);
             }
@@ -40,8 +45,11 @@
         }
 
         .container-document{
-            width:18.6cm;
-            margin:0 auto;
+            /* Fill the printable area (defined by @page margin above)
+               rather than clamping to a fixed 18.6cm. Together with
+               the tight @page margins this produces a page-fill layout
+               matching Xero's invoice PDFs. */
+            width: 100%;
         }
     </style>
 </head>
