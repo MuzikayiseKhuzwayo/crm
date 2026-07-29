@@ -2,6 +2,7 @@
 
 namespace VentureDrake\LaravelCrm\Livewire\Settings;
 
+use Livewire\Attributes\Url;
 use Livewire\Component;
 use Mary\Traits\Toast;
 use VentureDrake\LaravelCrm\Support\PdfTemplateRegistry;
@@ -32,6 +33,15 @@ class TemplateSettings extends Component
      * @var array<string, string>
      */
     public array $selected = [];
+
+    /**
+     * The currently-visible doc-type tab. Query-string-synced so bookmarks
+     * (`?tab=order`) deep-link cleanly, matching the tab-state contract on
+     * `/crm/users` established by US-004 of the invite-users lifecycle
+     * series.
+     */
+    #[Url]
+    public string $tab = 'invoice';
 
     public function mount(): void
     {

@@ -132,8 +132,15 @@ test('TemplateSettings blade view contains the 5 doc-type tabs and 5-card grid m
 
     $blade = file_get_contents($bladePath);
 
-    expect($blade)->toContain('x-mary-tabs');
-    expect($blade)->toContain('x-mary-tab');
+    // Uses raw DaisyUI `tabs tabs-lift` radio inputs (same style as
+    // /crm/users), bound to the Livewire `$tab` property via
+    // wire:model.live. Regression guard against a future refactor
+    // reverting to the pre-existing mary-tabs shape.
+    expect($blade)->toContain('class="tabs tabs-lift"');
+    expect($blade)->toContain('role="tab"');
+    expect($blade)->toContain('role="tabpanel"');
+    expect($blade)->toContain('wire:model.live="tab"');
+    expect($blade)->toContain('name="template-tabs"');
     expect($blade)->toContain('foreach ($docTypes as $docType)');
     expect($blade)->toContain('foreach ($templates as $slug => $template)');
     expect($blade)->toContain("route('laravel-crm.settings.templates.preview'");
