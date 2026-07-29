@@ -7,7 +7,7 @@
                 @if($logo)
                     <img class="modern-brand-logo" src="{{ str_starts_with($logo, 'data:') ? $logo : asset('storage/'.$logo) }}" alt="" />
                 @endif
-                @if($fromName)
+                @if(! $logo && $fromName)
                     <div class="modern-brand-name">{{ $fromName }}</div>
                 @endif
             </td>

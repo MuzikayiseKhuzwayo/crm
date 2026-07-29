@@ -51,8 +51,8 @@
     }
 
     .modern-pdf .modern-brand-logo {
-        max-height: 44px;
-        max-width: 160px;
+        max-height: 66px;
+        max-width: 240px;
         display: block;
         margin-bottom: 6px;
     }
@@ -72,7 +72,7 @@
         font-weight: 500;
         letter-spacing: 0.12em;
         text-transform: uppercase;
-        border-radius: 999px;
+        border-radius: 3px;
     }
 
     .modern-pdf .modern-meta {
