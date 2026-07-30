@@ -58,8 +58,8 @@
     }
 
     .bold-pdf .bold-band-brand img {
-        max-height: 40px;
-        max-width: 140px;
+        max-height: 60px;
+        max-width: 210px;
         display: inline-block;
     }
 

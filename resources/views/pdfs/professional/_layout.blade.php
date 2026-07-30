@@ -47,8 +47,8 @@
     }
 
     .professional-pdf .prof-brand-logo {
-        max-height: 48px;
-        max-width: 160px;
+        max-height: 72px;
+        max-width: 240px;
         display: block;
         margin-left: auto;
     }

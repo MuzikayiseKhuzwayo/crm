@@ -38,8 +38,8 @@
     }
 
     .compact-pdf .compact-brand-logo {
-        max-height: 36px;
-        max-width: 130px;
+        max-height: 54px;
+        max-width: 195px;
         display: block;
         margin-bottom: 3px;
     }

@@ -18,7 +18,7 @@
                 </td>
                 <td width="50%" style="text-align: right">
                     @if($logo)
-                        <img src="{{ asset('storage/'.$logo) }}" height="140" style="margin-top: 10px" />
+                        <img src="{{ str_starts_with($logo, 'data:') ? $logo : asset('storage/'.$logo) }}" height="210" style="margin-top: 10px" />
                     @endif
                 </td>
             </tr>
