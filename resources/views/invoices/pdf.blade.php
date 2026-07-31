@@ -18,7 +18,7 @@
                 </td>
                 <td width="50%" style="text-align: right">
                     @if($logo)
-                        <img src="{{ str_starts_with($logo, 'data:') ? $logo : asset('storage/'.$logo) }}" height="210" style="margin-top: 10px" />
+                        <img src="{{ str_starts_with($logo, 'data:') ? $logo : asset('storage/'.$logo) }}" style="max-height: 70px; max-width: 240px; margin-top: 10px" />
                     @endif
                 </td>
             </tr>
@@ -90,7 +90,7 @@
         </tr>
         </thead>
         <tbody>
-        @foreach($invoice->invoiceLInes()->whereNotNull('product_id')->orderBy('order', 'asc')->orderBy('created_at', 'asc')->get() as $invoiceLine)
+        @foreach($invoice->invoiceLines->whereNotNull('product_id')->sortBy([['order', 'asc'], ['created_at', 'asc']]) as $invoiceLine)
             <tr>
                 <td>
                     {{ $invoiceLine->product->name ?? null }}

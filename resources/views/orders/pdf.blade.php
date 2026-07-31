@@ -16,7 +16,7 @@
                 </td>
                 <td width="50%" style="text-align: right">
                     @if($logo)
-                        <img src="{{ str_starts_with($logo, 'data:') ? $logo : asset('storage/'.$logo) }}" height="210" />
+                        <img src="{{ str_starts_with($logo, 'data:') ? $logo : asset('storage/'.$logo) }}" style="max-height: 70px; max-width: 240px" />
                     @endif
                 </td>
             </tr>
@@ -85,7 +85,7 @@
         </tr>
         </thead>
         <tbody>
-        @foreach($order->orderProducts()->whereNotNull('product_id')->orderBy('order', 'asc')->orderBy('created_at', 'asc')->get() as $orderProduct)
+        @foreach($order->orderProducts->whereNotNull('product_id')->sortBy([['order', 'asc'], ['created_at', 'asc']]) as $orderProduct)
             <tr>
                 <td>{{ $orderProduct->product->name }}</td>
                 <td>{{ money($orderProduct->price ?? null, $orderProduct->currency) }}</td>

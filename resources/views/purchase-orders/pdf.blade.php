@@ -20,7 +20,7 @@
                 </td>
                 <td width="50%" style="text-align: right">
                     @if($logo)
-                        <img src="{{ str_starts_with($logo, 'data:') ? $logo : asset('storage/'.$logo) }}" height="210" />
+                        <img src="{{ str_starts_with($logo, 'data:') ? $logo : asset('storage/'.$logo) }}" style="max-height: 70px; max-width: 240px" />
                     @endif
                 </td>
             </tr>
@@ -97,7 +97,7 @@
         </tr>
         </thead>
         <tbody>
-        @foreach($purchaseOrder->purchaseOrderLines()->whereNotNull('product_id')->get() as $purchaseOrderLine)
+        @foreach($purchaseOrder->purchaseOrderLines->whereNotNull('product_id') as $purchaseOrderLine)
             <tr>
                 <td>{{ $purchaseOrderLine->product->name ?? null}}</td>
                 <td>{{ money($purchaseOrderLine->price ?? null, $purchaseOrderLine->currency) }}</td>

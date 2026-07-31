@@ -25,7 +25,7 @@
                 </td>
                 <td width="50%" style="text-align: right">
                     @if($logo)
-                        <img src="{{ str_starts_with($logo, 'data:') ? $logo : asset('storage/'.$logo) }}" height="210" />
+                        <img src="{{ str_starts_with($logo, 'data:') ? $logo : asset('storage/'.$logo) }}" style="max-height: 70px; max-width: 240px" />
                     @endif
                 </td>
             </tr>
@@ -98,7 +98,7 @@
         </tr>
         </thead>
         <tbody>
-        @foreach($delivery->deliveryProducts()->where('quantity', '>', 0)->orderBy('order', 'asc')->orderBy('created_at', 'asc')->get() as $deliveryProduct)
+        @foreach($delivery->deliveryProducts->where('quantity', '>', 0)->sortBy([['order', 'asc'], ['created_at', 'asc']]) as $deliveryProduct)
             <tr>
                 <td>{{ $deliveryProduct->orderProduct->product->name }}</td>
                 <td>{{ $deliveryProduct->quantity }}</td>
