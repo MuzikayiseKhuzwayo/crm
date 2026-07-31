@@ -22,18 +22,18 @@
     .modern-pdf {
         font-family: 'Nunito', 'Helvetica', sans-serif;
         color: #1f2937;
-        font-size: 12px;
-        line-height: 1.3;
+        font-size: 13px;
+        line-height: 1.2;
     }
 
     .modern-pdf .modern-block {
-        margin-bottom: 16px;
+        margin-bottom: 13px;
     }
 
     .modern-pdf .modern-hair {
         border: 0;
         border-top: 1px solid #e5e7eb;
-        margin: 14px 0;
+        margin: 11px 0;
     }
 
     .modern-pdf table {
@@ -58,21 +58,24 @@
     }
 
     .modern-pdf .modern-brand-name {
-        font-size: 14px;
+        font-size: 15px;
         font-weight: 500;
         color: #111827;
     }
 
     .modern-pdf .modern-pill {
         display: inline-block;
-        padding: 8px 18px;
-        background: #111827;
-        color: #ffffff;
-        font-size: 18px;
-        font-weight: 500;
-        letter-spacing: 0.12em;
+        padding: 7px 16px;
+        /* Tinted chip: pale fill with saturated same-hue text, rather
+           than a solid dark block. Palette stays on the template's
+           existing #111827. */
+        background: #e8eaee;
+        color: #111827;
+        font-size: 14px;
+        font-weight: 700;
+        letter-spacing: 0.1em;
         text-transform: uppercase;
-        border-radius: 3px;
+        border-radius: 6px;
     }
 
     .modern-pdf .modern-meta {
@@ -81,7 +84,7 @@
 
     .modern-pdf .modern-meta td {
         padding: 3px 0;
-        font-size: 11.5px;
+        font-size: 12.5px;
         color: #374151;
     }
 
@@ -89,7 +92,7 @@
         color: #6b7280;
         text-transform: uppercase;
         letter-spacing: 0.08em;
-        font-size: 10.5px;
+        font-size: 11.5px;
         width: 130px;
     }
 
@@ -107,7 +110,7 @@
         text-transform: uppercase;
         letter-spacing: 0.1em;
         color: #6b7280;
-        font-size: 10.5px;
+        font-size: 11.5px;
         margin-bottom: 6px;
     }
 
@@ -126,7 +129,7 @@
         color: #6b7280;
         text-transform: uppercase;
         letter-spacing: 0.08em;
-        font-size: 10.5px;
+        font-size: 11.5px;
         font-weight: 500;
     }
 
@@ -161,7 +164,7 @@
 
     .modern-pdf .modern-totals td {
         padding: 8px 14px;
-        font-size: 12px;
+        font-size: 13px;
     }
 
     .modern-pdf .modern-totals .modern-totals-label {
@@ -180,7 +183,7 @@
         border-top: 1px solid #d1d5db;
         font-weight: 500;
         color: #111827;
-        font-size: 13px;
+        font-size: 14px;
     }
 
     .modern-pdf .modern-note {
@@ -191,7 +194,7 @@
         text-transform: uppercase;
         letter-spacing: 0.1em;
         color: #6b7280;
-        font-size: 10.5px;
+        font-size: 11.5px;
         margin-bottom: 6px;
     }
 
