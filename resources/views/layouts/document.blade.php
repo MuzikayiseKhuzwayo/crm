@@ -57,7 +57,22 @@
                compact and professional templates each declare their own
                line-height on their scoped .*-pdf wrapper, which wins over
                this inherited value. */
-            line-height: 1.45;
+            line-height: 1.6;
+        }
+
+        /* document.css pins `.table-sm.table-items td/th` to line-height .7,
+           which is more specific than the .container-document rule above and
+           so wins for the classic template's cell text — where nearly all of
+           its content lives. Override it here (this <style> block is emitted
+           after document.css, and the extra .container-document raises
+           specificity) to match the container value.
+
+           Scoped in practice to the classic template: the `table-items`
+           class is used only by the legacy pdf views that classic renders,
+           and nowhere under resources/views/pdfs/. */
+        .container-document .table-sm.table-items td,
+        .container-document .table-sm.table-items th {
+            line-height: 1.6;
         }
     </style>
 </head>

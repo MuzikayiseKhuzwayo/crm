@@ -311,8 +311,14 @@ class PdfSampleData
             [
                 'name' => 'Sample service',
                 'description' => 'Third fabricated line item — a service instead of a product.',
-                'quantity' => 3,
-                'price' => 316.67,
+                // Keep price an integer: the money mutators multiply by 100,
+                // and money() reads an int as minor units but a float as a
+                // major amount — so a decimal price here renders as
+                // $31,667.00 instead of $316.67. 5 x 190 keeps the row
+                // self-consistent and the 950 amount summing into the 2700
+                // subtotal.
+                'quantity' => 5,
+                'price' => 190,
                 'tax_amount' => 95,
                 'amount' => 950,
             ],
