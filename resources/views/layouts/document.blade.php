@@ -50,6 +50,14 @@
                the tight @page margins this produces a page-fill layout
                matching Xero's invoice PDFs. */
             width: 100%;
+
+            /* Open up the very tight line-height (1.1) that the bundled
+               Bootstrap build sets on <body> in document.css. In practice
+               this governs the classic template only: the modern, bold,
+               compact and professional templates each declare their own
+               line-height on their scoped .*-pdf wrapper, which wins over
+               this inherited value. */
+            line-height: 1.45;
         }
     </style>
 </head>
