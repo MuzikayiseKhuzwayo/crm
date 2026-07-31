@@ -57,7 +57,7 @@
                compact and professional templates each declare their own
                line-height on their scoped .*-pdf wrapper, which wins over
                this inherited value. */
-            line-height: 1.6;
+            line-height: 1.2;
         }
 
         /* document.css pins `.table-sm.table-items td/th` to line-height .7,
@@ -72,7 +72,7 @@
            and nowhere under resources/views/pdfs/. */
         .container-document .table-sm.table-items td,
         .container-document .table-sm.table-items th {
-            line-height: 1.6;
+            line-height: 1.2;
         }
     </style>
 </head>
