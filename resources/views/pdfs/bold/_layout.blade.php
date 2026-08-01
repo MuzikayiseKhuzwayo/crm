@@ -35,7 +35,10 @@
         background: #05b3a9;
         color: #ffffff;
         padding: 18px 22px;
-        margin: -20px -20px 22px -20px;
+        /* Previously bled 20px past the content box on each side via
+           negative margins, so the band's edges did not line up with the
+           meta/items tables below it. */
+        margin: 0 0 22px 0;
     }
 
     .bold-pdf .bold-header-band td {
@@ -57,10 +60,21 @@
         color: #ffffff;
     }
 
+    /* White plate behind the logo. No single band colour can suit every
+       logo — a light logo disappears on a light band, a dark one on a dark
+       band — but virtually every logo is drawn to sit on white, so backing
+       it in white keeps it legible whatever the band colour is set to. */
+    .bold-pdf .bold-band-logo-plate {
+        display: inline-block;
+        background: #ffffff;
+        padding: 8px 12px;
+        border-radius: 4px;
+    }
+
     .bold-pdf .bold-band-brand img {
         max-height: 60px;
         max-width: 210px;
-        display: inline-block;
+        display: block;
     }
 
     .bold-pdf .bold-band-brand-name {

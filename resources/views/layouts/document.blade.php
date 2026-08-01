@@ -29,6 +29,39 @@
             src: url('vendor/laravel-crm/fonts/Nunito-Medium.ttf') format('truetype');
         }
 
+        /* Without 600/700 faces registered, every <strong> and
+           font-weight: 600/700 rule has no Nunito to match and DomPDF
+           silently substitutes a built-in Helvetica/Times bold — which is
+           why bold text rendered in a visibly different typeface to the
+           surrounding copy. */
+        @font-face {
+            font-family: 'Nunito';
+            font-style: normal;
+            font-weight: 600;
+            src: url('vendor/laravel-crm/fonts/Nunito-SemiBold.ttf') format('truetype');
+        }
+
+        @font-face {
+            font-family: 'Nunito';
+            font-style: normal;
+            font-weight: 700;
+            src: url('vendor/laravel-crm/fonts/Nunito-Bold.ttf') format('truetype');
+        }
+
+        @font-face {
+            font-family: 'Nunito';
+            font-style: italic;
+            font-weight: normal;
+            src: url('vendor/laravel-crm/fonts/Nunito-Italic.ttf') format('truetype');
+        }
+
+        @font-face {
+            font-family: 'Nunito';
+            font-style: italic;
+            font-weight: 700;
+            src: url('vendor/laravel-crm/fonts/Nunito-BoldItalic.ttf') format('truetype');
+        }
+
         @page {
             /* Xero-tight A4 margins so PDFs fill the printable area
                edge-to-edge rather than sitting inside DomPDF's default
