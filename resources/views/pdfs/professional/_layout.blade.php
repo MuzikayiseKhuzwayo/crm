@@ -33,9 +33,15 @@
         border-collapse: collapse;
     }
 
+    /* Every block below shares the .prof-items 8px horizontal padding so
+       content lines up on one left edge and one right edge. */
     .professional-pdf .prof-header td {
         vertical-align: top;
-        padding: 0;
+        padding: 0 8px;
+    }
+
+    .professional-pdf .prof-header td + td {
+        text-align: right;
     }
 
     .professional-pdf .prof-doc-title {
@@ -47,10 +53,9 @@
     }
 
     .professional-pdf .prof-brand-logo {
-        max-height: 72px;
-        max-width: 240px;
-        display: block;
-        margin-left: auto;
+        max-height: 108px;
+        max-width: 360px;
+        display: inline-block;
     }
 
     .professional-pdf .prof-brand-name {
@@ -62,7 +67,7 @@
     }
 
     .professional-pdf .prof-meta td {
-        padding: 6px 0;
+        padding: 6px 8px;
         border-bottom: 1px solid #d9d9d9;
         font-size: 11.5px;
     }
@@ -86,12 +91,12 @@
 
     .professional-pdf .prof-parties td {
         vertical-align: top;
-        padding: 14px 12px 14px 0;
+        padding: 14px 12px 14px 8px;
         width: 50%;
     }
 
     .professional-pdf .prof-parties td + td {
-        padding: 14px 0 14px 12px;
+        padding: 14px 8px 14px 12px;
         border-left: 1px solid #d9d9d9;
     }
 
@@ -148,7 +153,7 @@
     }
 
     .professional-pdf .prof-totals td {
-        padding: 8px 4px;
+        padding: 8px 8px;
         border-bottom: 1px solid #d9d9d9;
         font-size: 12px;
     }
@@ -175,6 +180,7 @@
 
     .professional-pdf .prof-note {
         margin-top: 18px;
+        padding: 0 8px;
     }
 
     .professional-pdf .prof-note-heading {

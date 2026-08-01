@@ -3,10 +3,10 @@
 @section('professionalContent')
     <table class="prof-header prof-block">
         <tr>
-            <td width="60%">
+            <td width="45%">
                 <h1 class="prof-doc-title">{{ ucfirst(__('laravel-crm::lang.order')) }}</h1>
             </td>
-            <td width="40%">
+            <td width="55%">
                 @if($logo)
                     <img class="prof-brand-logo" src="{{ str_starts_with($logo, 'data:') ? $logo : asset('storage/'.$logo) }}" alt="" />
                 @endif

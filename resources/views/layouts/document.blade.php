@@ -22,6 +22,15 @@
             src: url('vendor/laravel-crm/fonts/Nunito-Regular.ttf') format('truetype');
         }
         
+        /* The professional template's doc title uses weight 300; without a
+           Light face it fell back to a built-in serif. */
+        @font-face {
+            font-family: 'Nunito';
+            font-style: normal;
+            font-weight: 300;
+            src: url('vendor/laravel-crm/fonts/Nunito-Light.ttf') format('truetype');
+        }
+
         @font-face {
             font-family: 'Nunito';
             font-style: normal;
