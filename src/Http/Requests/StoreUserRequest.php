@@ -3,6 +3,7 @@
 namespace VentureDrake\LaravelCrm\Http\Requests;
 
 use Illuminate\Foundation\Http\FormRequest;
+use VentureDrake\LaravelCrm\Http\Rules\AssignableRole;
 
 class StoreUserRequest extends FormRequest
 {
@@ -27,6 +28,7 @@ class StoreUserRequest extends FormRequest
             'name' => 'required|string|max:255',
             'email' => 'required|string|email|max:255|unique:users,email',
             'password' => 'required|string|min:8|confirmed',
+            'role' => ['nullable', new AssignableRole],
         ];
     }
 }

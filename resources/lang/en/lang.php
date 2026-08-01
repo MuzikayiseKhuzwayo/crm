@@ -201,6 +201,7 @@ return [
     'user_stored' => 'user stored',
     'user_updated' => 'user updated',
     'user_deleted' => 'user deleted',
+    'user_cannot_delete_self' => 'you cannot delete your own user account',
     'leave_blank_to_keep_current_password' => 'leave blank to keep current password',
     'user_invitation_sent' => 'user invitation sent',
     'CRM_Access' => 'CRM Access',

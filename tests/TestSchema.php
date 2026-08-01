@@ -20,6 +20,8 @@ class TestSchema
                 $table->string('password')->nullable();
                 $table->boolean('crm_access')->default(true);
                 $table->text('crm_permissions')->nullable();
+                // Drives the stub's hasRole(); permissive when null.
+                $table->text('crm_roles')->nullable();
                 $table->timestamp('last_online_at')->nullable();
                 // Added in production by add_mailing_list_to_users_table.php.stub
                 $table->boolean('mailing_list')->default(true);
@@ -27,6 +29,43 @@ class TestSchema
                 $table->unsignedBigInteger('current_team_id')->nullable();
                 $table->text('team_ids')->nullable();
                 $table->rememberToken();
+                $table->timestamps();
+            });
+        }
+
+        // Jetstream's tenancy pivot. Not a CRM migration, but UserController::store()
+        // and UserIndex::users() both hard-require it when laravel-crm.teams is on.
+        if (! Schema::hasTable('team_user')) {
+            Schema::create('team_user', function (Blueprint $table) {
+                $table->bigIncrements('id');
+                $table->unsignedBigInteger('team_id');
+                $table->unsignedBigInteger('user_id');
+                $table->string('role')->nullable();
+                $table->timestamps();
+            });
+        }
+
+        // The CRM's own team grouping (crm_teams / crm_team_user). Note these are
+        // NOT prefixed by db_table_prefix in the production stub either.
+        if (! Schema::hasTable('crm_teams')) {
+            Schema::create('crm_teams', function (Blueprint $table) {
+                $table->bigIncrements('id');
+                // Added in production by add_team_id_to_laravel_crm_tables.php.stub;
+                // the BelongsToTeams global scope on Team requires it.
+                $table->unsignedBigInteger('team_id')->nullable();
+                $table->unsignedBigInteger('user_id');
+                $table->unsignedBigInteger('team_owner_id')->nullable();
+                $table->string('name');
+                $table->timestamps();
+                $table->softDeletes();
+            });
+        }
+
+        if (! Schema::hasTable('crm_team_user')) {
+            Schema::create('crm_team_user', function (Blueprint $table) {
+                $table->bigIncrements('id');
+                $table->unsignedBigInteger('crm_team_id');
+                $table->unsignedBigInteger('user_id');
                 $table->timestamps();
             });
         }

@@ -201,6 +201,7 @@ return [
     'user_stored' => 'کاربر ذخیره شد',
     'user_updated' => 'کاربر به‌روز شد',
     'user_deleted' => 'کاربر حذف شد',
+    'user_cannot_delete_self' => 'شما نمی‌توانید حساب کاربری خود را حذف کنید',
     'leave_blank_to_keep_current_password' => 'برای حفظ رمز عبور فعلی، خالی بگذارید',
     'user_invitation_sent' => 'دعوت‌نامه کاربر ارسال شد',
     'CRM_Access' => 'دسترسی CRM',

@@ -27,11 +27,9 @@ class UserInvite extends Component
 
     public function mount(): void
     {
-        foreach (Role::crm()
-            ->when(config('laravel-crm.teams'), function ($query) {
-                return $query->where('team_id', auth()->user()->currentTeam?->id);
-            })
-            ->get() as $role) {
+        // Role::assignable() is the single source of truth for "roles this caller
+        // may hand out" -- the dropdown and the validation rule must not diverge.
+        foreach (Role::assignable()->get() as $role) {
             $this->roles[] = [
                 'id' => $role->id,
                 'name' => $role->name,
@@ -79,10 +77,7 @@ class UserInvite extends Component
             'role_id' => [
                 'required',
                 function (string $attribute, $value, $fail) {
-                    $exists = Role::crm()
-                        ->when(config('laravel-crm.teams'), function ($query) {
-                            return $query->where('team_id', auth()->user()->currentTeam?->id);
-                        })
+                    $exists = Role::assignable()
                         ->whereKey($value)
                         ->exists();
 

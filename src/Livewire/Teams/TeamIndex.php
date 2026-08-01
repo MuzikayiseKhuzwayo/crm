@@ -4,8 +4,10 @@ namespace VentureDrake\LaravelCrm\Livewire\Teams;
 
 use App\Models\User;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
 use Illuminate\Pagination\LengthAwarePaginator;
 use Illuminate\Support\Collection;
+use Livewire\Attributes\Url;
 use Livewire\Component;
 use Livewire\WithPagination;
 use Mary\Traits\Toast;
@@ -16,7 +18,7 @@ use VentureDrake\LaravelCrm\Traits\ResetsPaginationWhenPropsChanges;
 
 class TeamIndex extends Component
 {
-    use ClearsProperties, ResetsPaginationWhenPropsChanges, Toast, WithPagination;
+    use AuthorizesRequests, ClearsProperties, ResetsPaginationWhenPropsChanges, Toast, WithPagination;
 
     public $layout = 'index';
 
@@ -73,6 +75,8 @@ class TeamIndex extends Component
     public function delete($id)
     {
         if ($team = Team::find($id)) {
+            $this->authorize('delete', $team);
+
             $team->delete();
 
             $this->success(ucfirst(trans('laravel-crm::lang.team_deleted')));

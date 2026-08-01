@@ -5,8 +5,10 @@ namespace VentureDrake\LaravelCrm\Livewire\Users;
 use App\Models\User;
 use Carbon\Carbon;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
 use Illuminate\Pagination\LengthAwarePaginator;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\Notification;
 use Livewire\Attributes\Url;
@@ -16,12 +18,13 @@ use Mary\Traits\Toast;
 use VentureDrake\LaravelCrm\Models\Role;
 use VentureDrake\LaravelCrm\Models\UserInvitation;
 use VentureDrake\LaravelCrm\Notifications\UserInvitationNotification;
+use VentureDrake\LaravelCrm\Support\TeamMembership;
 use VentureDrake\LaravelCrm\Traits\ClearsProperties;
 use VentureDrake\LaravelCrm\Traits\ResetsPaginationWhenPropsChanges;
 
 class UserIndex extends Component
 {
-    use ClearsProperties, ResetsPaginationWhenPropsChanges, Toast, WithPagination;
+    use AuthorizesRequests, ClearsProperties, ResetsPaginationWhenPropsChanges, Toast, WithPagination;
 
     public $layout = 'index';
 
@@ -92,6 +95,23 @@ class UserIndex extends Component
             $q->where('name', 'like', "%$this->search%");
         })->when($this->crm_access !== null && $this->crm_access !== '', fn (Builder $q) => $q->where('crm_access', (bool) $this->crm_access))
             ->when($this->role_id, fn (Builder $q) => $q->whereHas('roles', fn (Builder $q) => $q->where('crm_role', 1)->whereIn('roles.id', $this->role_id)))
+            // Mirrors the team scoping in pendingInvitationsQuery(). Without it a
+            // Team A admin lists every user in the host application and the delete
+            // button then 403s on a row they can see. Users are not team-scoped by a
+            // column, so the boundary is the Jetstream `team_user` pivot -- the same
+            // table UserController::store() writes to when teams are enabled. When no
+            // current team resolves this matches nothing, which fails closed the same
+            // way TeamMembership::inCurrentTeam() does.
+            ->when(config('laravel-crm.teams'), function (Builder $q) {
+                $currentTeamId = auth()->user()?->currentTeam?->id;
+
+                $q->whereExists(function ($query) use ($currentTeamId) {
+                    $query->select(DB::raw(1))
+                        ->from('team_user')
+                        ->whereColumn('team_user.user_id', 'users.id')
+                        ->where('team_user.team_id', $currentTeamId);
+                });
+            })
             ->orderBy(...array_values($this->sortBy))
             ->paginate(25);
     }
@@ -155,11 +175,28 @@ class UserIndex extends Component
 
     public function delete($id)
     {
-        if ($user = User::find($id)) {
-            $user->delete();
+        $user = User::find($id);
 
-            $this->success(ucfirst(trans('laravel-crm::lang.user_deleted')));
+        if (! $user) {
+            return;
         }
+
+        $this->authorize('delete', $user);
+
+        // Self-deletion is a user error rather than a permission failure -- an Owner
+        // legitimately holds 'delete crm users', and letting them remove their own
+        // account can orphan the last Owner. Surface it as a toast, not a 403.
+        if ((int) $user->getKey() === (int) auth()->id()) {
+            $this->error(ucfirst(trans('laravel-crm::lang.user_cannot_delete_self')));
+
+            return;
+        }
+
+        abort_unless(TeamMembership::inCurrentTeam($user), 403);
+
+        $user->delete();
+
+        $this->success(ucfirst(trans('laravel-crm::lang.user_deleted')));
     }
 
     public function render()

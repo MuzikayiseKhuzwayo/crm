@@ -3,6 +3,7 @@
 namespace VentureDrake\LaravelCrm\Livewire\Users;
 
 use Livewire\Component;
+use VentureDrake\LaravelCrm\Http\Rules\AssignableRole;
 use VentureDrake\LaravelCrm\Livewire\Users\Traits\HasUserCommon;
 use VentureDrake\LaravelCrm\Models\Role;
 
@@ -19,6 +20,7 @@ class UserEdit extends Component
         return [
             'name' => 'required|max:255',
             'email' => 'required|string|email|max:255|unique:users,email,'.$this->user->id,
+            'role' => ['nullable', new AssignableRole],
         ];
     }
 
@@ -83,7 +85,9 @@ class UserEdit extends Component
         ])->save();
 
         if ($this->role) {
-            if ($role = Role::find($this->role)) {
+            if ($role = Role::assignable()->find($this->role)) {
+                abort_if($role->name === 'Owner' && ! auth()->user()->hasRole('Owner'), 403);
+
                 if ($removeRole = $this->user->roles()->where('crm_role', 1)->first()) { // THIS COULD BE A BUG
                     $this->user->removeRole($removeRole);
                 }

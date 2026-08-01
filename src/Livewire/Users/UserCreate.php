@@ -6,6 +6,7 @@ use App\User;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use Livewire\Component;
+use VentureDrake\LaravelCrm\Http\Rules\AssignableRole;
 use VentureDrake\LaravelCrm\Livewire\Users\Traits\HasUserCommon;
 use VentureDrake\LaravelCrm\Models\Role;
 
@@ -21,6 +22,7 @@ class UserCreate extends Component
             'name' => 'required|max:255',
             'email' => 'required|string|email|max:255|unique:users,email',
             'password' => 'required|string|min:8|confirmed',
+            'role' => ['nullable', new AssignableRole],
         ];
     }
 
@@ -45,7 +47,9 @@ class UserCreate extends Component
         ]);
 
         if ($this->role) {
-            if ($role = Role::find($this->role)) {
+            if ($role = Role::assignable()->find($this->role)) {
+                abort_if($role->name === 'Owner' && ! auth()->user()->hasRole('Owner'), 403);
+
                 if ($removeRole = $user->roles()->where('crm_role', 1)->first()) { // THIS COULD BE A BUG
                     $user->removeRole($removeRole);
                 }

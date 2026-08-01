@@ -74,7 +74,9 @@ class UserController extends Controller
         ]);
 
         if ($request->role) {
-            if ($role = Role::find($request->role)) {
+            if ($role = Role::assignable()->find($request->role)) {
+                abort_if($role->name === 'Owner' && ! auth()->user()->hasRole('Owner'), 403);
+
                 if ($removeRole = $user->roles()->where('crm_role', 1)->first()) { // THIS COULD BE A BUG
                     $user->removeRole($removeRole);
                 }
@@ -164,7 +166,9 @@ class UserController extends Controller
         $this->updateUserAddresses($user, $request->addresses);
 
         if ($request->role) {
-            if ($role = Role::find($request->role)) {
+            if ($role = Role::assignable()->find($request->role)) {
+                abort_if($role->name === 'Owner' && ! auth()->user()->hasRole('Owner'), 403);
+
                 if ($removeRole = $user->roles()->where('crm_role', 1)->first()) {
                     $user->removeRole($removeRole);
                 }

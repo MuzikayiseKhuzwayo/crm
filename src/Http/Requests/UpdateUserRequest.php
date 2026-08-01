@@ -3,6 +3,7 @@
 namespace VentureDrake\LaravelCrm\Http\Requests;
 
 use Illuminate\Foundation\Http\FormRequest;
+use VentureDrake\LaravelCrm\Http\Rules\AssignableRole;
 
 class UpdateUserRequest extends FormRequest
 {
@@ -26,6 +27,7 @@ class UpdateUserRequest extends FormRequest
         return [
             'name' => 'required|string|max:255',
             'email' => 'required|string|email|max:255|unique:users,email,'.$this->user->id,
+            'role' => ['nullable', new AssignableRole],
         ];
     }
 }
