@@ -2,6 +2,7 @@
 
 namespace VentureDrake\LaravelCrm\Livewire\Settings\Permissions;
 
+use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
 use Illuminate\Pagination\LengthAwarePaginator;
 use Livewire\Component;
 use Livewire\WithPagination;
@@ -13,6 +14,7 @@ use VentureDrake\LaravelCrm\Traits\ResetsPaginationWhenPropsChanges;
 
 class RoleIndex extends Component
 {
+    use AuthorizesRequests;
     use ClearsProperties, ResetsPaginationWhenPropsChanges, Toast, WithPagination;
 
     public $layout = 'index';
@@ -49,6 +51,8 @@ class RoleIndex extends Component
     public function delete($id)
     {
         if ($role = Role::find($id)) {
+            $this->authorize('delete', $role);
+
             if (! in_array($role->name, ['Owner', 'Admin']) && $role->users->count() < 1) {
                 foreach (Permission::all() as $permission) {
                     $permission->removeRole($role);

@@ -33564,3 +33564,135 @@ Fixed the gaps; stubbed only the view.
   set for `comm -12` disjointness proofs** — it handles both `M ` and `A ` prefixes, and
   it avoids `git stash`, which this repo's 11 pre-existing stash entries make actively
   dangerous (a `pop` previously tried to apply a foreign entry over the tree).
+
+## US-004: Backfill authorization across Settings, Chat, imports, templates and the campaign cancel gaps
+- Added **51 `$this->authorize()` guards across 44 Livewire components** (+ the
+  `AuthorizesRequests` import and class-`use` on each). Same `FeatureIndex.php:72` shape as
+  US-002/US-003: for `delete($id)` the guard sits INSIDE the existing
+  `if ($model = X::find($id)) {` block immediately before the mutation, followed by a blank
+  line; for typed-property components it is the first statement of the method.
+- **Ability map applied**:
+  | Surface | Ability |
+  |---|---|
+  | Settings Create (`Label`, `LeadSource`, `TaxRate`, `ProductCategory`, `Field`, `FieldGroup`, `Role`) | `create` on that model's class-string |
+  | Settings Edit (+ `Pipeline`, `PipelineStage`) | `update` on `$this->{model}` |
+  | Settings Index/Show `delete($id)` (all 10 entities) | `delete` on the resolved model |
+  | `SettingEdit::save`, `TemplateSettings::save`, `XeroConnect::updateSettings` | `update` on `Setting::class` |
+  | `ChatShow::send` | `reply` on `$this->conversation` |
+  | `ChatShow/ChatIndex::close` | `update` on the conversation |
+  | `ChatShow/ChatIndex::convertToLead` | `create` on `Lead::class` |
+  | `ChatIndex::delete` | `delete` on the conversation |
+  | `UserImport::startImport` **and** `::processNextChunk` | `create` on `User::class` |
+  | `EmailTemplate` Create/Edit/Index | `create` / `update` / `delete` on EmailTemplate |
+  | `EmailCampaignShow::cancel` | `update` on `$this->campaign` |
+- **Class-string form for Setting is load-bearing**: `SettingPolicy::update(User $user)` takes
+  no model (verified at `src/Policies/SettingPolicy.php:53`), so the three settings singletons
+  use `authorize('update', Setting::class)` — the `ClickSendConnect.php:73` precedent.
+- **`ChatWidgetEdit::save` is a create-or-update hybrid** and got a branch-aware guard
+  (`$this->widget ? authorize('update', $this->widget) : authorize('create', ChatWidget::class)`)
+  placed before `validate()`, with a comment explaining why.
+- **Already guarded before this story** (left alone): all `FeatureStatus*`, all `SmsTemplate*`,
+  `SmsCampaignShow::cancel`, `EmailCampaignShow::delete`, `Person/OrganizationImport`. The AC
+  named `SmsCampaignShow::cancel` as a gap but it was already covered — verified, not re-added.
+- **Deliberately unguarded per AC** (verified post-change): `HasCustomFieldCommon::removeOption`
+  and the `SettingEdit` phone/email/address array helpers — all pure in-memory. **No shared trait
+  was modified** (`git show --name-only | grep Traits/` → empty), so no consumer can fatal.
+  `FileItem::download()` also left alone — it is a read, not a mutation; flagged as a future
+  `authorize('view', ...)` hardening candidate.
+
+### Lockout pre-flight (done BEFORE writing a single guard)
+- Every model targeted has a **registered** policy (`ChatWidget`, `Field`, `FieldGroup`, `Label`,
+  `LeadSource`, `Role`, `Pipeline`, `PipelineStage`, `ProductCategory`, `TaxRate`, `Setting`,
+  `ChatConversation`, `EmailTemplate`, `EmailCampaign`, `Lead`, `User`).
+- Scripted **every policy permission string against the seeded permission list** — all 17 policies
+  clean, so Owner/Admin (`Permission::all()`) pass every new guard. Two findings that would
+  otherwise have caused lockouts:
+  - `PipelineStagePolicy` checks **`crm pipelines`**, not `crm pipeline stages` — so Manager and
+    Employee (who hold `crm pipelines`) keep stage access.
+  - `FieldGroupPolicy` checks **`crm fields`**, matching `FieldPolicy`.
+- Manager **and** Employee both hold `reply crm chat` and `create crm leads`, so the Chat guards
+  don't lock either role out of replying or converting.
+
+### Tests — `tests/Feature/Livewire/Authorization/` (+4 files, 28 tests)
+`Chat` (10), `Settings` (10), `Import` (4), `CampaignCancel` (4). Every deny case asserts
+`->assertForbidden()` **and** that nothing changed (row survives / status still `scheduled` /
+count unchanged). No `Gate::before(fn () => true)` anywhere — denial runs through the real
+policies via US-001's `actingAsUserWithPermissions()`.
+
+**Mutation-tested four guards** (`EmailCampaignShow::cancel`, `ChatShow::send`,
+`SettingEdit::save`, `UserImport::startImport`): removing each flips exactly its own test red,
+and each restored cleanly. The tests are not vacuous.
+
+### Test-environment scaffolding
+- `tests/TestSchema.php`: added the 4 **chat tables** (widgets/visitors/conversations/messages),
+  folding in the two follow-up patch stubs (`chat_conversations.lead_id`,
+  `chat_messages.visitor_read_at`); FKs omitted per the file's convention. Also added
+  `users.mailing_list` (production ships it via `add_mailing_list_to_users_table.php.stub`).
+- Render-stub subclasses (`class AuthzChatShow extends ChatShow { render() {...} }`) — only
+  `render()` is replaced, so the real action methods and real `authorize()` calls still run.
+
+### Quality gates
+- `php -l` — clean on all 49 changed files. `./vendor/bin/pint --dirty --test` → **passed**.
+- `composer test` → **863 passed / 1 failed / 2886 assertions** (baseline at US-003 was 835/1/2831):
+  **+28 passing = exactly the 28 new tests, zero net new failures**. The 1 failure is the standing
+  flake `Tests\Feature\Portal\PublicFeatureTest > admin reply renders with is_admin_reply true`
+  — **0** scope-keyword hits in that file and untouched by this commit.
+- `composer format-test` → **still fails on the same 21 pre-existing files, none of them mine.**
+  Proven by set arithmetic: `comm -12 <(pint failure paths) <(git status paths)` → **empty**, and
+  none of the 21 were touched. Deliberately not fixed — they belong to other series (invite-users,
+  Api/V2, seeders) and `composer format` would inject a large unrelated diff into a commit
+  labelled `[US-004]`.
+
+### Files changed
+- **Modified** 44 Livewire components across `src/Livewire/{Settings/**,Chat,EmailTemplates,EmailCampaigns,Users}`.
+- **Added** 4 test files under `tests/Feature/Livewire/Authorization/`.
+- **Modified** `tests/TestSchema.php`.
+
+### Learnings for future iterations
+- **A first-match anchor loop silently skips duplicate anchors.** `ChatIndex::delete` and
+  `::close` open with the *identical* line `if ($conversation = ChatConversation::find($id)) {`.
+  My script's `foreach ($lines as $i => $line) { if (match) break; }` guarded only `delete`,
+  leaving `close` silently unguarded. Same class of bug hit `UserImport`: both its guards are the
+  byte-identical string `$this->authorize('create', User::class);`, so the idempotency check
+  (`str_contains($src, $guardLine)`) saw the first method's guard and skipped the second.
+  **Never trust a scripted bulk edit's own success count — always re-run an independent
+  brace-matched scan afterwards.** That re-scan is what caught both gaps.
+- **Verification scripts fail *open*, and a false-clean is worse than no check.** Three separate
+  checks this session reported "all clear" while actually testing nothing:
+  1. `exec("git status --porcelain | awk '{print $NF}'", …)` inside a PHP **double-quoted** string —
+     PHP ate `$NF`, awk printed whole lines with the `M ` status prefix, so every path failed
+     `str_starts_with($file, 'src/')` and the loop body never ran. Rewritten with a single-quoted
+     file list, the same check immediately found 3 real bugs.
+  2. `comm -12 /tmp/pintfail.txt …` where `pintfail.txt` was never written (the pint output is JSON
+     with a trailing composer line appended, so `json_decode` of the whole file returned null).
+     `comm` errored to stderr, `$(...)` captured empty, and `[ -z "$INTER" ]` printed a triumphant
+     "EMPTY ✓".
+  3. A `grep -n "…\$this->campaign…"` that reported a guard MISSING when the file plainly had it.
+  **Rule: any check that reports success must also report a non-zero count of things examined**
+  (files scanned, tests matched, calls verified). A pass with a zero denominator is a failure.
+- **The 3 real bugs the corrected check found** were all silent-at-write-time: `ChatWidgetEdit`
+  was missing the trait, and **`SettingEdit`/`TemplateSettings` referenced `Setting::class`
+  without importing it** — inside namespace `…\Livewire\Settings` that resolves to the
+  non-existent `VentureDrake\LaravelCrm\Livewire\Settings\Setting`, so the Gate would have been
+  handed a bogus class name. `php -l` and pint both pass on that code. **When a guard uses the
+  class-string form, verify the class is actually imported** — a missing import is a runtime-only
+  failure that no linter catches.
+- **Mutation harnesses must not use git as their "did it apply / did it restore" oracle** when the
+  working tree is uncommitted — `git diff --quiet <file>` is *always* non-zero, so "mutation
+  applied" and "restore failed" both read as true regardless of reality. Combined with `set -e`
+  (which aborted the run mid-way) and perl interpolating `$this` inside `\Q…\E`, my first harness
+  produced a completely bogus "VACUOUS" verdict on a guard that was in fact load-bearing.
+  Rewritten in PHP with **content-based** apply/verify/restore, all four mutations behaved
+  correctly. Compare against the backup, never against HEAD.
+- **`composer test` OOMs at the default 128M** on this suite (blade-icons `IconsManifest`) now that
+  the authz suite has grown — the crash surfaces as a `Pest\Exceptions\FatalException` mid-run, not
+  a test failure. Use `php -d memory_limit=1G ./vendor/bin/pest`. Also, `--filter` matching **zero**
+  tests exits 0, so a filtered run that "passes" proves nothing until you confirm the reported test
+  count is non-zero.
+- **Pest deprecation noise (~860 lines of PHP 8.5 `PDO::MYSQL_ATTR_SSL_CA`) drowns real failures.**
+  Redirect to a file and `grep -nE '⨯|FAILED|Tests:'` rather than trying to filter the stream; the
+  summary line labels passing tests as "deprecated", so `863 deprecated, 1 failed` means 863 passed.
+- **When a test fails, read *what* the message names before touching any guard.** All four failures
+  here named a column (`users.mailing_list`), a table (`password_reset_tokens`), or a validation
+  rule (`hex` required) — every one was fixtures, never authorization. A message naming a policy or
+  a 403 is the only kind that implicates the guard.

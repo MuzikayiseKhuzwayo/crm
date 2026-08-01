@@ -2,6 +2,7 @@
 
 namespace VentureDrake\LaravelCrm\Livewire\Settings\CustomFields;
 
+use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
 use Livewire\Component;
 use Ramsey\Uuid\Uuid;
 use VentureDrake\LaravelCrm\Livewire\Settings\CustomFields\Traits\HasCustomFieldCommon;
@@ -9,10 +10,13 @@ use VentureDrake\LaravelCrm\Models\Field;
 
 class CustomFieldCreate extends Component
 {
+    use AuthorizesRequests;
     use HasCustomFieldCommon;
 
     public function save()
     {
+        $this->authorize('create', Field::class);
+
         $this->validate();
 
         $field = Field::create([

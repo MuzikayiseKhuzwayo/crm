@@ -2,6 +2,7 @@
 
 namespace VentureDrake\LaravelCrm\Livewire\Settings\Labels;
 
+use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
 use Illuminate\Pagination\LengthAwarePaginator;
 use Livewire\Component;
 use Livewire\WithPagination;
@@ -12,6 +13,7 @@ use VentureDrake\LaravelCrm\Traits\ResetsPaginationWhenPropsChanges;
 
 class LabelIndex extends Component
 {
+    use AuthorizesRequests;
     use ClearsProperties, ResetsPaginationWhenPropsChanges, Toast, WithPagination;
 
     public $layout = 'index';
@@ -45,6 +47,8 @@ class LabelIndex extends Component
     public function delete($id)
     {
         if ($label = Label::find($id)) {
+            $this->authorize('delete', $label);
+
             $label->delete();
 
             $this->success(ucfirst(trans('laravel-crm::lang.label_deleted')));

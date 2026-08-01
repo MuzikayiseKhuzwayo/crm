@@ -21,6 +21,8 @@ class TestSchema
                 $table->boolean('crm_access')->default(true);
                 $table->text('crm_permissions')->nullable();
                 $table->timestamp('last_online_at')->nullable();
+                // Added in production by add_mailing_list_to_users_table.php.stub
+                $table->boolean('mailing_list')->default(true);
                 $table->unsignedBigInteger('current_crm_team_id')->nullable();
                 $table->unsignedBigInteger('current_team_id')->nullable();
                 $table->text('team_ids')->nullable();
@@ -1202,6 +1204,77 @@ class TestSchema
             $table->longText('response_body')->nullable();
             $table->timestamp('ssl_expires_at')->nullable();
             $table->timestamp('checked_at');
+            $table->timestamps();
+        });
+
+        // Chat tables. Mirrors create_laravel_crm_chat_tables.php.stub, with the two
+        // follow-up patch stubs folded in (chat_conversations.lead_id and
+        // chat_messages.visitor_read_at). FK constraints omitted per this file's convention.
+        Schema::create($prefix.'chat_widgets', function (Blueprint $table) {
+            $table->bigIncrements('id');
+            $table->string('external_id');
+            $table->unsignedBigInteger('team_id')->nullable();
+            $table->string('public_key', 64)->unique();
+            $table->string('name');
+            $table->string('welcome_message')->nullable();
+            $table->string('color', 16)->default('#2563eb');
+            $table->string('position', 16)->default('bottom-right');
+            $table->json('allowed_origins')->nullable();
+            $table->boolean('is_active')->default(true);
+            $table->unsignedBigInteger('user_created_id')->nullable();
+            $table->unsignedBigInteger('user_updated_id')->nullable();
+            $table->unsignedBigInteger('user_deleted_id')->nullable();
+            $table->timestamps();
+            $table->softDeletes();
+        });
+
+        Schema::create($prefix.'chat_visitors', function (Blueprint $table) {
+            $table->bigIncrements('id');
+            $table->string('external_id');
+            $table->unsignedBigInteger('team_id')->nullable();
+            $table->unsignedBigInteger('chat_widget_id');
+            $table->string('visitor_token', 64)->unique();
+            $table->string('name')->nullable();
+            $table->string('email')->nullable();
+            $table->string('ip_address', 64)->nullable();
+            $table->string('user_agent', 512)->nullable();
+            $table->string('current_url', 1024)->nullable();
+            $table->string('country_code', 8)->nullable();
+            $table->timestamp('last_seen_at')->nullable();
+            $table->unsignedBigInteger('person_id')->nullable();
+            $table->timestamps();
+        });
+
+        Schema::create($prefix.'chat_conversations', function (Blueprint $table) {
+            $table->bigIncrements('id');
+            $table->string('external_id');
+            $table->string('chat_id')->nullable();
+            $table->unsignedBigInteger('team_id')->nullable();
+            $table->unsignedBigInteger('chat_widget_id');
+            $table->unsignedBigInteger('chat_visitor_id');
+            $table->string('subject')->nullable();
+            $table->string('status')->default('open');
+            $table->unsignedBigInteger('user_assigned_id')->nullable();
+            $table->unsignedBigInteger('lead_id')->nullable();
+            $table->timestamp('last_message_at')->nullable();
+            $table->timestamp('closed_at')->nullable();
+            $table->unsignedBigInteger('user_created_id')->nullable();
+            $table->unsignedBigInteger('user_updated_id')->nullable();
+            $table->unsignedBigInteger('user_deleted_id')->nullable();
+            $table->timestamps();
+            $table->softDeletes();
+        });
+
+        Schema::create($prefix.'chat_messages', function (Blueprint $table) {
+            $table->bigIncrements('id');
+            $table->string('external_id');
+            $table->unsignedBigInteger('team_id')->nullable();
+            $table->unsignedBigInteger('chat_conversation_id');
+            $table->string('sender_type');
+            $table->unsignedBigInteger('sender_id')->nullable();
+            $table->text('body');
+            $table->timestamp('read_at')->nullable();
+            $table->timestamp('visitor_read_at')->nullable();
             $table->timestamps();
         });
     }

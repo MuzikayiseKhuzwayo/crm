@@ -5,6 +5,7 @@ namespace VentureDrake\LaravelCrm\Livewire\Users;
 use App\Models\User;
 use Carbon\Carbon;
 use Illuminate\Database\UniqueConstraintViolationException;
+use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Str;
@@ -15,6 +16,7 @@ use VentureDrake\LaravelCrm\Models\Role;
 
 class UserImport extends Component
 {
+    use AuthorizesRequests;
     use Toast;
 
     /** True when the session holds parsed preview rows ready to confirm. */
@@ -49,6 +51,8 @@ class UserImport extends Component
     /** Called from the confirmation modal — sets up state and kicks off the first chunk. */
     public function startImport(): void
     {
+        $this->authorize('create', User::class);
+
         $rows = session('crm_user_import_preview', []);
 
         if (empty($rows)) {
@@ -69,6 +73,8 @@ class UserImport extends Component
     /** Processes the next chunk of rows and dispatches another event if there is more work to do. */
     public function processNextChunk(): void
     {
+        $this->authorize('create', User::class);
+
         if (! $this->processing) {
             return;
         }

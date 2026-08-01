@@ -2,6 +2,7 @@
 
 namespace VentureDrake\LaravelCrm\Livewire\Settings\CustomFieldGroups;
 
+use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
 use Illuminate\Pagination\LengthAwarePaginator;
 use Livewire\Component;
 use Livewire\WithPagination;
@@ -12,6 +13,7 @@ use VentureDrake\LaravelCrm\Traits\ResetsPaginationWhenPropsChanges;
 
 class CustomFieldGroupIndex extends Component
 {
+    use AuthorizesRequests;
     use ClearsProperties, ResetsPaginationWhenPropsChanges, Toast, WithPagination;
 
     public $layout = 'index';
@@ -37,6 +39,8 @@ class CustomFieldGroupIndex extends Component
     public function delete($id)
     {
         if ($fieldGroup = FieldGroup::find($id)) {
+            $this->authorize('delete', $fieldGroup);
+
             $fieldGroup->delete();
 
             $this->success(ucfirst(trans('laravel-crm::lang.custom_field_group_deleted')));

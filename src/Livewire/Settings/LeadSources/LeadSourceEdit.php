@@ -2,12 +2,14 @@
 
 namespace VentureDrake\LaravelCrm\Livewire\Settings\LeadSources;
 
+use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
 use Livewire\Component;
 use VentureDrake\LaravelCrm\Livewire\Settings\LeadSources\Traits\HasLeadSourceCommon;
 use VentureDrake\LaravelCrm\Models\LeadSource;
 
 class LeadSourceEdit extends Component
 {
+    use AuthorizesRequests;
     use HasLeadSourceCommon;
 
     public ?LeadSource $leadSource = null;
@@ -20,6 +22,8 @@ class LeadSourceEdit extends Component
 
     public function save()
     {
+        $this->authorize('update', $this->leadSource);
+
         $this->validate();
 
         $this->leadSource->update([

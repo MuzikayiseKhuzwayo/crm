@@ -2,9 +2,11 @@
 
 namespace VentureDrake\LaravelCrm\Livewire\Settings;
 
+use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
 use Livewire\Attributes\Url;
 use Livewire\Component;
 use Mary\Traits\Toast;
+use VentureDrake\LaravelCrm\Models\Setting;
 use VentureDrake\LaravelCrm\Support\PdfTemplateRegistry;
 
 /**
@@ -21,6 +23,7 @@ use VentureDrake\LaravelCrm\Support\PdfTemplateRegistry;
  */
 class TemplateSettings extends Component
 {
+    use AuthorizesRequests;
     use Toast;
 
     /**
@@ -69,6 +72,8 @@ class TemplateSettings extends Component
 
     public function save(): void
     {
+        $this->authorize('update', Setting::class);
+
         $settings = app('laravel-crm.settings');
 
         foreach (PdfTemplateRegistry::DOC_TYPES as $docType) {

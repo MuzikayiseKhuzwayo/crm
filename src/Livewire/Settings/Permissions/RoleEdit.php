@@ -2,6 +2,7 @@
 
 namespace VentureDrake\LaravelCrm\Livewire\Settings\Permissions;
 
+use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
 use Livewire\Component;
 use Spatie\Permission\Models\Permission;
 use Spatie\Permission\PermissionRegistrar;
@@ -10,6 +11,7 @@ use VentureDrake\LaravelCrm\Models\Role;
 
 class RoleEdit extends Component
 {
+    use AuthorizesRequests;
     use HasRoleCommon;
 
     public Role $role;
@@ -23,6 +25,8 @@ class RoleEdit extends Component
 
     public function save()
     {
+        $this->authorize('update', $this->role);
+
         $this->validate();
 
         if (! in_array($this->role->name, ['Owner', 'Admin']) && $this->role->users->count() < 1) {

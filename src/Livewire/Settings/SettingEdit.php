@@ -2,6 +2,7 @@
 
 namespace VentureDrake\LaravelCrm\Livewire\Settings;
 
+use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
 use Illuminate\Support\Facades\DB;
 use Livewire\Component;
 use Livewire\WithFileUploads;
@@ -11,9 +12,11 @@ use VentureDrake\LaravelCrm\Models\Address;
 use VentureDrake\LaravelCrm\Models\AddressType;
 use VentureDrake\LaravelCrm\Models\Email;
 use VentureDrake\LaravelCrm\Models\Phone;
+use VentureDrake\LaravelCrm\Models\Setting;
 
 class SettingEdit extends Component
 {
+    use AuthorizesRequests;
     use Toast;
     use WithFileUploads;
 
@@ -243,6 +246,8 @@ class SettingEdit extends Component
 
     public function save()
     {
+        $this->authorize('update', Setting::class);
+
         $this->validate();
 
         app('laravel-crm.settings')->set('organization_name', $this->organizationName);

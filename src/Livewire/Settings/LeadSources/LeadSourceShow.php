@@ -2,12 +2,14 @@
 
 namespace VentureDrake\LaravelCrm\Livewire\Settings\LeadSources;
 
+use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
 use Livewire\Component;
 use Mary\Traits\Toast;
 use VentureDrake\LaravelCrm\Models\LeadSource;
 
 class LeadSourceShow extends Component
 {
+    use AuthorizesRequests;
     use Toast;
 
     public LeadSource $leadSource;
@@ -15,6 +17,8 @@ class LeadSourceShow extends Component
     public function delete($id)
     {
         if ($leadSource = LeadSource::find($id)) {
+            $this->authorize('delete', $leadSource);
+
             $leadSource->delete();
 
             $this->success(

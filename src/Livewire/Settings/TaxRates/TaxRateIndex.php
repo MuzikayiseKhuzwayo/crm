@@ -2,6 +2,7 @@
 
 namespace VentureDrake\LaravelCrm\Livewire\Settings\TaxRates;
 
+use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
 use Illuminate\Pagination\LengthAwarePaginator;
 use Livewire\Component;
 use Livewire\WithPagination;
@@ -12,6 +13,7 @@ use VentureDrake\LaravelCrm\Traits\ResetsPaginationWhenPropsChanges;
 
 class TaxRateIndex extends Component
 {
+    use AuthorizesRequests;
     use ClearsProperties, ResetsPaginationWhenPropsChanges, Toast, WithPagination;
 
     public $layout = 'index';
@@ -48,6 +50,8 @@ class TaxRateIndex extends Component
     public function delete($id)
     {
         if ($taxRate = TaxRate::find($id)) {
+            $this->authorize('delete', $taxRate);
+
             $taxRate->delete();
 
             $this->success(ucfirst(trans('laravel-crm::lang.tax_rate_deleted')));

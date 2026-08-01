@@ -2,6 +2,7 @@
 
 namespace VentureDrake\LaravelCrm\Livewire\Settings\Permissions;
 
+use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
 use Livewire\Component;
 use Mary\Traits\Toast;
 use Spatie\Permission\Models\Permission;
@@ -9,6 +10,7 @@ use VentureDrake\LaravelCrm\Models\Role;
 
 class RoleShow extends Component
 {
+    use AuthorizesRequests;
     use Toast;
 
     public Role $role;
@@ -16,6 +18,8 @@ class RoleShow extends Component
     public function delete($id)
     {
         if ($role = Role::find($id)) {
+            $this->authorize('delete', $role);
+
             if (! in_array($role->name, ['Owner', 'Admin']) && $role->users->count() < 1) {
                 foreach (Permission::all() as $permission) {
                     $permission->removeRole($role);

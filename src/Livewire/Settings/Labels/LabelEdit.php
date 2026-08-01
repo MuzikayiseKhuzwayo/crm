@@ -2,12 +2,14 @@
 
 namespace VentureDrake\LaravelCrm\Livewire\Settings\Labels;
 
+use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
 use Livewire\Component;
 use VentureDrake\LaravelCrm\Livewire\Settings\Labels\Traits\HasLabelCommon;
 use VentureDrake\LaravelCrm\Models\Label;
 
 class LabelEdit extends Component
 {
+    use AuthorizesRequests;
     use HasLabelCommon;
 
     public ?Label $label = null;
@@ -21,6 +23,8 @@ class LabelEdit extends Component
 
     public function save()
     {
+        $this->authorize('update', $this->label);
+
         $this->validate();
 
         $this->label->update([

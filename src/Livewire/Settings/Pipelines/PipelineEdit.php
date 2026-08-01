@@ -2,12 +2,14 @@
 
 namespace VentureDrake\LaravelCrm\Livewire\Settings\Pipelines;
 
+use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
 use Livewire\Component;
 use VentureDrake\LaravelCrm\Livewire\Settings\Pipelines\Traits\HasPipelineCommon;
 use VentureDrake\LaravelCrm\Models\Pipeline;
 
 class PipelineEdit extends Component
 {
+    use AuthorizesRequests;
     use HasPipelineCommon;
 
     public ?Pipeline $pipeline = null;
@@ -19,6 +21,8 @@ class PipelineEdit extends Component
 
     public function save()
     {
+        $this->authorize('update', $this->pipeline);
+
         $this->validate();
 
         $this->pipeline->update([

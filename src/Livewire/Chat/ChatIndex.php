@@ -3,6 +3,7 @@
 namespace VentureDrake\LaravelCrm\Livewire\Chat;
 
 use Carbon\Carbon;
+use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
 use Illuminate\Pagination\LengthAwarePaginator;
 use Illuminate\Support\Str;
 use Livewire\Attributes\Url;
@@ -19,6 +20,7 @@ use VentureDrake\LaravelCrm\Traits\ResetsPaginationWhenPropsChanges;
 
 class ChatIndex extends Component
 {
+    use AuthorizesRequests;
     use ResetsPaginationWhenPropsChanges, Toast, WithPagination;
 
     public $layout = 'index';
@@ -75,6 +77,8 @@ class ChatIndex extends Component
     public function delete($id): void
     {
         if ($conversation = ChatConversation::find($id)) {
+            $this->authorize('delete', $conversation);
+
             $conversation->delete();
             $this->success(ucfirst(trans('laravel-crm::lang.chat_deleted')));
         }
@@ -83,6 +87,8 @@ class ChatIndex extends Component
     public function close($id): void
     {
         if ($conversation = ChatConversation::find($id)) {
+            $this->authorize('update', $conversation);
+
             app(ChatService::class)->close($conversation);
             $this->success(ucfirst(trans('laravel-crm::lang.chat_closed')));
         }
@@ -90,6 +96,8 @@ class ChatIndex extends Component
 
     public function convertToLead($id): void
     {
+        $this->authorize('create', Lead::class);
+
         $conversation = ChatConversation::find($id);
 
         if (! $conversation) {

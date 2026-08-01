@@ -2,6 +2,7 @@
 
 namespace VentureDrake\LaravelCrm\Livewire\Settings\PipelineStages;
 
+use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
 use Illuminate\Pagination\LengthAwarePaginator;
 use Livewire\Component;
 use Livewire\WithPagination;
@@ -12,6 +13,7 @@ use VentureDrake\LaravelCrm\Traits\ResetsPaginationWhenPropsChanges;
 
 class PipelineStageIndex extends Component
 {
+    use AuthorizesRequests;
     use ClearsProperties, ResetsPaginationWhenPropsChanges, Toast, WithPagination;
 
     public $layout = 'index';
@@ -36,6 +38,8 @@ class PipelineStageIndex extends Component
     public function delete($id)
     {
         if ($pipelineStage = PipelineStage::find($id)) {
+            $this->authorize('delete', $pipelineStage);
+
             $pipelineStage->delete();
 
             $this->success(ucfirst(trans('laravel-crm::lang.pipeline_stage_deleted')));

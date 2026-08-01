@@ -2,6 +2,7 @@
 
 namespace VentureDrake\LaravelCrm\Livewire\Chat;
 
+use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
 use Illuminate\Support\Facades\Schema;
 use Livewire\Component;
 use Mary\Traits\Toast;
@@ -13,6 +14,7 @@ use VentureDrake\LaravelCrm\Services\ChatService;
 
 class ChatShow extends Component
 {
+    use AuthorizesRequests;
     use Toast;
 
     public ChatConversation $conversation;
@@ -40,6 +42,8 @@ class ChatShow extends Component
 
     public function send(): void
     {
+        $this->authorize('reply', $this->conversation);
+
         $this->validate(['body' => 'required|string|max:5000']);
 
         app(ChatService::class)->sendAgentMessage(
@@ -54,12 +58,16 @@ class ChatShow extends Component
 
     public function close(): void
     {
+        $this->authorize('update', $this->conversation);
+
         app(ChatService::class)->close($this->conversation);
         $this->success(ucfirst(trans('laravel-crm::lang.chat_closed')));
     }
 
     public function convertToLead(): void
     {
+        $this->authorize('create', Lead::class);
+
         // Prevent double-conversion
         if ($this->conversation->lead_id) {
             $this->warning(ucfirst(trans('laravel-crm::lang.chat_already_converted')));

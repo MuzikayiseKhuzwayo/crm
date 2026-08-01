@@ -2,6 +2,7 @@
 
 namespace VentureDrake\LaravelCrm\Livewire\Settings\ChatWidgets;
 
+use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
 use Illuminate\Pagination\LengthAwarePaginator;
 use Livewire\Component;
 use Livewire\WithPagination;
@@ -10,6 +11,7 @@ use VentureDrake\LaravelCrm\Models\ChatWidget;
 
 class ChatWidgetIndex extends Component
 {
+    use AuthorizesRequests;
     use Toast, WithPagination;
 
     public $layout = 'index';
@@ -22,6 +24,8 @@ class ChatWidgetIndex extends Component
     public function delete(int $id): void
     {
         if ($w = ChatWidget::find($id)) {
+            $this->authorize('delete', $w);
+
             $w->delete();
             $this->success(ucfirst(trans('laravel-crm::lang.chat_widget_deleted')));
         }

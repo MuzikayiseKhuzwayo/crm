@@ -2,16 +2,20 @@
 
 namespace VentureDrake\LaravelCrm\Livewire\Settings\LeadSources;
 
+use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
 use Livewire\Component;
 use VentureDrake\LaravelCrm\Livewire\Settings\LeadSources\Traits\HasLeadSourceCommon;
 use VentureDrake\LaravelCrm\Models\LeadSource;
 
 class LeadSourceCreate extends Component
 {
+    use AuthorizesRequests;
     use HasLeadSourceCommon;
 
     public function save()
     {
+        $this->authorize('create', LeadSource::class);
+
         $this->validate();
 
         LeadSource::create([

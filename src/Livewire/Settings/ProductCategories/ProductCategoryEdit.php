@@ -2,12 +2,14 @@
 
 namespace VentureDrake\LaravelCrm\Livewire\Settings\ProductCategories;
 
+use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
 use Livewire\Component;
 use VentureDrake\LaravelCrm\Livewire\Settings\ProductCategories\Traits\HasProductCategoryCommon;
 use VentureDrake\LaravelCrm\Models\ProductCategory;
 
 class ProductCategoryEdit extends Component
 {
+    use AuthorizesRequests;
     use HasProductCategoryCommon;
 
     public ProductCategory $productCategory;
@@ -20,6 +22,8 @@ class ProductCategoryEdit extends Component
 
     public function save()
     {
+        $this->authorize('update', $this->productCategory);
+
         $this->validate();
 
         $this->productCategory->update([

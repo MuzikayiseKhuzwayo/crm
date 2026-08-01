@@ -2,6 +2,7 @@
 
 namespace VentureDrake\LaravelCrm\Livewire\Settings\CustomFields;
 
+use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
 use Illuminate\Pagination\LengthAwarePaginator;
 use Livewire\Component;
 use Livewire\WithPagination;
@@ -12,6 +13,7 @@ use VentureDrake\LaravelCrm\Traits\ResetsPaginationWhenPropsChanges;
 
 class CustomFieldIndex extends Component
 {
+    use AuthorizesRequests;
     use ClearsProperties, ResetsPaginationWhenPropsChanges, Toast, WithPagination;
 
     public $layout = 'index';
@@ -41,6 +43,8 @@ class CustomFieldIndex extends Component
     public function delete($id)
     {
         if ($field = Field::find($id)) {
+            $this->authorize('delete', $field);
+
             $field->delete();
 
             $this->success(ucfirst(trans('laravel-crm::lang.custom_field_deleted')));

@@ -2,12 +2,14 @@
 
 namespace VentureDrake\LaravelCrm\Livewire\Settings\TaxRates;
 
+use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
 use Livewire\Component;
 use VentureDrake\LaravelCrm\Livewire\Settings\TaxRates\Traits\HasTaxRateCommon;
 use VentureDrake\LaravelCrm\Models\TaxRate;
 
 class TaxRateEdit extends Component
 {
+    use AuthorizesRequests;
     use HasTaxRateCommon;
 
     public ?TaxRate $taxRate = null;
@@ -23,6 +25,8 @@ class TaxRateEdit extends Component
 
     public function save()
     {
+        $this->authorize('update', $this->taxRate);
+
         $this->validate();
 
         $this->taxRate->update([

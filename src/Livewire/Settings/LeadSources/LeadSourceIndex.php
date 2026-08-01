@@ -2,6 +2,7 @@
 
 namespace VentureDrake\LaravelCrm\Livewire\Settings\LeadSources;
 
+use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
 use Illuminate\Pagination\LengthAwarePaginator;
 use Livewire\Component;
 use Livewire\WithPagination;
@@ -12,6 +13,7 @@ use VentureDrake\LaravelCrm\Traits\ResetsPaginationWhenPropsChanges;
 
 class LeadSourceIndex extends Component
 {
+    use AuthorizesRequests;
     use ClearsProperties, ResetsPaginationWhenPropsChanges, Toast, WithPagination;
 
     public $layout = 'index';
@@ -46,6 +48,8 @@ class LeadSourceIndex extends Component
     public function delete($id)
     {
         if ($leadSource = LeadSource::find($id)) {
+            $this->authorize('delete', $leadSource);
+
             $leadSource->delete();
 
             $this->success(ucfirst(trans('laravel-crm::lang.lead_source_deleted')));

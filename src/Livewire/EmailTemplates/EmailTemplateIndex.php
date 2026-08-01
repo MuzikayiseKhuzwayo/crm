@@ -3,6 +3,7 @@
 namespace VentureDrake\LaravelCrm\Livewire\EmailTemplates;
 
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
 use Illuminate\Pagination\LengthAwarePaginator;
 use Livewire\Attributes\Url;
 use Livewire\Component;
@@ -12,6 +13,7 @@ use VentureDrake\LaravelCrm\Models\EmailTemplate;
 
 class EmailTemplateIndex extends Component
 {
+    use AuthorizesRequests;
     use Toast;
     use WithPagination;
 
@@ -49,6 +51,8 @@ class EmailTemplateIndex extends Component
     public function delete($id)
     {
         if ($template = EmailTemplate::find($id)) {
+            $this->authorize('delete', $template);
+
             if ($template->is_system) {
                 $this->error(ucfirst(__('laravel-crm::lang.email_template')).' '.__('laravel-crm::lang.is_system_readonly'));
 

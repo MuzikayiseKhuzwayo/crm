@@ -2,6 +2,7 @@
 
 namespace VentureDrake\LaravelCrm\Livewire\Settings\Permissions;
 
+use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
 use Livewire\Component;
 use Spatie\Permission\Models\Permission;
 use Spatie\Permission\PermissionRegistrar;
@@ -10,10 +11,13 @@ use VentureDrake\LaravelCrm\Models\Role;
 
 class RoleCreate extends Component
 {
+    use AuthorizesRequests;
     use HasRoleCommon;
 
     public function save()
     {
+        $this->authorize('create', Role::class);
+
         $this->validate();
 
         $permissionsArray = [];

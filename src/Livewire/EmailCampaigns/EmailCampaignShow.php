@@ -71,6 +71,8 @@ class EmailCampaignShow extends Component
 
     public function cancel(EmailCampaignService $service): void
     {
+        $this->authorize('update', $this->campaign);
+
         $service->cancel($this->campaign);
         $this->campaign->refresh();
         $this->success(ucfirst(__('laravel-crm::lang.email_campaign')).' '.__('laravel-crm::lang.cancelled'));

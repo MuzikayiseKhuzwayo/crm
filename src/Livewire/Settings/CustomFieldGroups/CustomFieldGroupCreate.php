@@ -2,6 +2,7 @@
 
 namespace VentureDrake\LaravelCrm\Livewire\Settings\CustomFieldGroups;
 
+use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
 use Livewire\Component;
 use Ramsey\Uuid\Uuid;
 use VentureDrake\LaravelCrm\Livewire\Settings\CustomFieldGroups\Traits\HasCustomFieldGroupCommon;
@@ -9,10 +10,13 @@ use VentureDrake\LaravelCrm\Models\FieldGroup;
 
 class CustomFieldGroupCreate extends Component
 {
+    use AuthorizesRequests;
     use HasCustomFieldGroupCommon;
 
     public function save()
     {
+        $this->authorize('create', FieldGroup::class);
+
         $this->validate();
 
         FieldGroup::create([

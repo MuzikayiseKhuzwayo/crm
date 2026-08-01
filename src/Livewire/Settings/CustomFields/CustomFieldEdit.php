@@ -2,6 +2,7 @@
 
 namespace VentureDrake\LaravelCrm\Livewire\Settings\CustomFields;
 
+use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
 use Livewire\Component;
 use VentureDrake\LaravelCrm\Livewire\Settings\CustomFields\Traits\HasCustomFieldCommon;
 use VentureDrake\LaravelCrm\Models\Field;
@@ -10,12 +11,15 @@ use VentureDrake\LaravelCrm\Models\FieldOption;
 
 class CustomFieldEdit extends Component
 {
+    use AuthorizesRequests;
     use HasCustomFieldCommon;
 
     public Field $field;
 
     public function save()
     {
+        $this->authorize('update', $this->field);
+
         $this->validate();
 
         $this->field->update([

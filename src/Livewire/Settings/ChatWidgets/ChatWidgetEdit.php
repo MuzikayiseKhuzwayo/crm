@@ -2,12 +2,14 @@
 
 namespace VentureDrake\LaravelCrm\Livewire\Settings\ChatWidgets;
 
+use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
 use Livewire\Component;
 use Mary\Traits\Toast;
 use VentureDrake\LaravelCrm\Models\ChatWidget;
 
 class ChatWidgetEdit extends Component
 {
+    use AuthorizesRequests;
     use Toast;
 
     public ?ChatWidget $widget = null;
@@ -47,6 +49,13 @@ class ChatWidgetEdit extends Component
 
     public function save()
     {
+        // Doubles as create and update, so authorize the ability the branch below will exercise.
+        if ($this->widget) {
+            $this->authorize('update', $this->widget);
+        } else {
+            $this->authorize('create', ChatWidget::class);
+        }
+
         $data = $this->validate();
 
         if ($this->widget) {

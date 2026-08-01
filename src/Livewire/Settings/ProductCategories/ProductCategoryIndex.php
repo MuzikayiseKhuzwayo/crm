@@ -2,6 +2,7 @@
 
 namespace VentureDrake\LaravelCrm\Livewire\Settings\ProductCategories;
 
+use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
 use Illuminate\Pagination\LengthAwarePaginator;
 use Livewire\Component;
 use Livewire\WithPagination;
@@ -12,6 +13,7 @@ use VentureDrake\LaravelCrm\Traits\ResetsPaginationWhenPropsChanges;
 
 class ProductCategoryIndex extends Component
 {
+    use AuthorizesRequests;
     use ClearsProperties, ResetsPaginationWhenPropsChanges, Toast, WithPagination;
 
     public $layout = 'index';
@@ -43,6 +45,8 @@ class ProductCategoryIndex extends Component
     public function delete($id)
     {
         if ($productCategory = ProductCategory::find($id)) {
+            $this->authorize('delete', $productCategory);
+
             $productCategory->delete();
 
             $this->success(ucfirst(trans('laravel-crm::lang.product_category_deleted')));

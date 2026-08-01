@@ -2,6 +2,7 @@
 
 namespace VentureDrake\LaravelCrm\Livewire\EmailTemplates;
 
+use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
 use Livewire\Component;
 use Mary\Traits\Toast;
 use VentureDrake\LaravelCrm\Mail\EmailCampaignMessage;
@@ -10,6 +11,7 @@ use VentureDrake\LaravelCrm\Services\EmailTemplateService;
 
 class EmailTemplateEdit extends Component
 {
+    use AuthorizesRequests;
     use Toast;
 
     public EmailTemplate $template;
@@ -53,6 +55,8 @@ class EmailTemplateEdit extends Component
 
     public function save(EmailTemplateService $service)
     {
+        $this->authorize('update', $this->template);
+
         $this->validate();
 
         $service->update([

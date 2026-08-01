@@ -3,12 +3,14 @@
 namespace VentureDrake\LaravelCrm\Livewire\Settings\Integrations\Xero;
 
 use Dcblogdev\Xero\Facades\Xero;
+use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
 use Livewire\Component;
 use Mary\Traits\Toast;
 use VentureDrake\LaravelCrm\Models\Setting;
 
 class XeroConnect extends Component
 {
+    use AuthorizesRequests;
     use Toast;
 
     public $tennantName;
@@ -46,6 +48,8 @@ class XeroConnect extends Component
 
     public function updateSettings()
     {
+        $this->authorize('update', Setting::class);
+
         Setting::updateOrCreate([
             'name' => 'xero_contacts',
         ], [

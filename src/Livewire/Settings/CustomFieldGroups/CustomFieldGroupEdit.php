@@ -2,12 +2,14 @@
 
 namespace VentureDrake\LaravelCrm\Livewire\Settings\CustomFieldGroups;
 
+use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
 use Livewire\Component;
 use VentureDrake\LaravelCrm\Livewire\Settings\CustomFieldGroups\Traits\HasCustomFieldGroupCommon;
 use VentureDrake\LaravelCrm\Models\FieldGroup;
 
 class CustomFieldGroupEdit extends Component
 {
+    use AuthorizesRequests;
     use HasCustomFieldGroupCommon;
 
     public FieldGroup $fieldGroup;
@@ -19,6 +21,8 @@ class CustomFieldGroupEdit extends Component
 
     public function save()
     {
+        $this->authorize('update', $this->fieldGroup);
+
         $this->validate();
 
         $this->fieldGroup->update([
