@@ -33335,3 +33335,89 @@ minimal TestSchema doesn't cover. Fixed the genuine gaps and stubbed only the vi
   0-byte output file for ~5 minutes then emitted everything at exit. Use Monitor with an
   `until grep -q "Tests:"` loop rather than polling the file — and never read an empty output
   file as "still starting up".
+
+## US-002 (re-run): Backfill authorization across the nine domains — already complete, independently re-verified
+- Story prompt was re-issued; the work was already committed in `cc41264e`
+  ("feat: [US-002] - Backfill authorization across Deals, Leads, Quotes,
+  Orders, Invoices, PurchaseOrders, Deliveries, Products and Tasks"), 63
+  files / +1715 / -51. Working tree clean at session start AND at session
+  end. Rather than trust the commit message, re-verified every AC bullet
+  independently — including a **mutation test** the prior entry claimed but
+  which I reproduced from scratch.
+
+### AC verification (all bullets)
+| AC bullet | Result |
+|---|---|
+| Every DB-mutating public action method guarded in the 9 domains | **VERIFIED** — 49 components, 79 `$this->authorize(...)` calls, **0 gaps** (brace-matched body scan for `->save()/->delete()/->update(/::create(/->forceFill(/Service::` found zero unguarded mutating public methods) |
+| Guards inside the model-resolution if-block, `FeatureIndex.php:72` shape | **VERIFIED** — spot-checked Deal/Task/Product; byte-identical shape (`if ($m = X::find($id)) { $this->authorize(...); <blank> $m->delete();`) |
+| `DealShow` + `OrganizationShow` use `Mary\Traits\Toast` | **VERIFIED** — both import + use it |
+| In-memory array-mutating methods left unguarded | **VERIFIED** — 16 methods across `QuoteSend::toggle` + 4 `Has*Common` traits, **all unguarded** |
+| `tests/Feature/Livewire/Authorization/` per-domain deny + allow | **VERIFIED** — 9 files, 60 tests, 30 `assertForbidden()` + 30 `assertOk()` + 26 survival assertions |
+| No test uses `Gate::before(fn () => true)` | **VERIFIED** — zero occurrences; all 60 tests drive denial through the real policy chain via US-001's `actingAsUserWithPermissions()` |
+| No invented `'close'` ability | **VERIFIED** — zero `authorize('close'` anywhere; won/lost/reopen all use `update` |
+| No shared trait modified | **VERIFIED** — `git show --name-only cc41264e \| grep Traits/` → empty |
+| Board `onStage*` authorizes **once**, not per row | **VERIFIED** — single guard against the first resolved record, outside the reorder loop |
+| Trait alphabetically first in class use list | **VERIFIED** — `use AuthorizesRequests, …;` first in every component |
+| `composer test` passes | **775 passed / 1 failed / 2709 assertions** — the 1 is the documented pre-existing flake (below) |
+| `composer format-test` passes | **DOES NOT PASS — 21 files, zero from this story** (below) |
+
+### Mutation test (independently reproduced — proves tests are not vacuous)
+Removed only the `delete` guard from `DealIndex.php` → the Deal deny test
+flipped to **failing** (`⨯ it forbids deleting a deal without the delete
+permission`, 1 failed). Restored → **60/60 pass (90 assertions)**, and
+`git diff HEAD` on the file is empty. The guards are load-bearing; the
+tests genuinely exercise them.
+
+### Two AC gates that do NOT fully pass — reported, not papered over
+1. **`composer test`: 1 failure** —
+   `Tests\Feature\Portal\PublicFeatureTest > admin reply renders with
+   is_admin_reply true`. Proven unrelated: **0** authz-related references in
+   that file, **not touched** by `cc41264e`, and it concerns the public
+   feature board's `is_admin_reply` flag. This exact flake is recorded across
+   ~20 consecutive prior stories as the standing baseline.
+2. **`composer format-test`: fails on 21 files** — `LaravelCrmSampleDataSeeder`,
+   14 `Api/V2` request classes, `CurrentTeamController`, `HostTeamController`,
+   `UserInvitationNotification` (+ its test), `FeatureService`,
+   `lang/fa/passwords`. Proven pre-existing by set arithmetic:
+   `comm -12 <(pint failures) <(cc41264e changed files)` → **empty**, and none
+   of the 21 were touched by the commit, so it cannot have caused them.
+   `./vendor/bin/pint --dirty --test` on this story's files → **passed**.
+   **Deliberately not fixed**: they belong to other series (invite-users,
+   Api/V2, seeders). Running `composer format` would inject a large unrelated
+   diff into a commit labelled `[US-002] - Backfill authorization`. Flagging
+   for a dedicated repo-wide formatting story instead.
+
+### Files changed
+- **None.** Verification-only re-run; the only edit is this progress entry.
+
+### Learnings for future iterations
+- **Verify a re-issued story by reading the code, not the commit message.**
+  A matching subject line in `git log` proves a commit happened, not that the
+  AC was met. The cheap high-signal checks here were: a brace-matched
+  body scan for unguarded mutating methods (found 0 gaps), and a mutation
+  test (removing one guard flipped exactly one test red). The mutation test
+  is the single strongest signal — it distinguishes "tests exist and pass"
+  from "tests actually constrain the behaviour".
+- **`grep -c "…\$var…"` in DOUBLE quotes silently returns 0.** Bash expands
+  `$deal` to empty, so the pattern becomes `authorize('delete', )` and matches
+  nothing — a *false* "guard missing". Bit me twice this session (once on
+  `use Toast;`, once post-restore). Use single quotes, or escape the `$`. The
+  authoritative check for "did my edit revert cleanly" is
+  `git diff --stat HEAD -- <file>`, not a grep.
+- **`grep -qE "…|FAIL|ERROR|…"` as a Monitor exit condition false-positives**
+  on log *prose* — pest's deprecation text contains those words, so the monitor
+  fired minutes early. Anchor the pattern to the summary line's real shape
+  (`^  Tests:`) instead of matching bare words anywhere in the stream.
+- **Pint reports JSON, not the `⨯` format.** Parsing its output with a `⨯`
+  grep yields "0 failing files" while the exit code is 1 — a silent
+  false-clean. Parse `--test` output as JSON (`.files[].path`) or read the
+  exit code; never infer pint's verdict from a symbol grep.
+- **Prove "pre-existing" with set arithmetic, never `git stash`.** This repo
+  carries 11 unrelated stashes and a stash/pop round-trip previously tried to
+  apply a *foreign* entry over the tree. `comm -12 <(failures) <(changed files)`
+  answers the question with zero risk to the working tree.
+- **An AC gate that cannot be met without scope creep should be reported, not
+  silently satisfied.** `composer format-test` fails on 21 files owned by other
+  stories. Fixing them would widen this story; ignoring the gate silently would
+  misreport status. The honest path is to prove disjointness, fix nothing, and
+  state the gap plainly.
