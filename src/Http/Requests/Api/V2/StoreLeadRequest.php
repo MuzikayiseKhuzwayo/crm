@@ -3,8 +3,8 @@
 namespace VentureDrake\LaravelCrm\Http\Requests\Api\V2;
 
 use Illuminate\Foundation\Http\FormRequest;
-use VentureDrake\LaravelCrm\Http\Rules\Api\V2\ScopedExists;
 use VentureDrake\LaravelCrm\Http\Rules\Api\V2\OwnerInCurrentTeam;
+use VentureDrake\LaravelCrm\Http\Rules\Api\V2\ScopedExists;
 
 class StoreLeadRequest extends FormRequest
 {

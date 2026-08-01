@@ -28,6 +28,9 @@ use VentureDrake\LaravelCrm\Models\Email;
 use VentureDrake\LaravelCrm\Models\EmailCampaign;
 use VentureDrake\LaravelCrm\Models\EmailCampaignRecipient;
 use VentureDrake\LaravelCrm\Models\EmailTemplate;
+use VentureDrake\LaravelCrm\Models\Feature;
+use VentureDrake\LaravelCrm\Models\FeatureComment;
+use VentureDrake\LaravelCrm\Models\FeatureStatus;
 use VentureDrake\LaravelCrm\Models\Field;
 use VentureDrake\LaravelCrm\Models\FieldGroup;
 use VentureDrake\LaravelCrm\Models\FieldModel;
@@ -61,9 +64,6 @@ use VentureDrake\LaravelCrm\Models\Setting;
 use VentureDrake\LaravelCrm\Models\SmsCampaign;
 use VentureDrake\LaravelCrm\Models\SmsCampaignRecipient;
 use VentureDrake\LaravelCrm\Models\SmsTemplate;
-use VentureDrake\LaravelCrm\Models\Feature;
-use VentureDrake\LaravelCrm\Models\FeatureComment;
-use VentureDrake\LaravelCrm\Models\FeatureStatus;
 use VentureDrake\LaravelCrm\Models\Task;
 use VentureDrake\LaravelCrm\Models\TaxRate;
 use VentureDrake\LaravelCrm\Models\Team;
@@ -4038,7 +4038,7 @@ class LaravelCrmSampleDataSeeder extends Seeder
 
             foreach ($statusDefs as $def) {
                 FeatureStatus::create(array_merge($def, [
-                    'external_id'     => (string) Str::uuid(),
+                    'external_id' => (string) Str::uuid(),
                     'user_created_id' => $this->userId,
                     'user_updated_id' => $this->userId,
                 ]));
@@ -4049,36 +4049,36 @@ class LaravelCrmSampleDataSeeder extends Seeder
 
         $features = [
             [
-                'title'       => 'Bulk email sending from contact list',
+                'title' => 'Bulk email sending from contact list',
                 'description' => 'Allow users to select multiple contacts from the People or Organizations list and send a bulk email directly from the CRM without needing a campaign. Useful for quick one-off outreach.',
-                'status'      => 'Planned',
-                'is_public'   => true,
-                'votes'       => 142,
-                'comments'    => [
+                'status' => 'Planned',
+                'is_public' => true,
+                'votes' => 142,
+                'comments' => [
                     ['body' => 'This would save so much time for our sales team. We currently export to CSV and use a third-party tool.', 'is_admin_reply' => false],
                     ['body' => 'Great suggestion! We have this on our roadmap for the next major release. Stay tuned for updates.', 'is_admin_reply' => true],
                     ['body' => 'Would love to see a preview before sending as well.', 'is_admin_reply' => false],
                 ],
             ],
             [
-                'title'       => 'Two-way calendar sync with Google Calendar',
+                'title' => 'Two-way calendar sync with Google Calendar',
                 'description' => 'Sync meetings and tasks with Google Calendar so changes made in either system are reflected in the other. Would reduce double-entry and missed appointments.',
-                'status'      => 'Under Review',
-                'is_public'   => true,
-                'votes'       => 218,
-                'comments'    => [
+                'status' => 'Under Review',
+                'is_public' => true,
+                'votes' => 218,
+                'comments' => [
                     ['body' => 'We desperately need this. Our team lives in Google Calendar and the CRM feels disconnected right now.', 'is_admin_reply' => false],
                     ['body' => 'Is Outlook Calendar support also on the cards?', 'is_admin_reply' => false],
                     ['body' => 'We are evaluating both Google and Outlook integrations together. Will update this request once scoped.', 'is_admin_reply' => true],
                 ],
             ],
             [
-                'title'       => 'Deal probability forecasting dashboard',
+                'title' => 'Deal probability forecasting dashboard',
                 'description' => 'A dashboard widget that aggregates weighted deal values by pipeline stage probability to give a realistic revenue forecast for the current month and quarter.',
-                'status'      => 'In Progress',
-                'is_public'   => true,
-                'votes'       => 387,
-                'comments'    => [
+                'status' => 'In Progress',
+                'is_public' => true,
+                'votes' => 387,
+                'comments' => [
                     ['body' => 'This is exactly what our CFO has been asking for. Weighted pipeline is a standard sales metric.', 'is_admin_reply' => false],
                     ['body' => 'We started building this! Targeting the next release. Will include monthly and quarterly views.', 'is_admin_reply' => true],
                     ['body' => 'Can we export the forecast to CSV for board reporting?', 'is_admin_reply' => false],
@@ -4086,23 +4086,23 @@ class LaravelCrmSampleDataSeeder extends Seeder
                 ],
             ],
             [
-                'title'       => 'Custom notification rules per user',
+                'title' => 'Custom notification rules per user',
                 'description' => 'Let each user configure which CRM events trigger email or in-app notifications. For example, some users only want notifications for their own deals while others want team-wide alerts.',
-                'status'      => 'Under Review',
-                'is_public'   => true,
-                'votes'       => 163,
-                'comments'    => [
+                'status' => 'Under Review',
+                'is_public' => true,
+                'votes' => 163,
+                'comments' => [
                     ['body' => 'The current one-size-fits-all notifications are too noisy for large teams. This is a must-have.', 'is_admin_reply' => false],
                     ['body' => 'Agreed. A per-user notification preference panel is on our backlog. Upvote to help us prioritise.', 'is_admin_reply' => true],
                 ],
             ],
             [
-                'title'       => 'Mobile app for iOS and Android',
+                'title' => 'Mobile app for iOS and Android',
                 'description' => 'A native or progressive web app so sales reps can access leads, log calls and update deals while on the road without needing a laptop.',
-                'status'      => 'Under Review',
-                'is_public'   => true,
-                'votes'       => 521,
-                'comments'    => [
+                'status' => 'Under Review',
+                'is_public' => true,
+                'votes' => 521,
+                'comments' => [
                     ['body' => 'By far the most requested feature from our team. Even a basic PWA would be a huge improvement.', 'is_admin_reply' => false],
                     ['body' => 'We are actively researching PWA vs native. This is a significant investment and we want to get it right.', 'is_admin_reply' => true],
                     ['body' => 'I would pay extra for a mobile add-on subscription if it existed.', 'is_admin_reply' => false],
@@ -4110,58 +4110,58 @@ class LaravelCrmSampleDataSeeder extends Seeder
                 ],
             ],
             [
-                'title'       => 'Recurring invoice generation',
+                'title' => 'Recurring invoice generation',
                 'description' => 'Automatically generate and optionally send invoices on a recurring schedule (weekly, monthly, quarterly) for subscription-style clients. Should support start/end date and max occurrences.',
-                'status'      => 'Planned',
-                'is_public'   => true,
-                'votes'       => 274,
-                'comments'    => [
+                'status' => 'Planned',
+                'is_public' => true,
+                'votes' => 274,
+                'comments' => [
                     ['body' => 'We have about 30 recurring clients and this would eliminate hours of manual work every month.', 'is_admin_reply' => false],
                     ['body' => 'Planned for Q3. Will also integrate with the Xero sync so recurring invoices push across automatically.', 'is_admin_reply' => true],
                 ],
             ],
             [
-                'title'       => 'Lead scoring based on engagement',
+                'title' => 'Lead scoring based on engagement',
                 'description' => 'Automatically score leads based on activities such as email opens, link clicks, page visits (via the chat widget), and call outcomes. Higher scores should surface leads in a priority view.',
-                'status'      => 'Under Review',
-                'is_public'   => true,
-                'votes'       => 198,
-                'comments'    => [
+                'status' => 'Under Review',
+                'is_public' => true,
+                'votes' => 198,
+                'comments' => [
                     ['body' => 'We currently do this manually in a spreadsheet. Native scoring in the CRM would be game-changing.', 'is_admin_reply' => false],
                     ['body' => 'Configurable scoring rules (e.g. +10 for email open, +25 for demo booked) are the right approach here.', 'is_admin_reply' => false],
                     ['body' => 'Noted. We are gathering requirements for scoring rules before committing to a design.', 'is_admin_reply' => true],
                 ],
             ],
             [
-                'title'       => 'WhatsApp Business messaging integration',
+                'title' => 'WhatsApp Business messaging integration',
                 'description' => 'Connect a WhatsApp Business account so agents can send and receive WhatsApp messages from within the CRM, with all messages logged against the contact record.',
-                'status'      => 'Under Review',
-                'is_public'   => true,
-                'votes'       => 445,
-                'comments'    => [
+                'status' => 'Under Review',
+                'is_public' => true,
+                'votes' => 445,
+                'comments' => [
                     ['body' => 'Our customers mostly communicate via WhatsApp. This would unify all comms in one place.', 'is_admin_reply' => false],
                     ['body' => 'Is this feasible through the WhatsApp Cloud API?', 'is_admin_reply' => false],
                     ['body' => 'Yes, we are evaluating the WhatsApp Cloud API. Access requires business verification but it is achievable.', 'is_admin_reply' => true],
                 ],
             ],
             [
-                'title'       => 'Dark mode improvements for data tables',
+                'title' => 'Dark mode improvements for data tables',
                 'description' => 'Several data tables and inline forms have poor contrast in dark mode. Specifically the quote line item table, invoice totals section, and the kanban board card details.',
-                'status'      => 'Completed',
-                'is_public'   => true,
-                'votes'       => 89,
-                'comments'    => [
+                'status' => 'Completed',
+                'is_public' => true,
+                'votes' => 89,
+                'comments' => [
                     ['body' => 'The invoice totals table is almost unreadable in dark mode on my external monitor.', 'is_admin_reply' => false],
                     ['body' => 'Fixed in v2.4.1 — all table and form contrast issues have been resolved. Thanks for reporting!', 'is_admin_reply' => true],
                 ],
             ],
             [
-                'title'       => 'API webhook support for CRM events',
+                'title' => 'API webhook support for CRM events',
                 'description' => 'Allow users to configure outbound webhooks that fire when CRM events occur (e.g. lead created, deal stage changed, invoice paid). Essential for Zapier and custom integration workflows.',
-                'status'      => 'Planned',
-                'is_public'   => true,
-                'votes'       => 312,
-                'comments'    => [
+                'status' => 'Planned',
+                'is_public' => true,
+                'votes' => 312,
+                'comments' => [
                     ['body' => 'We use Zapier to connect the CRM to our project management tool. Right now we poll the API which is inefficient.', 'is_admin_reply' => false],
                     ['body' => 'Webhooks are on the roadmap and will ship alongside the expanded REST API in the next major version.', 'is_admin_reply' => true],
                     ['body' => 'Will there be a webhook log so we can debug failed deliveries?', 'is_admin_reply' => false],
@@ -4178,14 +4178,14 @@ class LaravelCrmSampleDataSeeder extends Seeder
             $createdAt = $this->weightedRandomDate();
 
             $feature = Feature::create([
-                'external_id'     => (string) Str::uuid(),
-                'number'          => $featureNumber,
-                'feature_id'      => 'FR'.str_pad($featureNumber, 4, '0', STR_PAD_LEFT),
-                'title'           => $data['title'],
-                'description'     => $data['description'],
-                'is_public'       => $data['is_public'],
-                'votes_count'     => 0,
-                'comments_count'  => 0,
+                'external_id' => (string) Str::uuid(),
+                'number' => $featureNumber,
+                'feature_id' => 'FR'.str_pad($featureNumber, 4, '0', STR_PAD_LEFT),
+                'title' => $data['title'],
+                'description' => $data['description'],
+                'is_public' => $data['is_public'],
+                'votes_count' => 0,
+                'comments_count' => 0,
                 'feature_status_id' => $status?->id,
                 'user_created_id' => $this->userId,
                 'user_updated_id' => $this->userId,
@@ -4211,7 +4211,7 @@ class LaravelCrmSampleDataSeeder extends Seeder
                 $voteDate = $voteWindowStart->copy()->addSeconds($secondsOffset);
                 $voteRows[] = [
                     'feature_id' => $feature->id,
-                    'user_id'    => $syntheticBase + $v,
+                    'user_id' => $syntheticBase + $v,
                     'created_at' => $voteDate,
                     'updated_at' => $voteDate,
                 ];
@@ -4231,14 +4231,14 @@ class LaravelCrmSampleDataSeeder extends Seeder
                 $commentOffset += mt_rand(60, 2880);
 
                 FeatureComment::create([
-                    'external_id'     => (string) Str::uuid(),
-                    'feature_id'      => $feature->id,
-                    'body'            => $commentData['body'],
-                    'is_admin_reply'  => $commentData['is_admin_reply'],
+                    'external_id' => (string) Str::uuid(),
+                    'feature_id' => $feature->id,
+                    'body' => $commentData['body'],
+                    'is_admin_reply' => $commentData['is_admin_reply'],
                     'user_created_id' => $this->userId,
                     'user_updated_id' => $this->userId,
-                    'created_at'      => $commentDate,
-                    'updated_at'      => $commentDate,
+                    'created_at' => $commentDate,
+                    'updated_at' => $commentDate,
                 ]);
             }
 

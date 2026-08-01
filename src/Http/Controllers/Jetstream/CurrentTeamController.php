@@ -6,6 +6,7 @@ use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Routing\Controller;
 use Illuminate\Support\Facades\Schema;
+use Laravel\Jetstream\Jetstream;
 use Spatie\Permission\PermissionRegistrar;
 use VentureDrake\LaravelCrm\Models\Team as CrmTeam;
 
@@ -40,8 +41,8 @@ class CurrentTeamController extends Controller
 
     protected function resolveTeamModel()
     {
-        if (class_exists(\Laravel\Jetstream\Jetstream::class)) {
-            return \Laravel\Jetstream\Jetstream::newTeamModel();
+        if (class_exists(Jetstream::class)) {
+            return Jetstream::newTeamModel();
         }
 
         return new CrmTeam;

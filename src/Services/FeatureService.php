@@ -3,6 +3,7 @@
 namespace VentureDrake\LaravelCrm\Services;
 
 use App\User;
+use Illuminate\Database\UniqueConstraintViolationException;
 use VentureDrake\LaravelCrm\Models\Feature;
 use VentureDrake\LaravelCrm\Models\FeatureComment;
 use VentureDrake\LaravelCrm\Models\FeatureView;
@@ -65,7 +66,7 @@ class FeatureService
 
         try {
             return FeatureVote::firstOrCreate($attrs);
-        } catch (\Illuminate\Database\UniqueConstraintViolationException $e) {
+        } catch (UniqueConstraintViolationException $e) {
             // Race: another request created the vote between the firstOrCreate
             // SELECT and INSERT. The unique (feature_id, user_id) index caught
             // it — return the winning row.

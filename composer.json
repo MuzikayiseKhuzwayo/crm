@@ -61,8 +61,8 @@
     },
     "autoload": {
         "psr-4": {
-            "VentureDrake\\LaravelCrm\\" : "src/",
-            "VentureDrake\\LaravelCrm\\Database\\Seeders\\" : "database/seeders"
+            "VentureDrake\\LaravelCrm\\": "src/",
+            "VentureDrake\\LaravelCrm\\Database\\Seeders\\": "database/seeders"
         },
         "files": [
             "src/Http/Helpers/SelectOptions.php",
@@ -77,13 +77,19 @@
     },
     "autoload-dev": {
         "psr-4": {
-            "VentureDrake\\LaravelCrm\\Tests\\" : "tests"
+            "VentureDrake\\LaravelCrm\\Tests\\": "tests"
         }
     },
     "scripts": {
-        "testbench" : "vendor/bin/testbench",
-        "test": "vendor/bin/pest --colors=always",
-        "test-coverage": "vendor/bin/pest --coverage-html coverage",
+        "testbench": "vendor/bin/testbench",
+        "test": [
+            "Composer\\Config::disableProcessTimeout",
+            "vendor/bin/pest --colors=always"
+        ],
+        "test-coverage": [
+            "Composer\\Config::disableProcessTimeout",
+            "vendor/bin/pest --coverage-html coverage"
+        ],
         "format": "vendor/bin/pint -v",
         "format-test": "vendor/bin/pint -v --test"
     },

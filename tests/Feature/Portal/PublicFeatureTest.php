@@ -139,7 +139,19 @@ test('authenticated user can post a comment', function () {
     expect($comment->is_admin_reply)->toBeFalse();
 });
 
-test('admin reply renders with is_admin_reply true', function () {
+test('a comment posted through the portal is never flagged as an admin reply', function () {
+    // This assertion was inverted when the test was written (2026-05-22), then
+    // PublicFeatureController was changed (2026-06-30) to pass an explicit
+    // isAdminReply: false with the rationale "Portal posts are always treated as
+    // public-user comments, even if the authenticated session belongs to a CRM
+    // admin who happens to be browsing the public board." The ?bool $isAdminReply
+    // parameter on FeatureService::comment() exists precisely to allow that
+    // override, so the controller is the intentional behaviour and the old
+    // expectation was stale. Flipped rather than deleted so the coverage survives
+    // and the contract is stated where the next reader will look.
+    //
+    // NB: this is NOT a permission problem. FeatureService::isAdminCommenter()
+    // still returns true for this user -- the controller simply does not consult it.
     $admin = User::create(['name' => 'Admin', 'email' => 'a@example.com', 'password' => bcrypt('x'), 'crm_access' => 1]);
     $feature = Feature::create(['title' => 'Discuss', 'is_public' => true]);
 
@@ -148,7 +160,7 @@ test('admin reply renders with is_admin_reply true', function () {
     ]);
 
     $comment = FeatureComment::where('feature_id', $feature->id)->first();
-    expect($comment->is_admin_reply)->toBeTrue();
+    expect($comment->is_admin_reply)->toBeFalse();
 
     $response = $this->get('/p/features/'.$feature->external_id);
     $response->assertSee('Official response');

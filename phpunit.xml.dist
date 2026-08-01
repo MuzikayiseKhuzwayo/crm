@@ -25,6 +25,14 @@
         </include>
     </source>
     <php>
+        <!--
+            The suite registers every Blade icon set and CRM component on each boot,
+            which exhausts PHP's default 128M and aborts the run with a Pest
+            FatalException part-way through rather than a test failure. Set here
+            rather than in the composer script so `./vendor/bin/pest` and CI get the
+            same headroom without needing a -d flag.
+        -->
+        <ini name="memory_limit" value="1G"/>
         <env name="DB_CONNECTION" value="testing"/>
         <env name="APP_KEY" value="base64:2fl+Ktvkfl+Fuz4Qp/A75G2RTiWVA/ZoKZvp6fiiM10="/>
     </php>

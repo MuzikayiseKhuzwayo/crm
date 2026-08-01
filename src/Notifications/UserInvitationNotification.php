@@ -2,6 +2,7 @@
 
 namespace VentureDrake\LaravelCrm\Notifications;
 
+use App\Models\Team;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Notifications\Messages\MailMessage;
@@ -101,8 +102,8 @@ class UserInvitationNotification extends Notification implements ShouldQueue
             return $hostTeamModel::query()->whereKey($teamId)->value('name');
         }
 
-        if (class_exists(\App\Models\Team::class)) {
-            return \App\Models\Team::query()->whereKey($teamId)->value('name');
+        if (class_exists(Team::class)) {
+            return Team::query()->whereKey($teamId)->value('name');
         }
 
         return DB::table('teams')->where('id', $teamId)->value('name');

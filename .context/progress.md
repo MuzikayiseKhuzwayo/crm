@@ -34288,3 +34288,125 @@ split them correctly.
 - **A docs-only story should move the test numbers by exactly zero.** That is the assertion
   worth making: 947/1/3221 identical to US-008 confirms nothing was touched accidentally. If a
   docs story shifts the suite, something is wrong with the change set, not the suite.
+
+## US-010: Manually smoke-test the seeded roles against a live host app
+Series-wrap story for `livewire-authz-checks` (US-001..US-009). Shipped the automated
+half of the smoke test plus both quality gates; the browser walkthrough is handed off
+below with the one precondition that makes it meaningful.
+
+### New `tests/Feature/SeededRoleSmokeTest.php` (16 tests / 177 assertions)
+- **AC 1 — view-only user on deals.** `delete`, `won` and `lost` each return 403 with the
+  deal still present and `closed_status` still null. A fourth test proves the buttons are
+  not rendered: it walks the blade's `@can`/`@endcan` directives with a **stack** and
+  asserts each control sits inside a still-open frame for the right permission. A naive
+  "the gate string appears above the control" check is vacuous here — `deal-index` opens
+  `@can('edit crm deals')` three separate times — and the delete control is a modal
+  (`onclick="modalDeleteDeal…"` + `<x-crm-delete-confirm>`), not a `wire:click="delete("`,
+  so both the trigger *and* the dialog are asserted.
+- **AC 2 — the seeded-role regression matrix.** Owner/Admin/Manager/Employee × 10 core
+  entities (deals, leads, quotes, orders, invoices, people, organizations, tasks, settings,
+  users). Two things are **derived from source rather than hardcoded**, so the matrix cannot
+  drift: each role's permission set is parsed out of `LaravelCrmTablesSeeder` (Owner/Admin
+  get `Permission::all()`; Manager/Employee get explicit `givePermissionTo([...])` lists),
+  and the permission string each policy method checks is parsed out of the policy itself —
+  which matters because the mapping is not always the obvious one (`PipelineStagePolicy`
+  checks `crm pipelines`, `FieldGroupPolicy` checks `crm fields`), and a hardcoded guess
+  would report a false regression. Asserts **both directions** per (role, model, ability):
+  holding the permission must allow (the lockout regression), lacking it must deny (the
+  guard is not over-broad). Both parsers carry a vacuity guard, and the matrix fails if it
+  examined fewer than 40 abilities. **Result: no seeded role lost any ability.**
+- **AC 3 — product sub-resources and the product-attributes fix.** All four seeded roles
+  pass the class-string `manageProducts` guard on Deal/Quote/Order; a companion test pins
+  the deliberate design (a user with `edit crm products` but not `edit crm deals` is
+  denied), because gating on ProductPolicy would have locked Manager and Employee out of
+  quote building — neither holds any `crm products` permission. Owner passes
+  view/update/delete on `ProductAttribute`, and every product-attributes route's `can:`
+  argument is checked against its own URI, which is exactly what the US-006 rename fixed.
+- **Module-gate coverage.** Added explicit coverage for the one documented way a seeded
+  role can still lose access (US-009's upgrade note): with `deals` removed from
+  `config('laravel-crm.modules')`, a fully-permissioned Owner is denied **every** Deal
+  ability while ungated entities (Task) are unaffected.
+
+**All five guard mechanisms mutation-tested** with a content-backup harness that reports a
+non-zero denominator: `DealIndex::won` guard, the blade delete gate, `DealPolicy::view`'s
+module gate, the product-attributes route parameter, and `manageProducts`' permission
+choice. All five load-bearing; all restored byte-identical.
+
+### Quality gates — both clean for the first time in the series
+- **`composer format`** applied, touching the 21 files US-002..US-009 deferred. Verified
+  cosmetic before accepting: diffing with `-w` leaves only mechanical changes (`"` → `'`,
+  inline FQCN → `use` import). Zero logic changes. `composer format-test` now **passes**.
+- **`composer test` → EXIT 0: 964 passed, 0 failed, 3400 assertions** (was 947/1/3221).
+  It previously could not complete at all — OOM at PHP's default 128M, then Composer's 300s
+  process timeout once that was raised. Both fixed at source (`phpunit.xml.dist`
+  `memory_limit`, `Composer\Config::disableProcessTimeout`) so `./vendor/bin/pest` and CI
+  get the headroom too, instead of every story remembering `-d memory_limit=1G`.
+
+### The long-standing PublicFeatureTest failure — diagnosed, and it was not a regression
+The single failure carried as "the standing flake" for ~20 stories is resolved. It is **not**
+a permission problem: `FeatureService::isAdminCommenter()` still returns `true` for that user
+(probed directly). `PublicFeatureController` was changed on 2026-06-30 to pass an explicit
+`isAdminReply: false` — "portal posts are always treated as public-user comments, even if the
+authenticated session belongs to a CRM admin" — which is precisely what the `?bool
+$isAdminReply` parameter exists for, while the assertion dates from 2026-05-22. The stale
+expectation is flipped rather than deleted, so the coverage survives and the contract is
+stated where the next reader will look. Scope creep into another series' test, taken because
+it was the sole blocker on the AC's `composer test` gate and the evidence was definitive.
+
+### Manual walkthrough — handed off, with a blocking precondition
+**Neither host app currently serves this branch.** Both `laravel-12-crm-v2` and
+`laravel-crm-premium` symlink `vendor/venturedrake/laravel-crm` →
+`/Users/andrewdrake/Packages/laravel-crm`, which is on `develop` at `3a1fdcb0` and has no
+`livewire-authz-checks` branch. Walking through the hosts today exercises the **pre-change**
+code and would produce a false "everything works". Before the walkthrough, either merge/push
+the branch into that path repo and check it out, or repoint the symlink at this clone.
+
+Then, per the AC: create a user with only `view crm deals` and confirm (a) `/crm/deals`
+loads, (b) no delete/won/lost buttons, (c) a hand-crafted Livewire POST to `delete` returns
+403 and the deal survives. Then walk Owner/Manager/Employee across deals, leads, quotes,
+orders, invoices, people, organizations, tasks, settings and users. Note `LARAVEL_CRM_TEAMS`
+is unset in both hosts — set it to `true` in the premium host for the teams path. The matrix
+above is the proxy for all of this, but the browser is the last QA layer: this codebase has
+already had two production bugs (an Eloquent scope used as a sort column; a `only_full_group_by`
+1055) that only surfaced against a real host.
+
+### Files changed
+- **Added** `tests/Feature/SeededRoleSmokeTest.php`.
+- **Modified** `phpunit.xml.dist` (memory_limit), `composer.json` (disable process timeout on
+  `test`/`test-coverage`), `tests/Feature/Portal/PublicFeatureTest.php` (stale assertion).
+- **Modified** 21 files by `composer format` (cosmetic only).
+
+### Learnings for future iterations
+- **`config/laravel-crm.php` is shadowed at test runtime.** Testbench serves a published copy
+  from `vendor/orchestra/testbench-core/laravel/config/laravel-crm.php`, so editing the
+  package's own config file is invisible to tests — a mutation that removed `deals` from
+  `modules` changed the file on disk and the suite still passed. **Module-gated behaviour can
+  only be varied with `config([...])` at runtime.** This also means any test that tries to
+  prove module gating by editing the package config silently no-ops. Found because a mutation
+  failed to trip; a harness that only reported "all load-bearing" would have hidden it.
+- **A mutation that does not trip is a finding, not a harness failure to shrug off.** Chasing
+  M3 produced both the shadowing discovery above and a new test for the module-gate lockout —
+  the highest-value output of the story. Always retarget the mutation at something that can
+  reach the runtime rather than deleting it from the harness.
+- **Derive test expectations from source when the mapping is non-obvious.** Hardcoding
+  "`update` → `edit crm X`" across ten policies would have produced false failures on the
+  policies that deviate. Parsing `hasPermissionTo('…')` out of the policy method makes the
+  matrix self-updating and impossible to drift — at the cost that it cannot detect a *changed*
+  permission string (both sides move together), which is fine: its job is catching lockouts.
+- **`toContain($needle, $message)` is variadic in Pest** — the second argument is read as a
+  second needle, so the assertion silently changes meaning and the failure message is
+  nonsense. Assert on `str_contains(...)` with `->toBeTrue($message)` instead. Bit me once
+  here despite being recorded in this log.
+- **`EXIT=$?` after a pipeline is the pipeline's exit code, not the command's.**
+  `composer test | grep …; echo $?` reported 0 while `composer test` had actually aborted with
+  a fatal error. Capture the real code (`cmd > log; REAL=$?`) before trusting it — this hid an
+  OOM for a full cycle.
+- **Two separate limits can each truncate a long suite, and fixing one reveals the other.**
+  PHP's 128M `memory_limit` aborts mid-run with a Pest `FatalException` (not a test failure);
+  raising it exposed Composer's 300s `process-timeout`, which kills the script entirely. Both
+  are worth fixing in-repo rather than in each invocation.
+- **A permanently-red test everyone has learned to ignore is worse than a green one that
+  documents actual behaviour.** Before flipping one, establish *which side is stale* from
+  evidence — here `git log -S` on both the assertion and the production line, plus an explicit
+  rationale comment in the controller and a parameter that exists specifically to allow the
+  override. Flip rather than delete, and cite the evidence in the test.

@@ -2,6 +2,7 @@
 
 namespace VentureDrake\LaravelCrm\Http\Controllers;
 
+use App\Models\Team;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Routing\Controller;
@@ -63,8 +64,8 @@ class HostTeamController extends Controller
             return get_class($related);
         }
 
-        if (class_exists(\App\Models\Team::class)) {
-            return \App\Models\Team::class;
+        if (class_exists(Team::class)) {
+            return Team::class;
         }
 
         return null;

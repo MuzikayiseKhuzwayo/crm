@@ -21,7 +21,7 @@ test('notification class implements ShouldQueue and extends the base Notificatio
     );
 
     expect($notification)->toBeInstanceOf(ShouldQueue::class)
-        ->and($notification)->toBeInstanceOf(\Illuminate\Notifications\Notification::class);
+        ->and($notification)->toBeInstanceOf(Illuminate\Notifications\Notification::class);
 });
 
 test('toMail carries the subject with app name and an action URL containing the invitation code', function () {
@@ -69,7 +69,7 @@ test('toMail includes inviter, team, role, and expiry lines', function () {
         'expires_at' => now()->addDay(),
     ]);
 
-    $mail = (new UserInvitationNotification($invitation))->toMail(new \stdClass);
+    $mail = (new UserInvitationNotification($invitation))->toMail(new stdClass);
 
     $introLines = array_map(fn ($line) => (string) $line, $mail->introLines);
     $body = implode(' ', $introLines);
