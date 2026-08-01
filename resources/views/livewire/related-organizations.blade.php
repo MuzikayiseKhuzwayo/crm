@@ -1,4 +1,5 @@
 <x-mary-card title="{{ ucfirst(__('laravel-crm::lang.related_organizations')) }}" shadow separator>
+    @can('update', $model)
     <x-slot:menu>
         <x-mary-button @click="$wire.showAddRelatedOrganization = true" class="btn-sm btn-square" type="button" icon="fas.plus" />
     </x-slot:menu>
@@ -40,6 +41,7 @@
             </x-slot:actions>
         </x-mary-form>
     </x-mary-drawer>
+    @endcan
     <div class="grid gap-y-5">
         @foreach($this->contacts as $contact)
             <x-mary-list-item :item="$contact">
@@ -52,7 +54,9 @@
                             </a>
                         </div>
                         <div>
-                            <x-mary-button wire:click="remove({{ $contact->entityable->id }})" class="btn-xs btn-error btn-square text-white" type="button" icon="fas.x" />
+                            @can('update', $model)
+                                <x-mary-button wire:click="remove({{ $contact->entityable->id }})" class="btn-xs btn-error btn-square text-white" type="button" icon="fas.x" />
+                            @endcan
                         </div>
                     </div>
 

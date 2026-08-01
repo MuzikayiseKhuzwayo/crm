@@ -60,12 +60,14 @@
                     <x-mary-button icon="o-arrow-down-tray" link="{{ url(route('laravel-crm.invoices.download', $invoice)) }}" no-wire-navigate class="btn-sm btn-square btn-outline" />
                 @endif
             @endcan--}}
-            <livewire:crm-invoice-send :key="'invoice-send-'.$invoice->id" :$invoice />
-            @if(! $invoice->xeroInvoice)
-                @if(! $invoice->fully_paid_at)
-                    <livewire:crm-invoice-pay :key="'invoice-pay-'.$invoice->id" :$invoice />
+            @can('edit crm invoices')
+                <livewire:crm-invoice-send :key="'invoice-send-'.$invoice->id" :$invoice />
+                @if(! $invoice->xeroInvoice)
+                    @if(! $invoice->fully_paid_at)
+                        <livewire:crm-invoice-pay :key="'invoice-pay-'.$invoice->id" :$invoice />
+                    @endif
                 @endif
-            @endif 
+            @endcan
             @can('view crm invoices')
                 <x-mary-button icon="o-arrow-down-tray" link="{{ url(route('laravel-crm.invoices.download', $invoice)) }}" no-wire-navigate class="btn-sm btn-square btn-outline" />
             @endcan

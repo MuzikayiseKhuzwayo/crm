@@ -47,6 +47,17 @@ class User extends Authenticatable
     }
 
     /**
+     * Spatie registers a Gate::before hook that only consults the user when
+     * checkPermissionTo() exists (PermissionRegistrar::registerPermissions).
+     * Without this, `@can('edit crm notes')` in a Blade view resolves to false
+     * for every stub user, so permission-string gates could never be exercised.
+     */
+    public function checkPermissionTo($permission, $guardName = null): bool
+    {
+        return $this->hasPermissionTo($permission, $guardName);
+    }
+
+    /**
      * Mirrors hasPermissionTo(): permissive when `crm_roles` is unset so the
      * ~800 pre-existing tests keep passing, and explicit when a test needs to
      * exercise a role-gated branch (e.g. the Owner escalation guard).

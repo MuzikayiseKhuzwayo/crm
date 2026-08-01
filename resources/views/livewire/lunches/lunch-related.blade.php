@@ -1,4 +1,5 @@
 <div class="grid gap-5">
+    @can('create crm lunches')
     <x-mary-card title="{{ ucfirst(__('laravel-crm::lang.add_lunch')) }}" separator>
         <x-mary-form wire:submit="save">
             <div class="grid gap-3" wire:key="details">
@@ -30,6 +31,7 @@
             </x-slot:actions>
         </x-mary-form>
     </x-mary-card>
+    @endcan
 
     @if(count($lunches) > 0)
         @foreach($lunches as $lunch)

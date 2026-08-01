@@ -27,13 +27,19 @@
                     </div>
                 @endif
             </div>
-            <x-mary-dropdown right top>
-                <x-slot:trigger>
-                    <x-mary-icon name="o-ellipsis-horizontal" />
-                </x-slot:trigger>
-                <x-mary-menu-item wire:click="edit" title="{{ ucfirst(__('laravel-crm::lang.edit')) }}" />
-                <x-mary-menu-item onclick="modalDeleteCallItem{{ $call->id }}.showModal()" title="{{ ucfirst(__('laravel-crm::lang.delete')) }}" />
-            </x-mary-dropdown>
+            @canany(['edit crm calls', 'delete crm calls'])
+                <x-mary-dropdown right top>
+                    <x-slot:trigger>
+                        <x-mary-icon name="o-ellipsis-horizontal" />
+                    </x-slot:trigger>
+                    @can('edit crm calls')
+                        <x-mary-menu-item wire:click="edit" title="{{ ucfirst(__('laravel-crm::lang.edit')) }}" />
+                    @endcan
+                    @can('delete crm calls')
+                        <x-mary-menu-item onclick="modalDeleteCallItem{{ $call->id }}.showModal()" title="{{ ucfirst(__('laravel-crm::lang.delete')) }}" />
+                    @endcan
+                </x-mary-dropdown>
+            @endcanany
         </div>
 
         @if($editing)
@@ -50,7 +56,9 @@
                 </div>
                 <x-slot:actions>
                     <x-mary-button wire:click="cancel" label="{{ ucfirst(__('laravel-crm::lang.cancel')) }}" type="button" />
-                    <x-mary-button label="{{ ucfirst(__('laravel-crm::lang.save_changes')) }}" class="btn-primary text-white" type="submit" spinner="update" />
+                    @can('edit crm calls')
+                        <x-mary-button label="{{ ucfirst(__('laravel-crm::lang.save_changes')) }}" class="btn-primary text-white" type="submit" spinner="update" />
+                    @endcan
                 </x-slot:actions>
             </x-mary-form>
         @else
@@ -73,18 +81,20 @@
             <h2 class="font-bold">{{ ucfirst(__('laravel-crm::lang.description')) }}</h2>
             {{ $call->description }}
 
-            <dialog id="modalDeleteCallItem{{ $call->id }}" class="modal">
-                <div class="modal-box text-left">
-                    <h3 class="text-lg font-bold">Delete call?</h3>
-                    <p class="py-4">You're about to delete this call. This action cannot be reversed.</p>
-                    <div class="modal-action">
-                        <form method="dialog">
-                            <button class="btn">{{ ucfirst(__('laravel-crm::lang.cancel')) }}</button>
-                            <button wire:click="delete" class="btn btn-error text-white">{{ ucfirst(__('laravel-crm::lang.delete')) }}</button>
-                        </form>
+            @can('delete crm calls')
+                <dialog id="modalDeleteCallItem{{ $call->id }}" class="modal">
+                    <div class="modal-box text-left">
+                        <h3 class="text-lg font-bold">Delete call?</h3>
+                        <p class="py-4">You're about to delete this call. This action cannot be reversed.</p>
+                        <div class="modal-action">
+                            <form method="dialog">
+                                <button class="btn">{{ ucfirst(__('laravel-crm::lang.cancel')) }}</button>
+                                <button wire:click="delete" class="btn btn-error text-white">{{ ucfirst(__('laravel-crm::lang.delete')) }}</button>
+                            </form>
+                        </div>
                     </div>
-                </div>
-            </dialog>
+                </dialog>
+            @endcan
         @endif
     </div>
 </x-mary-card>

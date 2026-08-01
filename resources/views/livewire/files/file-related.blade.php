@@ -1,4 +1,5 @@
 <div class="grid gap-5">
+    @can('create crm files')
     <x-mary-card title="{{ ucfirst(__('laravel-crm::lang.add_file')) }}" separator>
         <div class="grid gap-4" wire:key="file-upload"
              @dragenter.prevent="dragDepth++; dragging = true"
@@ -127,6 +128,7 @@
             </div>
         </div>
     </x-mary-card>
+    @endcan
 
     @if(count($files) > 0)
         @foreach($files as $file)

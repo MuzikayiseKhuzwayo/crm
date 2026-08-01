@@ -33948,3 +33948,103 @@ its own controller-signature decision, so fixing them here would widen a commit 
 - **Pest's summary labels passing tests as "deprecated"** on PHP 8.5 (`PDO::MYSQL_ATTR_SSL_CA`), and
   ~900 lines of deprecation noise drown real failures. `898 deprecated, 1 failed` means 898 passed.
   Redirect to a file and `grep -E "⨯|Tests:"`; never try to filter the live stream.
+
+## US-007: Close Blade @can gaps and gate kanban drag-and-drop
+- Added **44 `@can`/`@canany` gates across 20 Blade views**, closing the UX gap where a
+  read-only user was shown mutating controls that `authorize()` would 403. Server-side
+  guards (US-002..US-006) remain authoritative; this story only stops the buttons rendering.
+- **Ability map** — permission strings where the subject is statically known, policy
+  abilities where it is polymorphic:
+  | Surface | Gate |
+  |---|---|
+  | `invoice-show`: `crm-invoice-send`, `crm-invoice-pay` | `@can('edit crm invoices')` |
+  | `{note,task,call,meeting,lunch}-item`: `edit`, `pin`/`unpin`, `complete`, inline-form save | `@can('edit crm X')` |
+  | `{note,task,call,meeting,lunch,file}-item`: delete menu item **and delete `<dialog>`** | `@can('delete crm X')` |
+  | each item dropdown as a whole | `@canany(['edit crm X','delete crm X'])` so it never renders empty |
+  | `{note,task,call,meeting,lunch,file}-related` add-form card | `@can('create crm X')` |
+  | `model-products` add/remove | `@if($canManageProducts)` |
+  | `related-people` / `related-organizations` menu, drawer, remove | `@can('update', $model)` |
+- **Polymorphic subjects use the policy-ability form deliberately.** `RelatedPeople`/
+  `RelatedOrganizations` guard with `authorize('update', $this->model)` where `$model` is
+  Person/Organization/Lead/Deal/…; no static permission string can mirror that, so the view
+  uses `@can('update', $model)` — an exact match for the server guard.
+- **`model-products`** gets `@php($canManageProducts = ! $model || (auth()->user()?->can('update', $model) ?? false))`.
+  `add`/`remove` are pure in-memory array ops with no server guard, so this is UX-only; the
+  `! $model` arm covers the create flow, which is already `can:create`-gated at the route.
+  Verified the add/remove controls only render when `$from` is null — i.e. `$model` is always
+  either the entity being edited or null — so `update` is the right ability in every case.
+- **Kanban drag-and-drop**: the four board wrappers now pass
+  `:sortable="auth()->user()?->can('edit crm {deals|leads|quotes|features}') ?? false"` into
+  `KanbanBoard::mount()`. The boards already had `@includeWhen($sortable, '…kanban-board.sortable')`,
+  so a false flag means the SortableJS `<script>` is never emitted — cards are not draggable
+  rather than draggable-then-403. `$sortable` previously defaulted to `true` for everyone.
+  Portal (`crm-portal-feature-board`) intentionally untouched — it has no auth user.
+
+### Two real defects found by tooling (not by reading)
+1. **The delete `<dialog>` blocks were still ungated.** Each item view renders a
+   `<dialog>` containing `wire:click="delete"`. Gating only the dropdown menu item left that
+   button in the DOM for read-only users. Caught only after the test's gate check was
+   tightened (below) — the loose version passed.
+2. **`@can('<permission string>')` evaluated `false` for every stub user**, so no
+   permission-string gate had ever been exercised in tests. Spatie's `Gate::before`
+   (`PermissionRegistrar.php:129`) only consults the user when `method_exists($user, 'checkPermissionTo')`,
+   and `tests/Stubs/User.php` had only `hasPermissionTo()`. Fixed by adding
+   `checkPermissionTo()` delegating to `hasPermissionTo()` — permissive default preserved, so
+   the ~900 existing tests are unaffected, and `actingAsUserWithPermissions([...])` now gates
+   views accurately too. Surfaced as a genuine regression in `FileRelatedTest`.
+
+### Tests — `tests/Feature/BladeAuthorizationGatesTest.php` (42 tests / 232 assertions)
+34 dataset rows asserting each named control is enclosed by its gate, 4 asserting each board
+passes the sortable flag, 4 asserting each board still `@includeWhen($sortable, …)`, plus one
+that compiles all 20 views and checks `@can/@endcan` + `@canany/@endcanany` balance.
+**Mutation-tested 4 gates** (note delete, deals sortable, related-people remove,
+model-products remove) with a content-backup harness — all 4 load-bearing, all restored
+byte-identical.
+
+### Quality gates
+- `./vendor/bin/pint --dirty --test` → **passed**.
+- `composer test` → **940 passed / 1 failed / 3206 assertions** (US-006 baseline 898/1/2974):
+  **+42 passing = exactly the 42 new tests, zero net new failures.** The 1 failure is the
+  standing flake `PublicFeatureTest > admin reply renders with is_admin_reply true` —
+  0 scope-keyword hits in that file, not in the changed set, last touched by an unrelated merge.
+- `composer format-test` → **still fails on the same 21 pre-existing files, none of them mine.**
+  Proven by set arithmetic on parsed pint JSON: 21 failing ∩ 22 changed = **0**, both sets
+  non-empty. Deliberately not fixed — they belong to other series (invite-users, Api/V2,
+  seeders) and `composer format` would inject a large unrelated diff into a `[US-007]` commit.
+
+### PR note (required by the AC)
+Every `@can` in this codebase gates on a **permission string**, but 14 policies add a second
+condition the views do not check: the `isEnabled()` module gate (Deal, Lead, Quote, Invoice,
+Feature, …). On a host with a trimmed `config('laravel-crm.modules')`, `authorize()` will deny
+while `@can('edit crm deals')` still renders the button. The two places this story used the
+policy-ability form (`@can('update', $model)` in `related-people`/`related-organizations`) do
+honour the module gate, since Gate routes them through the policy. Reconciling the rest is a
+separate story.
+
+### Learnings for future iterations
+- **A "gate appears somewhere above the control" check is vacuous when the gate string repeats
+  in the file.** My first test used `strrpos($before, $gate) !== false`; it passed even with the
+  gate deleted, because `related-people` has an *earlier, already-closed* `@can('update', $model)`
+  and `model-products` has `$canManageProducts` in a top-of-file `@php(...)`. Only the mutation
+  harness exposed it. The correct check walks Blade directives with a **stack** (`@if/@can/@canany/
+  @foreach/@has*enabled` push, `@end<name>` pops the nearest matching frame) and asserts the
+  control sits inside a still-open frame whose text contains the gate. That stricter check then
+  immediately found the ungated `<dialog>` blocks. **Write the mutation harness before trusting
+  the assertion.**
+- **A whitespace-prefixed idempotency guard silently no-ops.** `str_contains($src, "␣␣␣␣␣␣␣␣␣␣␣␣@can('delete crm notes')")`
+  (12 spaces) matched *inside* the 20-space dropdown gate added minutes earlier, so the dialog
+  script reported "SKIP ×6, wrapped 0" and did nothing. Anchor indentation-sensitive guards on
+  `"\n".$needle."\n"`. The only reason this was caught is that the script prints a count of work
+  done — a guard that reports success with a zero denominator is a failure.
+- **`BladeCompiler::compileString()` standalone throws `Target [Illuminate\Contracts\View\Factory]
+  is not instantiable` for any view containing `<x-…>` component tags.** Every one of my 20 files
+  "failed" identically, including barely-touched ones — a harness failure, not a template failure.
+  Compile inside the booted testbench app (`Blade::compileString()` from a Pest test) instead.
+- **Pest's summary labels passing tests as "deprecated"** on PHP 8.5 (`PDO::MYSQL_ATTR_SSL_CA`).
+  `940 deprecated, 1 failed` means 940 passed. Redirect to a file and `grep -E "⨯|FAILED|^ *Tests:"`.
+- **`cat -A` is not available on macOS** (`illegal option -- A`) — use `sed 's/ /·/g'` to make
+  indentation visible when you need exact leading whitespace for an anchor.
+- **Adding a `@can` around content that a test asserts on is a real regression risk.** The gate
+  itself was correct; the *harness* was wrong (stub couldn't answer permission strings). Before
+  weakening a gate to make a test pass, check whether the test's user can actually answer the
+  question the gate asks.

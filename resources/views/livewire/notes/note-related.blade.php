@@ -1,5 +1,6 @@
 <div class="grid gap-5 {{ ($pinned) ? 'mb-5' : null }}">
     @if(!$pinned)
+    @can('create crm notes')
     <x-mary-card title="{{ ucfirst(__('laravel-crm::lang.add_note')) }}" separator>
         <x-mary-form wire:submit="save">
             <div class="grid gap-3" wire:key="details">
@@ -11,6 +12,7 @@
             </x-slot:actions>
         </x-mary-form>
     </x-mary-card>
+    @endcan
     @endif
     @if(count($notes) > 0)
         @foreach($notes as $note)

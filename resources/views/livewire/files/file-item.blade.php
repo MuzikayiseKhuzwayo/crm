@@ -42,7 +42,9 @@
                     <x-mary-icon name="o-ellipsis-horizontal" />
                 </x-slot:trigger>
                 <x-mary-menu-item wire:click="download" title="{{ ucfirst(__('laravel-crm::lang.download')) }}" />
-                <x-mary-menu-item onclick="modalDeleteFileItem{{ $file->id }}.showModal()" title="{{ ucfirst(__('laravel-crm::lang.delete')) }}" />
+                @can('delete crm files')
+                    <x-mary-menu-item onclick="modalDeleteFileItem{{ $file->id }}.showModal()" title="{{ ucfirst(__('laravel-crm::lang.delete')) }}" />
+                @endcan
             </x-mary-dropdown>
         </div>
 
@@ -53,18 +55,20 @@
             @endif
         </div>
 
-        <dialog id="modalDeleteFileItem{{ $file->id }}" class="modal">
-            <div class="modal-box text-left">
-                <h3 class="text-lg font-bold">Delete file?</h3>
-                <p class="py-4">You're about to delete this file. This action cannot be reversed.</p>
-                <div class="modal-action">
-                    <form method="dialog">
-                        <button class="btn">{{ ucfirst(__('laravel-crm::lang.cancel')) }}</button>
-                        <button wire:click="delete" class="btn btn-error text-white">{{ ucfirst(__('laravel-crm::lang.delete')) }}</button>
-                    </form>
+        @can('delete crm files')
+            <dialog id="modalDeleteFileItem{{ $file->id }}" class="modal">
+                <div class="modal-box text-left">
+                    <h3 class="text-lg font-bold">Delete file?</h3>
+                    <p class="py-4">You're about to delete this file. This action cannot be reversed.</p>
+                    <div class="modal-action">
+                        <form method="dialog">
+                            <button class="btn">{{ ucfirst(__('laravel-crm::lang.cancel')) }}</button>
+                            <button wire:click="delete" class="btn btn-error text-white">{{ ucfirst(__('laravel-crm::lang.delete')) }}</button>
+                        </form>
+                    </div>
                 </div>
-            </div>
-        </dialog>
+            </dialog>
+        @endcan
     </div>
 </x-mary-card>
 

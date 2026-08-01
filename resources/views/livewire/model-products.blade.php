@@ -1,5 +1,6 @@
+@php($canManageProducts = ! $model || (auth()->user()?->can('update', $model) ?? false))
 <x-mary-card title="{{ ucfirst(__('laravel-crm::lang.products')) }}" separator>
-    @if(! $from && class_basename($model) != 'Delivery')
+    @if($canManageProducts && ! $from && class_basename($model) != 'Delivery')
         <x-slot:menu>
             <x-mary-button wire:click="add" class="btn-sm btn-square" type="button" icon="fas.plus" />
         </x-slot:menu>
@@ -28,7 +29,9 @@
                                     
                                     <div class="absolute top-3 right-3">
                                         <x-mary-icon name="fas.arrows-alt-v"/>
-                                        <x-mary-button wire:click="remove({{ $index }})" class="btn-xs btn-error btn-square text-white" type="button" icon="fas.x" />
+                                        @if($canManageProducts)
+                                            <x-mary-button wire:click="remove({{ $index }})" class="btn-xs btn-error btn-square text-white" type="button" icon="fas.x" />
+                                        @endif
                                     </div>
                                 @endif
                                 <div class="grid {{ ($creating != 'Delivery') ? 'lg:grid-cols-4' : null }} gap-2">
@@ -66,7 +69,7 @@
                 </tbody>
                 @if($creating != 'Delivery')
                     <tfoot id="quoteProductsTotals">
-                    @if(! $from && class_basename($model) != 'Delivery')
+                    @if($canManageProducts && ! $from && class_basename($model) != 'Delivery')
                         <tr>
                             <td class="text-right px-0 py-3 border-y border-base-content/10" colspan="2">
                                 <x-mary-button wire:click="add" class="btn-sm btn-square" type="button" icon="fas.plus" />

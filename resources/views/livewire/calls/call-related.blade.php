@@ -1,4 +1,5 @@
 <div class="grid gap-5">
+    @can('create crm calls')
     <x-mary-card title="{{ ucfirst(__('laravel-crm::lang.add_call')) }}" separator>
         <x-mary-form wire:submit="save">
             <div class="grid gap-3" wire:key="details">
@@ -21,6 +22,7 @@
             </x-slot:actions>
         </x-mary-form>
     </x-mary-card>
+    @endcan
 
     @if(count($calls) > 0)
         @foreach($calls as $call)
