@@ -83,8 +83,11 @@
         font-weight: 600;
     }
 
+    /* 8px horizontal padding mirrors .bold-items th/td, so the meta,
+       parties and note blocks share the line-item table's indent instead
+       of sitting flush against the container edge. */
     .bold-pdf .bold-meta td {
-        padding: 4px 0;
+        padding: 4px 8px;
         font-size: 11.5px;
         color: #374151;
     }
@@ -105,12 +108,12 @@
 
     .bold-pdf .bold-parties td {
         vertical-align: top;
-        padding: 0 12px 0 0;
+        padding: 0 12px 0 8px;
         width: 50%;
     }
 
     .bold-pdf .bold-parties td + td {
-        padding: 0 0 0 12px;
+        padding: 0 8px 0 12px;
     }
 
     .bold-pdf .bold-party-heading {
@@ -197,6 +200,7 @@
 
     .bold-pdf .bold-note {
         margin-top: 20px;
+        padding-left: 8px;
     }
 
     .bold-pdf .bold-note-heading {
