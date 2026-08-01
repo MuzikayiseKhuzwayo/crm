@@ -33696,3 +33696,255 @@ and each restored cleanly. The tests are not vacuous.
   here named a column (`users.mailing_list`), a table (`password_reset_tokens`), or a validation
   rule (`hex` required) — every one was fixtures, never authorization. A message naming a policy or
   a 403 is the only kind that implicates the guard.
+
+## US-005: Close the cross-team user deletion and role-assignment escalation
+- **`src/Support/TeamMembership.php`** (new) exposes `inCurrentTeam($user): bool`, reusing the
+  portable duck-type idiom from `Http/Rules/Api/V2/OwnerInCurrentTeam.php:63-74`
+  (`method_exists($u, 'allTeams')` → collect team ids). Four branches, each AC-mandated:
+  teams disabled → `true`; teams on but no current team → `false` (**fail closed**); host user
+  with no `allTeams()` → `true` (unknowable, don't block); otherwise membership of the current
+  team. `crmTeams()` and `team_user` are deliberately *not* consulted — the former is the CRM's
+  own optional grouping (usually empty), the latter is a Jetstream table non-Jetstream hosts
+  don't ship.
+- **`UserIndex::delete($id)`** rewritten to the AC's four-step shape: return early if the user
+  isn't found → `authorize('delete', $user)` → self-deletion short-circuits to
+  `$this->error(...user_cannot_delete_self)` (a user error, not a 403 — an Owner legitimately
+  holds `delete crm users`, and self-deletion can orphan the last Owner) →
+  `abort_unless(TeamMembership::inCurrentTeam($user), 403)` → delete. Component gained
+  `AuthorizesRequests` + the `TeamMembership` import.
+- **`UserIndex::users()`** gained the matching team scoping. Users carry no `team_id` column, so
+  the literal mirror of `pendingInvitationsQuery()`'s `where('team_id', …)` isn't available — the
+  boundary is a `whereExists` on the Jetstream `team_user` pivot, the same table
+  `UserController::store():92` already writes to unconditionally in teams mode. When no current
+  team resolves it matches nothing, which fails closed exactly as `TeamMembership` does. Without
+  this the delete guard would 403 on rows the admin can see.
+- **`TeamIndex`** gained `authorize('delete', $team)`, `AuthorizesRequests`, and the missing
+  `use Livewire\Attributes\Url;` import — its four `#[Url]` attributes were silently dead, so
+  `search`/`user_id`/`label_id`/`sortBy` never round-tripped through the query string.
+- **`Role::scopeAssignable()`** (new) = `crm()` plus, in teams mode, a
+  `whereNull('team_id')->orWhere('team_id', $currentTeamId)` group. Docblocked as load-bearing:
+  the seeder writes Owner/Admin/Manager/Employee with `team_id => null` **even in teams mode**
+  (`LaravelCrmTablesSeeder.php:564,573,582,689`), so a plain `team_id` match returns an empty set
+  and silently skips role assignment on every create/edit. Deliberately **not** `crmNotOwner()` —
+  that would break ownership transfer.
+- **Six call sites consolidated onto the scope**: `Role::assignable()->find()` at
+  `UserController.php:77`/`:167`, `UserCreate.php:48`, `UserEdit.php:86`; and the two inline
+  team-predicate duplicates at `Users/Traits/HasUserCommon.php:55` and `UserInvite.php:31,84`.
+  The dropdown and the assignable set can no longer diverge. The two *invitation-acceptance*
+  `Role::find` sites (`UserController.php:450,519`) are intentionally untouched — the invitee
+  isn't an admin assigning a role, and the role was already validated at invite time.
+- **Owner escalation** blocked with
+  `abort_if($role->name === 'Owner' && ! auth()->user()->hasRole('Owner'), 403)` at each of the
+  four assignment sites, placed *before* the `$user->roles()` lookup.
+- **`src/Http/Rules/AssignableRole.php`** (new) wraps the same predicate as a `ValidationRule`
+  and is wired into `StoreUserRequest`, `UpdateUserRequest`, `UserCreate::rules()` and
+  `UserEdit::rules()` — one rule object rather than the closure duplicated four times. Reuses the
+  existing `user_invitation_role_invalid` message ("the selected role is invalid").
+- **`user_cannot_delete_self`** added to all four shipped locales (`en`, `fa`, plus the narrow
+  `en_au`/`en_gb` override files) with a real Persian translation rather than an English stub.
+
+### Tests — `tests/Feature/Livewire/Authorization/UserAuthorizationTest.php` (18 tests / 41 assertions)
+Covers the AC's four named scenarios plus the predicate and scope directly: TeamMembership's
+three branches; delete-without-permission 403; **cross-team delete 403 with the user surviving**;
+same-team delete succeeding; **self-delete producing no deletion and an error toast**; users()
+scoped in teams mode and unscoped without; TeamIndex delete deny/allow + the `Url` import;
+`assignable()` including the global-role branch while excluding foreign-team and non-CRM roles;
+Owner staying assignable; **UserCreate::save with another team's role id failing validation with
+no user and no role row created**; **a non-Owner assigning Owner getting 403**; and the two allow
+paths (an Owner *can* assign Owner; a non-Owner *can* assign a non-Owner role) that prove the
+guard isn't over-broad. No `Gate::before(fn () => true)` anywhere — denial runs through the real
+policies via US-001's `actingAsUserWithPermissions()`.
+
+**All 8 guards mutation-verified** with a content-based (not git-based) harness: removing each of
+the cross-team `abort_unless`, the self-delete branch, the `users()` scoping, both `authorize()`
+calls, the Owner `abort_if`, the `AssignableRole` rule, and the `whereNull('team_id')` branch
+flips its own test red; every mutation restored cleanly.
+
+### Test-environment scaffolding (necessary dependency of the AC's assertion shape)
+- `tests/Stubs/User.php`: added `hasRole()` (permissive when `crm_roles` is null, so the ~880
+  pre-existing tests are unaffected), a `roles()` morphToMany + `assignRole()`/`removeRole()`
+  stand-ins, and the `HasCrmPhones`/`HasCrmEmails`/`HasCrmAddresses`/`HasCrmTeams` traits the
+  CRM patches onto host User models.
+- `tests/TestSchema.php`: added `users.crm_roles`, the Jetstream `team_user` pivot, and
+  `crm_teams`/`crm_team_user` (including the `crm_teams.team_id` column that
+  `add_team_id_to_laravel_crm_tables.php.stub` adds in production and the `BelongsToTeams`
+  global scope requires).
+- Render-stub subclasses (`class AuthzUserIndex extends UserIndex { render() {…} }`) — only
+  `render()` is replaced, so the real action methods and real `authorize()` calls still run.
+
+### Quality gates
+- `php -l` clean on all 19 changed files. `./vendor/bin/pint --dirty --test` → **passed**.
+- `composer test` → **881 passed / 1 failed / 2927 assertions** (baseline at US-004 was
+  863/1/2886): **+18 passing = exactly the 18 new tests, zero net new failures.** The 1 failure is
+  the standing flake `Tests\Feature\Portal\PublicFeatureTest > admin reply renders with
+  is_admin_reply true` — **0** scope-keyword hits in that file, and it was not touched by this
+  commit.
+- `composer format-test` → **still fails on the same 21 pre-existing files, none of them mine.**
+  Proven by set arithmetic: `comm -12 <(pint failure paths) <(git status paths)` → **empty**
+  (21 failing vs 19 changed, zero overlap). Deliberately not fixed — they belong to other series
+  (invite-users, Api/V2, seeders) and `composer format` would inject a large unrelated diff into a
+  commit labelled `[US-005]`.
+
+### Learnings for future iterations
+- **`#[Url]` attributes are silently inert without `use Livewire\Attributes\Url;`.** PHP does not
+  error on an unresolvable attribute FQCN — it's only raised when read via reflection — so
+  `TeamIndex`'s four `#[Url]` properties never bound to the query string and nobody noticed. The
+  same latent bug was fixed on `UserIndex` in the invite-users series. **Whenever you add a
+  `#[Url]` property, grep the file for the import first**; if it's missing, adding it silently
+  activates every sibling attribute too. Worth a one-off sweep: `grep -l '#\[Url\]' src/Livewire/**
+  | xargs grep -L 'use Livewire\\Attributes\\Url;'`.
+- **"Mirror the scoping from X" rarely means "copy X's WHERE clause".** `pendingInvitationsQuery()`
+  can use `where('team_id', …)` because invitations carry the column; users don't, so the faithful
+  mirror is a `whereExists` on the tenancy pivot. Read the *intent* (the visible set must equal
+  the actionable set), then pick the mechanism the target model actually supports — and make the
+  null-team case fail closed the same way the predicate does, or the listing and the guard drift
+  apart again.
+- **Fail-closed vs fail-open is a per-branch decision, not a per-function one.** `TeamMembership`
+  fails **closed** on "teams on but no current team" (a real misconfiguration that must not grant
+  cross-tenant delete) and **open** on "host user has no `allTeams()`" (unknowable — blocking here
+  would brick every non-Jetstream host). Copying `OwnerInCurrentTeam` wholesale would have got
+  this right by accident; reasoning about each branch is what makes it defensible.
+- **Placing a guard *before* the code that needs test scaffolding decides how much scaffolding you
+  need.** `abort_if(… Owner …)` sits above `$user->roles()`, so the deny test never touches Spatie
+  plumbing. Only the *allow* path needed `roles()`/`assignRole()` on the stub — and that was worth
+  adding, because "an Owner can still assign Owner" is the single most important safety property of
+  this story (an over-broad guard here locks admins out of ownership transfer).
+- **`$this->error()` writes its title to a `session()->flash()`, but the flash is not readable from
+  the Livewire test's session.** Asserting `session('mary.toast.title')` fails with `null`. Rather
+  than reach into the `xjs` effect payload, override `error()` on the render-stub subclass to
+  capture titles into a public array and assert with `->get('errorToasts')` — it tests the exact
+  contract ("an error toast with this message"), stays readable, and doesn't couple the test to
+  Mary's JS serialisation.
+- **A mutation harness must compare against a content backup, never against git.** With an
+  uncommitted tree `git diff --quiet <file>` is always non-zero, so "mutation applied" and "restore
+  failed" both read as true. The harness here holds the original string in memory, asserts the file
+  actually changed after the edit, and asserts byte-equality after the restore — and reports a
+  non-zero count of mutations examined, so a harness that silently examined nothing can't pass.
+- **`Team` (`crm_teams`) is itself team-scoped** via `BelongsToTeams`, so the global scope adds
+  `where team_id = ?` to `Team::orderBy('name')->get()` in `mountCommon()`. A `crm_teams` test table
+  without a `team_id` column fatals only once `laravel-crm.teams` is switched on — invisible in
+  every teams-off test. Any table whose model uses `BelongsToTeams` needs the column in TestSchema
+  even though it lives in a *separate* production migration (`add_team_id_to_laravel_crm_tables`).
+- **Follow-ups deliberately out of scope** (named here so they aren't mistaken for oversights):
+  `UserImport.php:137` is a fourth role-assignment site with no Owner guard; `UserCreate::save()`
+  creates the user row *before* the role `abort_if`, so a blocked escalation leaves a roleless user
+  behind; and `UserCreate`/`UserEdit::save()` still have no `authorize('create'|'update')` guard —
+  the earlier backfill series never reached the Users domain.
+
+## US-006: Close the unguarded route groups and fix the pre-existing productAttribute 403
+- **Activities group** — added `can:` middleware to all 7 routes: `viewAny`/`create` in the
+  class-string form; `view`/`update`/`delete` in the route-parameter form. The parameter form is
+  safe here and only here: `ActivityController@show|edit|update|destroy` all type-hint
+  `Activity $activity`, so SubstituteBindings populates `{activity}` with a model before
+  `Authorize::getModel()` reads it. `ActivityPolicy` was registered in US-001; Manager and
+  Employee already hold all four `crm activities` permissions, so no role lost access.
+- **Deal / Quote / Order product sub-resources** — added `can:manageProducts,<Model>` at the
+  **group** level on the three `{deal|quote|order}/products` groups, plus the stray
+  `deals/create-product`. Verified empirically that all three controllers' `show($id)`,
+  `update(Request, $id)` and `destroy($id)` take raw ids, so `can:update,deal` would hand Gate
+  the string `"1"`, `Gate::getPolicyFor('1')` would return null, and **every user including
+  Owner would be denied** — exactly the failure mode the AC warns about. The no-model
+  class-string form works on every route in the group and mirrors the shipped
+  `can:manageStatuses,...\Feature` precedent.
+- **product-attributes 403 fixed** — the real bug was the **URI parameter name**. The routes read
+  `{productCategory}` while the guard read `productAttribute`, so
+  `$request->route('productAttribute')` returned null, `Gate::allows('view', [null])` found no
+  policy, and show/edit/update/destroy were 403 for everyone including Owner. Renamed the URI
+  parameter to `{productAttribute}` so it matches **both** the `can:` argument **and**
+  `ProductAttributeController`'s `ProductAttribute $productAttribute` type-hint — the only form
+  that both resolves the guard and lets implicit binding populate the controller argument.
+  All `route()` call sites pass positionally, so the rename is safe.
+- **Correction to my own initial diagnosis** — I first concluded the lowercase
+  `Models\productAttribute` class-string on `index`/`create`/`store` was a second 403-for-everyone
+  bug, on the reasoning that `isset($policies[$lower])` is false and `is_subclass_of` is false for
+  the same class. **That was wrong.** Laravel falls through to its default policy guesser, which
+  maps `Models\productAttribute` → `Policies\productAttributePolicy`, and PHP class resolution is
+  case-insensitive, so it resolves. Those three routes were never broken. The mutation harness
+  caught this — reverting the capitalisation failed no test. I kept the capitalisation (it matches
+  the real class name, hits the explicit `$policies` registration directly rather than a fallback,
+  and is consistent with every sibling group) but corrected the code comment and do **not** claim
+  it as a bug fix.
+- **`crm_product_attributes` added to `tests/TestSchema.php`** — core ships **no migration stub at
+  all** for this table, though the model, controller and routes all exist. Mirrors the
+  `product_categories` shape so the routes are exercisable. Flagged below as a real gap.
+
+### Verification
+- **Automated resolution check over all 148 parameter-form `can:` middlewares in the file** —
+  scripted every `can:X,param` against its own route URI (including enclosing group prefixes) and
+  its controller's signature. All 21 arguments added or moved by this story resolve to a bound
+  model or an existing class. Comments were excluded after an initial run parsed my own
+  explanatory prose (`can:update,deal would hand Gate a raw string`) as middleware.
+- **Mutation-tested all 3 guards** with a content-based harness (never git-based — the tree is
+  uncommitted, so `git diff --quiet` is always non-zero and reports bogus apply/restore results).
+  Removing the activities `can:view`, removing the deal-products group middleware, and reverting
+  `{productAttribute}`→`{productCategory}` each flip exactly their own test red; all restored
+  byte-identical. The harness reports a non-zero count of mutations examined so it cannot pass
+  vacuously.
+- `php -l` clean on all 3 changed files. `./vendor/bin/pint --dirty --test` → **passed**.
+- `composer test` → **898 passed / 1 failed / 2974 assertions** (US-005 baseline was
+  881/1/2927): **+17 passing = exactly the 17 new tests, +47 assertions, zero net new failures.**
+  The 1 failure is the standing flake `PublicFeatureTest > admin reply renders with
+  is_admin_reply true` — 0 scope-keyword hits in that file, last touched by an unrelated merge.
+- `composer format-test` → **still fails on the same 21 pre-existing files, none of them mine.**
+  Proven by set arithmetic: intersection of the 21 pint-failing paths with my 4 changed paths is
+  **empty**. Deliberately not fixed — they belong to other series (invite-users, Api/V2, seeders)
+  and `composer format` would inject a large unrelated diff into a commit labelled `[US-006]`.
+
+### Files changed
+- **Modified** `src/Http/routes.php` (7 Activities routes, 3 product groups + create-product,
+  product-attributes URI rename + class-string capitalisation).
+- **Added** `tests/Feature/RouteAuthorizationTest.php` (17 tests / 47 assertions).
+- **Modified** `tests/TestSchema.php` (+`crm_product_attributes`).
+
+### Out-of-scope gaps found and deliberately NOT fixed (reported, not silently widened)
+The resolution audit surfaced three same-family pre-existing bugs the AC does not name. Each needs
+its own controller-signature decision, so fixing them here would widen a commit labelled `[US-006]`:
+- **Notes** — `NoteController@show|edit|update` take `$id`, not a typed `Note`, so
+  `can:view,note` / `can:update,note` on `notes/{note}` hand Gate a raw string. **403 for everyone,
+  3 routes.** Same shape as the product-attributes bug.
+- **Customers** — routes use `{client}` while the guards read `customer`
+  (`can:view,customer` etc.), so `$request->route('customer')` is null. **403 for everyone,
+  4 routes.** `CustomerController` type-hints `Customer $client`, so the fix is a guard rename,
+  not a URI rename — the opposite of the product-attributes fix.
+- **Routes pointing at non-existent controller methods** — `LeadController@update|destroy`,
+  `DealController@update|destroy`, `QuoteController@update|destroy`, `InvoiceController@send|pay`,
+  `PurchaseOrderController@send`, `Call|Meeting|Lunch|FileController@complete`. Not an authz issue
+  (500 on hit), but worth a sweep.
+- **`crm_product_attributes` has no migration stub in core**, so the table does not exist in a
+  real install even though the model, controller and 7 routes do.
+
+### Learnings for future iterations
+- **`can:<ability>,<param>` only works when the controller type-hints that exact parameter name.**
+  `Authorize::getModel()` is `$request->route($model, null)`, so the guard reads the *route*
+  parameter — and that parameter is only a model if SubstituteBindings converted it, which requires
+  the controller method to type-hint a parameter of the **same name**. Three ways this silently
+  yields 403-for-everyone: the controller takes `$id` (Notes, and the deal/quote/order product
+  controllers); the URI parameter name differs from the guard argument (product-attributes); the
+  URI parameter name differs from the type-hinted variable (Customers). **Before writing any
+  parameter-form `can:`, check the controller signature.** When it takes a raw id, use the
+  no-model class-string form with a `manageX`-style ability instead.
+- **Laravel's Gate falls back to a policy *guesser*, and PHP class resolution is case-insensitive.**
+  A wrong-cased model class-string (`Models\productAttribute`) still resolves, because the guesser
+  maps it to `Policies\productAttributePolicy` and that matches `ProductAttributePolicy`. Reasoning
+  only from `isset($policies[$key])` and `is_subclass_of()` — as I did — concludes "broken" when it
+  isn't. **Confirm a suspected authz bug by mutation-testing it, not by reading `Gate` source.**
+- **A mutation harness is the only thing that distinguishes "tests pass" from "tests constrain
+  behaviour" — and it catches your own wrong diagnoses.** It is what proved 3 guards load-bearing
+  *and* proved my 4th claim false. Two properties are essential: compare against a **content**
+  backup (not git — an uncommitted tree makes `git diff --quiet` always report "changed"), and
+  **report a non-zero count of mutations examined**, so a harness that silently examined nothing
+  cannot print a triumphant pass.
+- **"Not 403" is a vacuous allow-assertion on its own.** `DealProductController@index` is literally
+  `abort(404)`, and unseeded model bindings 404 in SubstituteBindings *before* the gate runs — so
+  an allow test can pass without the guard ever executing. My first two attempts did exactly that.
+  Pair the HTTP assertion with a direct `Gate::allows($ability, $argument)` assertion using the
+  exact arguments the middleware constructs; that is unambiguous positive proof, unpolluted by
+  controller behaviour. (Rejecting 404 outright is wrong — for `abort(404)` controllers a 404 *is*
+  the gate-passed signal.)
+- **Grep-based route auditing is unreliable; script it against the real router.** `$prefix`-style
+  interpolation traps aside, group prefixes mean a route's full URI is not on the same line as its
+  `can:`. Walking the file with a group stack, then cross-checking each controller signature, found
+  four genuine bug families that no amount of reading would have surfaced reliably.
+- **Pest's summary labels passing tests as "deprecated"** on PHP 8.5 (`PDO::MYSQL_ATTR_SSL_CA`), and
+  ~900 lines of deprecation noise drown real failures. `898 deprecated, 1 failed` means 898 passed.
+  Redirect to a file and `grep -E "⨯|Tests:"`; never try to filter the live stream.

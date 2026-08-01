@@ -199,7 +199,8 @@ Route::group(['prefix' => 'settings/feature-statuses', 'middleware' => 'auth.lar
 
 Route::group(['prefix' => 'deals', 'middleware' => 'auth.laravel-crm'], function () {
     Route::get('create-product', 'VentureDrake\LaravelCrm\Http\Controllers\DealProductController@createProduct')
-        ->name('laravel-crm.deal-products.create-product');
+        ->name('laravel-crm.deal-products.create-product')
+        ->middleware(['can:manageProducts,VentureDrake\LaravelCrm\Models\Deal']);
 
     Route::any('filter', 'VentureDrake\LaravelCrm\Http\Controllers\DealController@index')
         ->name('laravel-crm.deals.filter')
@@ -247,7 +248,12 @@ Route::group(['prefix' => 'deals', 'middleware' => 'auth.laravel-crm'], function
 
     /* Deal Products */
 
-    Route::group(['prefix' => '{deal}/products', 'middleware' => 'auth.laravel-crm'], function () {
+    // Group-level can:manageProducts uses the no-model class-string form deliberately.
+    // DealProductController@show|update|destroy take $id rather than a typed Deal, so
+    // implicit binding never populates {deal}. can:update,deal would hand Gate a raw
+    // string, Gate::getPolicyFor('42') would return null, and every user including Owner
+    // would be denied. Mirrors the shipped can:manageStatuses,...\Feature precedent.
+    Route::group(['prefix' => '{deal}/products', 'middleware' => ['auth.laravel-crm', 'can:manageProducts,VentureDrake\LaravelCrm\Models\Deal']], function () {
         Route::get('', 'VentureDrake\LaravelCrm\Http\Controllers\DealProductController@index')
             ->name('laravel-crm.deal-products.index');
 
@@ -324,7 +330,9 @@ Route::group(['prefix' => 'quotes', 'middleware' => 'auth.laravel-crm'], functio
 
     /* Quote Products */
 
-    Route::group(['prefix' => '{quote}/products', 'middleware' => 'auth.laravel-crm'], function () {
+    // No-model class-string form: QuoteProductController@show|update|destroy take $id,
+    // so {quote} never becomes a model and can:update,quote would deny everyone.
+    Route::group(['prefix' => '{quote}/products', 'middleware' => ['auth.laravel-crm', 'can:manageProducts,VentureDrake\LaravelCrm\Models\Quote']], function () {
         Route::get('', 'VentureDrake\LaravelCrm\Http\Controllers\QuoteProductController@index')
             ->name('laravel-crm.quote-products.index');
 
@@ -397,7 +405,9 @@ Route::group(['prefix' => 'orders', 'middleware' => 'auth.laravel-crm'], functio
 
     /* Order Products */
 
-    Route::group(['prefix' => '{order}/products', 'middleware' => 'auth.laravel-crm'], function () {
+    // No-model class-string form: OrderProductController@show|update|destroy take $id,
+    // so {order} never becomes a model and can:update,order would deny everyone.
+    Route::group(['prefix' => '{order}/products', 'middleware' => ['auth.laravel-crm', 'can:manageProducts,VentureDrake\LaravelCrm\Models\Order']], function () {
         Route::get('', 'VentureDrake\LaravelCrm\Http\Controllers\OrderProductController@index')
             ->name('laravel-crm.order-products.index');
 
@@ -573,25 +583,35 @@ Route::group(['prefix' => 'purchase-orders', 'middleware' => 'auth.laravel-crm']
 
 Route::group(['prefix' => 'activities', 'middleware' => 'auth.laravel-crm'], function () {
     Route::get('', 'VentureDrake\LaravelCrm\Http\Controllers\ActivityController@index')
-        ->name('laravel-crm.activities.index');
+        ->name('laravel-crm.activities.index')
+        ->middleware(['can:viewAny,VentureDrake\LaravelCrm\Models\Activity']);
 
     Route::get('create', 'VentureDrake\LaravelCrm\Http\Controllers\ActivityController@create')
-        ->name('laravel-crm.activities.create');
+        ->name('laravel-crm.activities.create')
+        ->middleware(['can:create,VentureDrake\LaravelCrm\Models\Activity']);
 
     Route::post('', 'VentureDrake\LaravelCrm\Http\Controllers\ActivityController@store')
-        ->name('laravel-crm.activities.store');
+        ->name('laravel-crm.activities.store')
+        ->middleware(['can:create,VentureDrake\LaravelCrm\Models\Activity']);
 
+    // The route-parameter form is safe on the four routes below: ActivityController's
+    // show/edit/update/destroy all type-hint Activity $activity, so implicit binding
+    // populates {activity} with a model before Authorize::getModel() reads it.
     Route::get('{activity}', 'VentureDrake\LaravelCrm\Http\Controllers\ActivityController@show')
-        ->name('laravel-crm.activities.show');
+        ->name('laravel-crm.activities.show')
+        ->middleware(['can:view,activity']);
 
     Route::get('{activity}/edit', 'VentureDrake\LaravelCrm\Http\Controllers\ActivityController@edit')
-        ->name('laravel-crm.activities.edit');
+        ->name('laravel-crm.activities.edit')
+        ->middleware(['can:update,activity']);
 
     Route::put('{activity}', 'VentureDrake\LaravelCrm\Http\Controllers\ActivityController@update')
-        ->name('laravel-crm.activities.update');
+        ->name('laravel-crm.activities.update')
+        ->middleware(['can:update,activity']);
 
     Route::delete('{activity}', 'VentureDrake\LaravelCrm\Http\Controllers\ActivityController@destroy')
-        ->name('laravel-crm.activities.destroy');
+        ->name('laravel-crm.activities.destroy')
+        ->middleware(['can:delete,activity']);
 });
 
 /* Tasks */
@@ -1163,31 +1183,39 @@ Route::group(['prefix' => 'product-categories', 'middleware' => 'auth.laravel-cr
 /* Product Attributes */
 
 Route::group(['prefix' => 'product-attributes', 'middleware' => 'auth.laravel-crm'], function () {
+    // Cosmetic only: these class-strings were lowercase Models\productAttribute, which
+    // still resolved a policy via Laravel's case-insensitive guesser fallback. Capitalised
+    // here so they match the real class name and hit the explicit $policies registration
+    // directly, consistent with every sibling route group.
     Route::get('', 'VentureDrake\LaravelCrm\Http\Controllers\ProductAttributeController@index')
         ->name('laravel-crm.product-attributes.index')
-        ->middleware(['can:viewAny,VentureDrake\LaravelCrm\Models\productAttribute']);
+        ->middleware(['can:viewAny,VentureDrake\LaravelCrm\Models\ProductAttribute']);
 
     Route::get('create', 'VentureDrake\LaravelCrm\Http\Controllers\ProductAttributeController@create')
         ->name('laravel-crm.product-attributes.create')
-        ->middleware(['can:create,VentureDrake\LaravelCrm\Models\productAttribute']);
+        ->middleware(['can:create,VentureDrake\LaravelCrm\Models\ProductAttribute']);
 
     Route::post('', 'VentureDrake\LaravelCrm\Http\Controllers\ProductAttributeController@store')
         ->name('laravel-crm.product-attributes.store')
-        ->middleware(['can:create,VentureDrake\LaravelCrm\Models\productAttribute']);
+        ->middleware(['can:create,VentureDrake\LaravelCrm\Models\ProductAttribute']);
 
-    Route::get('{productCategory}', 'VentureDrake\LaravelCrm\Http\Controllers\ProductAttributeController@show')
+    // The URI parameter is {productAttribute}, not {productCategory}. It must match both
+    // the can: argument (Authorize::getModel() reads $request->route('productAttribute'))
+    // and ProductAttributeController's ProductAttribute $productAttribute type-hint, so
+    // implicit binding resolves a model before the gate runs.
+    Route::get('{productAttribute}', 'VentureDrake\LaravelCrm\Http\Controllers\ProductAttributeController@show')
         ->name('laravel-crm.product-attributes.show')
         ->middleware(['can:view,productAttribute']);
 
-    Route::get('{productCategory}/edit', 'VentureDrake\LaravelCrm\Http\Controllers\ProductAttributeController@edit')
+    Route::get('{productAttribute}/edit', 'VentureDrake\LaravelCrm\Http\Controllers\ProductAttributeController@edit')
         ->name('laravel-crm.product-attributes.edit')
         ->middleware(['can:update,productAttribute']);
 
-    Route::put('{productCategory}', 'VentureDrake\LaravelCrm\Http\Controllers\ProductAttributeController@update')
+    Route::put('{productAttribute}', 'VentureDrake\LaravelCrm\Http\Controllers\ProductAttributeController@update')
         ->name('laravel-crm.product-attributes.update')
         ->middleware(['can:update,productAttribute']);
 
-    Route::delete('{productCategory}', 'VentureDrake\LaravelCrm\Http\Controllers\ProductAttributeController@destroy')
+    Route::delete('{productAttribute}', 'VentureDrake\LaravelCrm\Http\Controllers\ProductAttributeController@destroy')
         ->name('laravel-crm.product-attributes.destroy')
         ->middleware(['can:delete,productAttribute']);
 });
