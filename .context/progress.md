@@ -2,6 +2,23 @@
 
 ## Codebase Patterns
 
+- **A command's NAME is not a specification — read its source before documenting it as
+  a fix.** `php artisan laravelcrm:permissions` sounds like the command that creates
+  permissions. It does not. It reads
+  `if (config('laravel-crm.teams') === false) { $this->error(...); }` and returns, so on a
+  single-tenant install it prints `Teams config for multi-tenant support is not enabled.`
+  and changes nothing; on a teams install it only fans *existing* global CRM roles and
+  their *existing* grants out to each team via raw `DB::table()->updateOrInsert()`. The
+  thing that actually creates permission rows — and the thing that is genuinely
+  `firstOrCreate` + `givePermissionTo` and therefore idempotent — is
+  `LaravelCrmTablesSeeder` (156 `Permission::firstOrCreate`, 4 `Role::firstOrCreate`, zero
+  bare `create`), reachable via `laravelcrm:update` (which calls `db:seed` at line 115) or
+  `db:seed --class=...\LaravelCrmTablesSeeder`. Documenting the wrong command is worse than
+  documenting nothing: an operator runs it, sees an error-but-exit-0, assumes the step is
+  done, and deploys into the 403s the step was supposed to prevent. **For any doc that
+  tells an operator to run something, open the command and confirm it does what its name
+  implies — especially when an AC hands you the command name.**
+
 - **A coverage-guard test must PIN whatever its detector cannot see.** Any
   "every X must have Y" regression test that first *scopes* which methods it checks
   (here: "does the body contain a persistence signal?") has a silent hole — for a method
@@ -34164,3 +34181,110 @@ separate story.
   match (`substr_count(...) !== 1`) and the harness reported `ANCHOR not unique (0)` instead
   of quietly skipping — which is the whole reason to assert the anchor count before writing.
   A harness that silently examines nothing prints a triumphant pass.
+
+## US-009: Document the behaviour change in CHANGELOG and an upgrade guide
+- Documentation-only story closing out the `livewire-authz-checks` series (US-001..US-008).
+  Both files were already staged from a prior session, so the work here was to **verify every
+  factual claim against the source** rather than trust it — which surfaced three defects.
+- **`CHANGELOG.md`** — `### Security` entry under `## [Unreleased]` describing the behaviour
+  change: every mutating Livewire action and CRM route now enforces the same Spatie permission
+  the UI already advertised via `@can`. Sub-bullets cover the guard backfill, the `can:` route
+  middleware, the cross-team/Owner-escalation fixes, the Blade gates + kanban drag gating, the
+  new `ActivityPolicy` and now-registered `ProductAttributePolicy`, and the
+  `ActionAuthorizationCoverageTest` regression guard. Closes with the no-new-permission
+  guarantee, an upgrade pointer, and the minor-not-patch call-out. A `### Fixed` entry records
+  the pre-existing `product-attributes` 403.
+- **`docs/upgrading.md`** — `## Upgrading` section covering the three AC-named risk cases as
+  `### 1.` / `### 2.` / `### 3.`: (1) re-run the permission seeding first, with the six
+  commonly-missing permission families in a table and copy-pasteable verify commands; (2)
+  custom view-only roles built under Settings → Roles correctly lose actions, with a tinker
+  audit snippet; (3) trimmed `config('laravel-crm.modules')` 403s because every policy's
+  `isEnabled()` returns `null` for a disabled module. Then a "What does not change" section
+  (Owner/Admin/Manager/Employee lose nothing; no new permission introduced) and a "Release
+  type" section.
+
+### Three defects found by verification (would have shipped otherwise)
+1. **CHANGELOG guard count was wrong.** Claimed "164 mutating actions across 116 Livewire
+   components". Measured against the branch's actual diff
+   (`git diff $(git merge-base HEAD develop) HEAD -- src/Livewire`): **165 across 117**, with
+   zero commented-out lines among the added guards. The stale 164/116 was the sum of the
+   US-002/003/004 progress entries (79+34+51 / 50+22+44), which predates US-005's additions.
+   Corrected.
+2. **CHANGELOG Blade-gate count was wrong.** Claimed "44 `@can` / `@canany` gates". The actual
+   added-directive breakdown is **33 `@can(` + 5 `@canany(` = 38 opening gates**, balanced by
+   33 `@endcan` + 5 `@endcanany`. The "20 Blade views" half was correct. Corrected to 38.
+3. **The AC's own premise about `laravelcrm:permissions` is factually wrong** — see the new
+   Codebase Patterns entry. The AC says to "LEAD with re-running `php artisan
+   laravelcrm:permissions`, which is firstOrCreate + givePermissionTo and therefore
+   idempotent". That parenthetical describes the **seeder**, not the command. The command
+   creates no permissions and no-ops with an error on single-tenant installs.
+
+### How the AC/code conflict was resolved (deliberate, deviates from AC prose)
+Leading with `laravelcrm:permissions` as *the* fix would actively harm the majority of readers:
+on a single-tenant install it prints `Teams config for multi-tenant support is not enabled.`,
+exits 0, and changes nothing — so an operator following that instruction would believe the step
+was done and deploy straight into the 403s it was meant to prevent. The AC's **intent** ("lead
+with re-running the permission seeding; don't bury it") is honoured in full — it is `### 1.`,
+before everything else, with the commands in a fenced block at the top of the step. The command
+the AC names is given first-class prominence (named in the block as step 2 and in its own bolded
+paragraph) with an explicit statement of what it does, when it is needed, and that it is **not a
+substitute** for the seeder. Both the CHANGELOG bullet and the guide now name both commands and
+split them correctly.
+
+### Claims verified against source (all accurate as written)
+- Owner + Admin `Permission::all()` at `LaravelCrmTablesSeeder.php:569-570` and `:578-579` —
+  both line ranges land exactly on `Role::firstOrCreate($roleArray)->givePermissionTo(Permission::all());`.
+- Seeder idempotency: 156 `Permission::firstOrCreate`, 4 `Role::firstOrCreate`, **zero** bare
+  `Permission::create` / `Role::create`.
+- Manager and Employee each hold full create/view/edit/delete on **all 19** core entities named
+  in the guide (scripted check, zero missing).
+- The three "pre-existing gaps" warnings: neither Manager nor Employee holds any `crm monitors`
+  (confirmed); Employee holds only `view crm chat` + `reply crm chat` and **no**
+  `crm email-campaigns` / `crm sms-campaigns` (confirmed); Manager holds **no** `crm customers`
+  while Employee holds all four (confirmed).
+- The `isEnabled()` snippet is quoted **byte-accurately** from `DealPolicy`, including the
+  missing `else` that makes it return `null`.
+- The tinker snippet's `// expect 4` — exactly 4 `crm monitors` permissions exist.
+- `laravelcrm:update` really does re-seed (`db:seed --class=...LaravelCrmTablesSeeder` at
+  `LaravelCrmUpdate.php:115`).
+- The `### Fixed` entry: at the merge-base the route really was `{productCategory}` while the
+  guard read `can:view,productAttribute`; it is now `{productAttribute}` on both sides.
+- Both cross-file links resolve (`CHANGELOG.md` → `docs/upgrading.md`; guide → `../database/...`).
+
+### Files changed
+- **Modified** `CHANGELOG.md` (guard count 164→165, component count 116→117, gate count 44→38,
+  and the Upgrading bullet rewritten to name both commands and split their roles).
+- **Added** `docs/upgrading.md` (step 1 restructured to lead with the commands and to state
+  plainly that `laravelcrm:permissions` is not a substitute for the seeder).
+
+### Quality gates
+- `./vendor/bin/pint --dirty --test` → `{"tool":"pint","result":"passed"}`.
+- `composer test` → **947 passed / 1 failed / 3221 assertions** — **byte-identical to the
+  US-008 baseline**, which is exactly right for a docs-only change (0 PHP files touched, 0 test
+  files touched). The 1 failure is the standing flake
+  `Tests\Feature\Portal\PublicFeatureTest > admin reply renders with is_admin_reply true`:
+  0 keyword hits for this story's scope, and not in the changed set.
+- `composer format-test` not re-run — the change set is 2 markdown files and 0 PHP files, so the
+  pre-existing 21-file pint baseline documented from US-002 onward is trivially unchanged.
+
+### Learnings for future iterations
+- **When an AC hands you a command name, open the command.** The whole value of this story was
+  in *not* transcribing the AC. Promoted to Codebase Patterns.
+- **Counts copied from progress entries go stale the moment a later story adds to the same
+  surface.** 164/116 was correct at the end of US-004 and wrong by US-005. Derive numbers from
+  `git diff $(git merge-base HEAD <base>) HEAD` at documentation time, not from the running
+  tally in the log. Tree totals are also wrong (189/136 here) because they include guards that
+  predate the branch — the *delta* is the only number a changelog should quote.
+- **Count opening directives, not lines containing the token.** `grep -c '@can'` matches
+  `@endcan` and `@endcanany` too. Use `grep -oE '@can\(|@canany\('` and sanity-check that the
+  opener and closer counts balance — they did here (38/38), which is also a free
+  well-formedness check on the Blade edits.
+- **Prefer a heredoc'd PHP script over inline shell for anything that greps PHP source.** Two
+  attempts at the role-permission check died on bash quoting (`$roleArray`, nested quotes) and
+  one produced a syntax error. A `/tmp/*.php` script that parses the seeder's
+  `givePermissionTo([...])` block and prints per-family results was both correct first time and
+  re-runnable — and it prints a **non-zero count of permissions examined**, so it cannot pass
+  vacuously.
+- **A docs-only story should move the test numbers by exactly zero.** That is the assertion
+  worth making: 947/1/3221 identical to US-008 confirms nothing was touched accidentally. If a
+  docs story shifts the suite, something is wrong with the change set, not the suite.

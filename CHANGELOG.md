@@ -10,6 +10,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Calendar
 - Payments
 
+### Security
+- **Authorization is now enforced on every mutating Livewire action and CRM route** — every action now checks the same Spatie permission the UI already advertised via `@can`. Previously the Blade layer hid buttons a user could not use, but the Livewire components behind them did not re-check on the server, so any user who could reach a CRM page could invoke its actions directly over the Livewire endpoint regardless of role.
+  - `$this->authorize(...)` added to 165 mutating actions across 117 Livewire components covering leads, deals, quotes, orders, invoices, deliveries, purchase orders, products, tasks, people, organizations, notes / calls / meetings / lunches / files, settings lookups, chat, imports, templates, and campaigns
+  - `can:` middleware added to the previously ungated `activities/*` route group and the deal / quote / order `products` sub-resource groups
+  - Cross-team user deletion and non-Owner `Owner` role assignment now blocked; the users listing is scoped to the current team so the visible set matches the actionable set
+  - 38 `@can` / `@canany` gates added across 20 Blade views, and kanban cards are no longer draggable without the matching `edit` permission (they previously dragged, then 403'd on drop)
+  - New `ActivityPolicy`; the orphaned `ProductAttributePolicy` is now registered (it existed but was never wired up, so every `ProductAttribute` authorization check silently fell through to deny)
+  - `ActionAuthorizationCoverageTest` added as a regression guard — a mutating Livewire action without a guard or a documented exemption fails the suite by name
+  - **No new permission name is introduced.** Stock Owner and Admin receive `Permission::all()`, and Manager and Employee hold create / view / edit / delete on the core CRM entities, so no seeded role loses access it previously exercised (see the upgrade guide for the exact per-role breakdown)
+  - **Upgrading — re-run the permission seeding first.** Installs that have upgraded over time without re-seeding may be missing later-release permissions (`crm monitors`, `crm features`, `crm email-campaigns`, `crm sms-campaigns`, `crm chat`, `crm activities`) and will start returning `403`. Run `php artisan laravelcrm:update` (or `db:seed --class=...\LaravelCrmTablesSeeder`) to create any missing permission rows — the seeder is `firstOrCreate` + `givePermissionTo` throughout, so it is idempotent and revokes nothing. On multi-tenant (`teams`) installs, follow it with `php artisan laravelcrm:permissions`, which fans the global CRM roles out to each team; that command creates no permissions of its own and exits with an error when teams are disabled. Custom view-only roles built under Settings → Roles will correctly lose actions they could previously perform, and hosts with a trimmed `config('laravel-crm.modules')` will `403` on the disabled module. See [docs/upgrading.md](docs/upgrading.md) for the full guide.
+  - **Ships as a minor release, not a patch** — it changes observable behaviour for existing users
+### Fixed
+- `product-attributes` routes were 403 for every user including Owner: the route parameter was named `{productCategory}` while the `can:` guard read `productAttribute`, so the gate was handed `null` and resolved no policy
+
 ## 2.3.0 - 2026-05-31
 ### Added
 - **Feature voting & feedback portal** — public roadmap board where customers and team members can submit feature requests, vote, comment, and follow status changes
