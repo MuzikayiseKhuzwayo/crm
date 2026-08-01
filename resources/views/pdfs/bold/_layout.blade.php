@@ -87,8 +87,9 @@
        parties and note blocks share the line-item table's indent instead
        of sitting flush against the container edge. */
     .bold-pdf .bold-meta td {
-        padding: 4px 8px;
+        padding: 1px 8px;
         font-size: 11.5px;
+        line-height: 1.15;
         color: #374151;
     }
 
