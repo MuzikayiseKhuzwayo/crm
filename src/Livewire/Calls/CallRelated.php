@@ -2,6 +2,7 @@
 
 namespace VentureDrake\LaravelCrm\Livewire\Calls;
 
+use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
 use Livewire\Attributes\On;
 use Livewire\Component;
 use Mary\Traits\Toast;
@@ -10,7 +11,7 @@ use VentureDrake\LaravelCrm\Models\Person;
 
 class CallRelated extends Component
 {
-    use Toast;
+    use AuthorizesRequests, Toast;
 
     public $model = null;
 
@@ -42,6 +43,8 @@ class CallRelated extends Component
 
     public function save(): void
     {
+        $this->authorize('create', Call::class);
+
         $this->validate([
             'name' => 'required|max:255',
             'description' => 'nullable',

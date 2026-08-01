@@ -2,12 +2,14 @@
 
 namespace VentureDrake\LaravelCrm\Livewire\Organizations;
 
+use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
 use Livewire\Component;
 use VentureDrake\LaravelCrm\Livewire\Organizations\Traits\HasOrganizationCommon;
+use VentureDrake\LaravelCrm\Models\Organization;
 
 class OrganizationCreate extends Component
 {
-    use HasOrganizationCommon;
+    use AuthorizesRequests, HasOrganizationCommon;
 
     public function mount()
     {
@@ -24,6 +26,8 @@ class OrganizationCreate extends Component
 
     public function save()
     {
+        $this->authorize('create', Organization::class);
+
         $this->validate();
 
         // Create a request object to pass to services

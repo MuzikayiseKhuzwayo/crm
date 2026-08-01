@@ -2,12 +2,14 @@
 
 namespace VentureDrake\LaravelCrm\Livewire\People;
 
+use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
 use Livewire\Component;
 use VentureDrake\LaravelCrm\Livewire\People\Traits\HasPersonCommon;
+use VentureDrake\LaravelCrm\Models\Person;
 
 class PersonCreate extends Component
 {
-    use HasPersonCommon;
+    use AuthorizesRequests, HasPersonCommon;
 
     public function mount()
     {
@@ -24,6 +26,8 @@ class PersonCreate extends Component
 
     public function save()
     {
+        $this->authorize('create', Person::class);
+
         $this->validate();
 
         // Create a request object to pass to services

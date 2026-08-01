@@ -2,6 +2,15 @@
 
 ## Codebase Patterns
 
+- **Livewire's base `Component` already uses `AuthorizesRequests`** (see
+  `vendor/livewire/livewire/src/Component.php:29`). `$this->authorize()` therefore works
+  on any Livewire component even without the explicit `use`, and
+  `class_uses_recursive(AnyComponent::class)` ALWAYS reports the trait. Keep adding the
+  explicit `use AuthorizesRequests` line — it documents the guard's presence and matches
+  the US-002/US-003 convention — but **never assert "component X is unguarded" via the
+  trait list**; assert against the source instead:
+  `expect(file_get_contents((new ReflectionClass(X::class))->getFileName()))->not->toContain('$this->authorize(')`.
+
 - **Plugin code lives in a sibling repo.** The Filament plugin work (`v0.x`
   stories) lives at `/Users/andrewdrake/Packages/laravel-crm-filament`,
   *not* in the `humble-koi` clone. The clone only carries the planning
@@ -33421,3 +33430,137 @@ tests genuinely exercise them.
   stories. Fixing them would widen this story; ignoring the gate silently would
   misreport status. The honest path is to prove disjointness, fix nothing, and
   state the gap plainly.
+
+## US-003: Backfill authorization across People, Organizations, Activities and the shared related/sub-item components
+- Added **34 `$this->authorize(...)` guards** across **22 Livewire components**, plus the
+  `AuthorizesRequests` import + class-`use` on each. Same `FeatureIndex.php:72` shape as
+  US-002: for `delete($id)` the guard sits INSIDE the existing `if ($model = X::find($id)) {`
+  block immediately before the mutation, followed by a blank line; for typed-property
+  components it is the first statement of the method.
+- **Ability map applied**:
+  | Surface | Ability |
+  |---|---|
+  | `Person/OrganizationIndex::delete`, `…Show::delete` | `delete` on the resolved model |
+  | `Person/OrganizationCreate::save` | `create` on `Person`/`Organization::class` |
+  | `Person/OrganizationEdit::save` | `update` on `$this->person` / `$this->organization` |
+  | `Person/OrganizationImport::startImport` + `::processNextChunk` | `create` on the model |
+  | `Note/Call/Meeting/Lunch/FileItem::update\|pin\|unpin` | `update` on that item's own model |
+  | `Note/Call/Meeting/Lunch/FileItem::delete` | `delete` on that item's own model |
+  | `Note/Call/Meeting/Lunch/FileRelated::save` | `create` on `Note\|Call\|Meeting\|Lunch\|File::class` |
+  | `RelatedPeople/RelatedOrganizations::add` + `::remove` | `update` on `$this->model` (the parent) |
+  | `RelatedPeople/RelatedOrganizations::add` new-record branch | `create` on `Person`/`Organization::class` |
+- **`Activities/` needed no guards.** A brace-matched body scan of `ActivityIndex` and
+  `ActivityFeed` found zero DB-mutating public methods — both are read-only feeds
+  (`activities()` computed + `setScope()`/`updatedTab()` state setters). Recorded here
+  so a future reader doesn't mistake the absence for an oversight.
+- **Import components included beyond the literal map.** `Person/OrganizationImport`
+  bulk-create records, and every public Livewire method is directly invokable from the
+  client, so `startImport()` AND `processNextChunk()` are both guarded — guarding only
+  the entry point would leave the worker method exploitable. Same reasoning US-002 used
+  to guard `TaskItem::update()`/`TaskRelated::save()` beyond its own literal map.
+- **In-memory methods left unguarded per AC**: `RelatedDeals::add|remove` (untouched —
+  `git status` shows no diff on that file), plus the `Has*Common` array helpers. **No
+  shared trait was modified** — `git diff --name-only | grep Traits/` is empty, so no
+  consumer can fatal on a missing method.
+- **`FileItem::download()` deliberately left unguarded.** It is a read, not a mutation,
+  and the AC's map enumerates only update/delete/pin/unpin. Flagging it as a candidate
+  for a future `authorize('view', $this->file)` hardening story rather than widening
+  this one.
+- **No lockout risk.** Verified against `LaravelCrmTablesSeeder` that Manager AND Employee
+  both hold the full `view|create|edit|delete` set on `crm people`, `crm organizations`,
+  `crm notes`, `crm calls`, `crm meetings`, `crm lunches` and `crm files` before adding a
+  single guard.
+
+### Tests — `tests/Feature/Livewire/Authorization/` (+8 files, 60 tests / 122 assertions)
+`Person`, `Organization`, `Note`, `Call`, `Meeting`, `Lunch`, `File`, `RelatedContacts`.
+Every deny case asserts `->assertForbidden()` **and** that the record survived (row still
+present, column still null, or `count()` unchanged). **No `Gate::before(fn () => true)`
+anywhere** — denial runs through the real policies via US-001's
+`actingAsUserWithPermissions()` helper.
+
+The `RelatedContacts` suite discriminates the two stacked guards by making the parent the
+*other* entity type: `RelatedPeople` is mounted on an Organization, so
+`authorize('update', $this->model)` needs `edit crm organizations` while
+`authorize('create', Person::class)` needs `create crm people`. A user holding only the
+first is forbidden at the second, and no `Person` row is created.
+
+Call/Meeting/Lunch are structurally identical, so their six deny/allow pairs are generated
+once by a shared `itGuardsAnActivityItem()` helper in `tests/Pest.php` rather than
+triplicated by hand.
+
+**Mutation-tested twice** — removing `RelatedPeople`'s create guard flips exactly the
+"forbids minting a brand new person" test red; removing `NoteItem::pin`'s guard flips
+exactly the "forbids pinning" test red. Both restored (`git diff --numstat` back to the
+pre-mutation counts). The guards are load-bearing.
+
+### Test-environment scaffolding
+`Livewire::test()` renders on mount, and these components' mount paths hit genuine gaps.
+Fixed the gaps; stubbed only the view.
+- **`tests/TestSchema.php`** — added 7 genuinely-missing tables: `crm_contacts`,
+  `crm_calls`, `crm_meetings`, `crm_lunches`, `crm_organization_types`,
+  `crm_contact_types`, `crm_industries`, `crm_timezones` (columns taken from the
+  production migration stubs; FKs omitted per the file's existing convention, plus the
+  `location` column the components write but the base stub predates).
+- **`tests/Pest.php`** — the shared `itGuardsAnActivityItem()` generator.
+- **Render-stub subclasses** (`class AuthzNoteItem extends NoteItem { render() {...} }`).
+  Overriding *only* `render()` leaves the real action methods, the real trait, and the
+  real `authorize()` calls intact, so the production authorization path is genuinely
+  exercised against the real policies.
+
+### Quality gates
+- `php -l` — clean on all 32 changed files.
+- `./vendor/bin/pint --dirty --test` → **passed**.
+- `composer test` → **835 passed / 1 failed / 2831 assertions**. Baseline at US-002 was
+  775 / 1 / 2709, so **+60 passing (exactly the 60 new tests), +122 assertions, zero net
+  new failures**. The single failure is the documented pre-existing flake
+  `Tests\Feature\Portal\PublicFeatureTest > admin reply renders with is_admin_reply true`
+  (grep of that file for authz/component references → **0 hits**).
+- `composer format-test` → **fails on the same 21 files as at US-002, none of them mine**.
+  Proven by set arithmetic: `comm -12 <(pint failure paths) <(git status paths)` → **empty**.
+  Deliberately not fixed — they belong to other series (invite-users, Api/V2, seeders), and
+  `composer format` would inject a large unrelated diff into a commit labelled `[US-003]`.
+
+### Files changed
+- **Modified** 22 Livewire components across `src/Livewire/{People,Organizations,Notes,Calls,Meetings,Lunches,Files}/`
+  plus `src/Livewire/RelatedPeople.php` and `src/Livewire/RelatedOrganizations.php`.
+- **Added** 8 test files under `tests/Feature/Livewire/Authorization/`.
+- **Modified** `tests/TestSchema.php`, `tests/Pest.php`.
+
+### Learnings for future iterations
+- **Livewire's base `Component` already uses `AuthorizesRequests`.** Confirmed at
+  `vendor/livewire/livewire/src/Component.php:29`, so `class_uses_recursive(AnyComponent::class)`
+  ALWAYS contains the trait and `$this->authorize()` is available even without the explicit
+  `use`. Two consequences: (1) the explicit trait line this codebase adds is
+  redundant-but-intentional — it documents the guard's presence and matches the US-002
+  convention, keep adding it; (2) **never assert "component X is unguarded" via the trait
+  list** — it will always be present. Assert against the source instead
+  (`expect(file_get_contents($reflection->getFileName()))->not->toContain('$this->authorize(')`),
+  which is what the RelatedDeals regression guard now does. My first attempt used
+  `class_uses_recursive` and failed for exactly this reason.
+- **`$this->model` on the shared `Related*` components is polymorphic, and that is the
+  point.** `remove()` deletes `Contact` *pivot* rows, never the Person/Organization, so
+  the parent record is the correct authorization subject — `authorize('update', $this->model)`
+  resolves per-instance through whichever policy the parent's class maps to. Gating on
+  `delete Person` would have been both wrong (nothing is deleted) and wrong-permissioned.
+- **A stacked-guard method needs a parent of a *different* entity type to test cleanly.**
+  With `RelatedPeople` mounted on a Person, `authorize('update', $this->model)` and
+  `authorize('create', Person::class)` both key off `crm people` and the two guards become
+  indistinguishable. Mounting on an Organization splits them across two permission
+  families and makes each deny case unambiguous. Worth reaching for whenever one method
+  carries two guards.
+- **`$prefix` in a double-quoted bash string expands to empty and silently produces false
+  "MISSING" results** when grepping PHP for variable-prefixed table names — the exact trap
+  US-002 recorded. It bit me again in the seeder-permission audit, where a
+  `str_contains($s, "\$roleArray = ['name' => 'Manager'…")` probe reported *every* domain
+  as having no permissions. Rewriting it as a line-range slice over the real role blocks
+  showed Manager and Employee hold the full CRUD set. When a permission audit reports
+  "NONE" across the board, suspect the probe before the data.
+- **Iterating on missing TestSchema tables is a fixture problem, never a guard problem.**
+  All render/mount failures here named a *table* (`crm_organization_types`, `crm_industries`,
+  `crm_timezones`), never a policy. The tell: `ViewException`/`QueryException` from
+  `mountCommon()` means fixtures; `assertForbidden()` failing means the guard. Fix the
+  schema, then mutation-test one guard to confirm the tests still constrain behaviour.
+- **`git status --porcelain | awk '{print $NF}'` is the safe way to build the changed-file
+  set for `comm -12` disjointness proofs** — it handles both `M ` and `A ` prefixes, and
+  it avoids `git stash`, which this repo's 11 pre-existing stash entries make actively
+  dangerous (a `pop` previously tried to apply a foreign entry over the tree).

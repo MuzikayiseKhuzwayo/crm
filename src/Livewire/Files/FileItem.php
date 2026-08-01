@@ -2,6 +2,7 @@
 
 namespace VentureDrake\LaravelCrm\Livewire\Files;
 
+use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
 use Illuminate\Support\Facades\Storage;
 use Livewire\Component;
 use Mary\Traits\Toast;
@@ -9,7 +10,7 @@ use VentureDrake\LaravelCrm\Models\File;
 
 class FileItem extends Component
 {
-    use Toast;
+    use AuthorizesRequests, Toast;
 
     public File $file;
 
@@ -28,6 +29,8 @@ class FileItem extends Component
 
     public function delete(): void
     {
+        $this->authorize('delete', $this->file);
+
         $this->file->delete();
 
         $this->success(ucfirst(trans('laravel-crm::lang.file_deleted')));

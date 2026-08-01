@@ -2,6 +2,7 @@
 
 namespace VentureDrake\LaravelCrm\Livewire\Meetings;
 
+use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
 use Livewire\Component;
 use Mary\Traits\Toast;
 use VentureDrake\LaravelCrm\Models\Meeting;
@@ -9,7 +10,7 @@ use VentureDrake\LaravelCrm\Models\Person;
 
 class MeetingItem extends Component
 {
-    use Toast;
+    use AuthorizesRequests, Toast;
 
     public Meeting $meeting;
 
@@ -75,6 +76,8 @@ class MeetingItem extends Component
 
     public function update(): void
     {
+        $this->authorize('update', $this->meeting);
+
         $this->validate([
             'name' => 'required|max:255',
             'start_at' => 'required',
@@ -112,6 +115,8 @@ class MeetingItem extends Component
 
     public function delete(): void
     {
+        $this->authorize('delete', $this->meeting);
+
         $this->meeting->delete();
 
         $this->success(ucfirst(trans('laravel-crm::lang.meeting_deleted')));

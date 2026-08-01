@@ -2,6 +2,7 @@
 
 namespace VentureDrake\LaravelCrm\Livewire\Files;
 
+use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
 use Livewire\Attributes\On;
 use Livewire\Component;
 use Livewire\WithFileUploads;
@@ -10,7 +11,7 @@ use VentureDrake\LaravelCrm\Models\File;
 
 class FileRelated extends Component
 {
-    use Toast;
+    use AuthorizesRequests, Toast;
     use WithFileUploads;
 
     public $model = null;
@@ -36,6 +37,8 @@ class FileRelated extends Component
 
     public function save(): void
     {
+        $this->authorize('create', File::class);
+
         $this->validate([
             'uploadedFile' => [
                 'required',

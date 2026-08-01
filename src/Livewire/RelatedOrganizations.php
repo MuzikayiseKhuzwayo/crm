@@ -2,6 +2,7 @@
 
 namespace VentureDrake\LaravelCrm\Livewire;
 
+use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
 use Livewire\Attributes\Computed;
 use Livewire\Attributes\On;
 use Livewire\Component;
@@ -11,6 +12,7 @@ use VentureDrake\LaravelCrm\Models\Organization;
 
 class RelatedOrganizations extends Component
 {
+    use AuthorizesRequests;
     use HasOrganizationSuggest;
     use Toast;
 
@@ -38,6 +40,8 @@ class RelatedOrganizations extends Component
 
     public function add()
     {
+        $this->authorize('update', $this->model);
+
         $data = $this->validate([
             'organization_name' => 'required',
         ]);
@@ -45,6 +49,8 @@ class RelatedOrganizations extends Component
         if ($this->organization_id) {
             $organization = Organization::find($this->organization_id);
         } else {
+            $this->authorize('create', Organization::class);
+
             $organization = Organization::create([
                 'name' => $data['organization_name'],
                 'user_owner_id' => auth()->user()->id,
@@ -74,6 +80,8 @@ class RelatedOrganizations extends Component
     public function remove($id)
     {
         if ($organization = Organization::find($id)) {
+            $this->authorize('update', $this->model);
+
             $this->model->contacts()
                 ->where([
                     'entityable_type' => $organization->getMorphClass(),

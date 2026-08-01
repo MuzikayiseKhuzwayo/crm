@@ -2,6 +2,7 @@
 
 namespace VentureDrake\LaravelCrm\Livewire\Lunches;
 
+use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
 use Livewire\Component;
 use Mary\Traits\Toast;
 use VentureDrake\LaravelCrm\Models\Lunch;
@@ -9,7 +10,7 @@ use VentureDrake\LaravelCrm\Models\Person;
 
 class LunchItem extends Component
 {
-    use Toast;
+    use AuthorizesRequests, Toast;
 
     public Lunch $lunch;
 
@@ -75,6 +76,8 @@ class LunchItem extends Component
 
     public function update(): void
     {
+        $this->authorize('update', $this->lunch);
+
         $this->validate([
             'name' => 'required|max:255',
             'start_at' => 'required',
@@ -112,6 +115,8 @@ class LunchItem extends Component
 
     public function delete(): void
     {
+        $this->authorize('delete', $this->lunch);
+
         $this->lunch->delete();
 
         $this->success(ucfirst(trans('laravel-crm::lang.lunch_deleted')));

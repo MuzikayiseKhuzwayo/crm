@@ -2,6 +2,7 @@
 
 namespace VentureDrake\LaravelCrm\Livewire\Calls;
 
+use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
 use Livewire\Component;
 use Mary\Traits\Toast;
 use VentureDrake\LaravelCrm\Models\Call;
@@ -9,7 +10,7 @@ use VentureDrake\LaravelCrm\Models\Person;
 
 class CallItem extends Component
 {
-    use Toast;
+    use AuthorizesRequests, Toast;
 
     public Call $call;
 
@@ -75,6 +76,8 @@ class CallItem extends Component
 
     public function update(): void
     {
+        $this->authorize('update', $this->call);
+
         $this->validate([
             'name' => 'required|max:255',
             'start_at' => 'required',
@@ -112,6 +115,8 @@ class CallItem extends Component
 
     public function delete(): void
     {
+        $this->authorize('delete', $this->call);
+
         $this->call->delete();
 
         $this->success(ucfirst(trans('laravel-crm::lang.call_deleted')));

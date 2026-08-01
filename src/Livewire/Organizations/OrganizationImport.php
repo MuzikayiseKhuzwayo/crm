@@ -3,6 +3,7 @@
 namespace VentureDrake\LaravelCrm\Livewire\Organizations;
 
 use Illuminate\Database\UniqueConstraintViolationException;
+use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
 use Livewire\Component;
 use Mary\Traits\Toast;
 use Ramsey\Uuid\Uuid;
@@ -10,7 +11,7 @@ use VentureDrake\LaravelCrm\Models\Organization;
 
 class OrganizationImport extends Component
 {
-    use Toast;
+    use AuthorizesRequests, Toast;
 
     public bool $hasPreview = false;
 
@@ -44,6 +45,8 @@ class OrganizationImport extends Component
 
     public function startImport(): void
     {
+        $this->authorize('create', Organization::class);
+
         $rows = session(self::SESSION_KEY, []);
 
         if (empty($rows)) {
@@ -63,6 +66,8 @@ class OrganizationImport extends Component
 
     public function processNextChunk(): void
     {
+        $this->authorize('create', Organization::class);
+
         if (! $this->processing) {
             return;
         }

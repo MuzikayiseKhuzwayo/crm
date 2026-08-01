@@ -2,13 +2,14 @@
 
 namespace VentureDrake\LaravelCrm\Livewire\Organizations;
 
+use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
 use Livewire\Component;
 use VentureDrake\LaravelCrm\Livewire\Organizations\Traits\HasOrganizationCommon;
 use VentureDrake\LaravelCrm\Models\Organization;
 
 class OrganizationEdit extends Component
 {
-    use HasOrganizationCommon;
+    use AuthorizesRequests, HasOrganizationCommon;
 
     public Organization $organization;
 
@@ -83,6 +84,8 @@ class OrganizationEdit extends Component
 
     public function save()
     {
+        $this->authorize('update', $this->organization);
+
         $this->validate();
 
         // Create a request object to pass to services

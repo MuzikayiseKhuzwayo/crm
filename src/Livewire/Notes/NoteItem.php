@@ -2,13 +2,14 @@
 
 namespace VentureDrake\LaravelCrm\Livewire\Notes;
 
+use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
 use Livewire\Component;
 use Mary\Traits\Toast;
 use VentureDrake\LaravelCrm\Models\Note;
 
 class NoteItem extends Component
 {
-    use Toast;
+    use AuthorizesRequests, Toast;
 
     public Note $note;
 
@@ -49,6 +50,8 @@ class NoteItem extends Component
 
     public function update(): void
     {
+        $this->authorize('update', $this->note);
+
         $this->validate([
             'content' => 'required',
         ]);
@@ -70,6 +73,8 @@ class NoteItem extends Component
 
     public function pin(): void
     {
+        $this->authorize('update', $this->note);
+
         $this->note->update(['pinned' => 1]);
 
         $this->success(
@@ -81,6 +86,8 @@ class NoteItem extends Component
 
     public function unpin(): void
     {
+        $this->authorize('update', $this->note);
+
         $this->note->update(['pinned' => 0]);
 
         $this->success(
@@ -92,6 +99,8 @@ class NoteItem extends Component
 
     public function delete(): void
     {
+        $this->authorize('delete', $this->note);
+
         $this->note->delete();
 
         $this->success(ucfirst(trans('laravel-crm::lang.note_deleted')));

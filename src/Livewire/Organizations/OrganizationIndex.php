@@ -4,6 +4,7 @@ namespace VentureDrake\LaravelCrm\Livewire\Organizations;
 
 use App\Models\User;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
 use Illuminate\Pagination\LengthAwarePaginator;
 use Illuminate\Support\Collection;
 use Livewire\Component;
@@ -17,7 +18,7 @@ use VentureDrake\LaravelCrm\Traits\ResetsPaginationWhenPropsChanges;
 
 class OrganizationIndex extends Component
 {
-    use ClearsProperties, ResetsPaginationWhenPropsChanges, SearchesEncryptableContacts, Toast, WithPagination;
+    use AuthorizesRequests, ClearsProperties, ResetsPaginationWhenPropsChanges, SearchesEncryptableContacts, Toast, WithPagination;
 
     public $layout = 'index';
 
@@ -84,6 +85,8 @@ class OrganizationIndex extends Component
     public function delete($id)
     {
         if ($organization = Organization::find($id)) {
+            $this->authorize('delete', $organization);
+
             $organization->delete();
 
             $this->success(ucfirst(trans('laravel-crm::lang.organization_deleted')));

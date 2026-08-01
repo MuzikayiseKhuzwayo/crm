@@ -2,13 +2,14 @@
 
 namespace VentureDrake\LaravelCrm\Livewire\People;
 
+use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
 use Livewire\Component;
 use VentureDrake\LaravelCrm\Livewire\People\Traits\HasPersonCommon;
 use VentureDrake\LaravelCrm\Models\Person;
 
 class PersonEdit extends Component
 {
-    use HasPersonCommon;
+    use AuthorizesRequests, HasPersonCommon;
 
     public Person $person;
 
@@ -81,6 +82,8 @@ class PersonEdit extends Component
 
     public function save()
     {
+        $this->authorize('update', $this->person);
+
         $this->validate();
 
         // Create a request object to pass to services

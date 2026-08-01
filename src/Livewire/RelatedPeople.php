@@ -2,6 +2,7 @@
 
 namespace VentureDrake\LaravelCrm\Livewire;
 
+use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
 use Livewire\Attributes\Computed;
 use Livewire\Attributes\On;
 use Livewire\Component;
@@ -11,6 +12,7 @@ use VentureDrake\LaravelCrm\Models\Person;
 
 class RelatedPeople extends Component
 {
+    use AuthorizesRequests;
     use HasPersonSuggest;
     use Toast;
 
@@ -38,6 +40,8 @@ class RelatedPeople extends Component
 
     public function add()
     {
+        $this->authorize('update', $this->model);
+
         $data = $this->validate([
             'person_name' => 'required',
         ]);
@@ -45,6 +49,8 @@ class RelatedPeople extends Component
         if ($this->person_id) {
             $person = Person::find($this->person_id);
         } else {
+            $this->authorize('create', Person::class);
+
             $name = \VentureDrake\LaravelCrm\Http\Helpers\PersonName\firstLastFromName($data['person_name']);
 
             $person = Person::create([
@@ -77,6 +83,8 @@ class RelatedPeople extends Component
     public function remove($id)
     {
         if ($person = Person::find($id)) {
+            $this->authorize('update', $this->model);
+
             $this->model->contacts()
                 ->where([
                     'entityable_type' => $person->getMorphClass(),

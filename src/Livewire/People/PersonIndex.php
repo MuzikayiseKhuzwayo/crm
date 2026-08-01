@@ -4,6 +4,7 @@ namespace VentureDrake\LaravelCrm\Livewire\People;
 
 use App\Models\User;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
 use Illuminate\Pagination\LengthAwarePaginator;
 use Illuminate\Support\Collection;
 use Livewire\Component;
@@ -17,7 +18,7 @@ use VentureDrake\LaravelCrm\Traits\ResetsPaginationWhenPropsChanges;
 
 class PersonIndex extends Component
 {
-    use ClearsProperties, ResetsPaginationWhenPropsChanges, SearchesEncryptableContacts, Toast, WithPagination;
+    use AuthorizesRequests, ClearsProperties, ResetsPaginationWhenPropsChanges, SearchesEncryptableContacts, Toast, WithPagination;
 
     public $layout = 'index';
 
@@ -95,6 +96,8 @@ class PersonIndex extends Component
     public function delete($id)
     {
         if ($person = Person::find($id)) {
+            $this->authorize('delete', $person);
+
             $person->delete();
 
             $this->success(ucfirst(trans('laravel-crm::lang.person_deleted')));

@@ -3,6 +3,7 @@
 namespace VentureDrake\LaravelCrm\Livewire\People;
 
 use Illuminate\Database\UniqueConstraintViolationException;
+use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
 use Livewire\Component;
 use Mary\Traits\Toast;
 use Ramsey\Uuid\Uuid;
@@ -11,7 +12,7 @@ use VentureDrake\LaravelCrm\Models\Person;
 
 class PersonImport extends Component
 {
-    use Toast;
+    use AuthorizesRequests, Toast;
 
     public bool $hasPreview = false;
 
@@ -45,6 +46,8 @@ class PersonImport extends Component
 
     public function startImport(): void
     {
+        $this->authorize('create', Person::class);
+
         $rows = session(self::SESSION_KEY, []);
 
         if (empty($rows)) {
@@ -64,6 +67,8 @@ class PersonImport extends Component
 
     public function processNextChunk(): void
     {
+        $this->authorize('create', Person::class);
+
         if (! $this->processing) {
             return;
         }

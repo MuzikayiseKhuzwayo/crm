@@ -2,6 +2,7 @@
 
 namespace VentureDrake\LaravelCrm\Livewire\Notes;
 
+use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
 use Livewire\Attributes\On;
 use Livewire\Component;
 use Mary\Traits\Toast;
@@ -10,7 +11,7 @@ use VentureDrake\LaravelCrm\Models\Note;
 
 class NoteRelated extends Component
 {
-    use Toast;
+    use AuthorizesRequests, Toast;
 
     public $model = null;
 
@@ -28,6 +29,8 @@ class NoteRelated extends Component
 
     public function save()
     {
+        $this->authorize('create', Note::class);
+
         $data = $this->validate([
             'content' => 'required',
         ]);
