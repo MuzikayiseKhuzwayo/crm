@@ -95,9 +95,12 @@
                 <td>
                     {{ $invoiceLine->product->name ?? null }}
                     @if($invoiceLine->comments)
-                        <br /><br />
-                        <strong>{{ ucfirst(__('laravel-crm::lang.comments')) }}: </strong> <br />
-                        {{ $invoiceLine->comments }}
+                        {{-- Block wrapper with a small top margin rather than a
+                             second <br />, which added a whole empty line. --}}
+                        <div style="margin-top: 4px">
+                            <strong>{{ ucfirst(__('laravel-crm::lang.comments')) }}: </strong> <br />
+                            {{ $invoiceLine->comments }}
+                        </div>
                     @endif
                 </td>
                 <td>{{ money($invoiceLine->price ?? null, $invoiceLine->currency) }}</td>
