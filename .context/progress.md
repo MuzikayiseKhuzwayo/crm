@@ -2,6 +2,19 @@
 
 ## Codebase Patterns
 
+- **A coverage-guard test must PIN whatever its detector cannot see.** Any
+  "every X must have Y" regression test that first *scopes* which methods it checks
+  (here: "does the body contain a persistence signal?") has a silent hole — for a method
+  the scope filter misses, deleting Y makes it drop out of scope entirely and the suite
+  still passes. In `ActionAuthorizationCoverageTest` seven guarded methods wrote only
+  through an injected `$service->`, a job `::dispatch`, or `SettingService->set()`, so
+  removing their `authorize()` was undetectable. Fix in two parts: widen the signal list
+  where a pattern is unambiguous, then add an explicit pin const for the remainder and
+  assert **both directions** — every pinned entry is still guarded, *and* the computed
+  "guarded but out of scope" set equals the pin exactly, so a future guard on an
+  out-of-scope method must be pinned rather than going quietly uncovered. Only a mutation
+  test finds this class of hole; the suite passes either way.
+
 - **Livewire's base `Component` already uses `AuthorizesRequests`** (see
   `vendor/livewire/livewire/src/Component.php:29`). `$this->authorize()` therefore works
   on any Livewire component even without the explicit `use`, and
@@ -34048,3 +34061,106 @@ separate story.
   itself was correct; the *harness* was wrong (stub couldn't answer permission strings). Before
   weakening a gate to make a test pass, check whether the test's user can actually answer the
   question the gate asks.
+
+## US-008: Add the ActionAuthorizationCoverageTest regression guard
+- Added `tests/Feature/Livewire/ActionAuthorizationCoverageTest.php` — a static-analysis
+  regression guard that reflects over all of `src/Livewire/` (178 concrete classes + 28
+  traits, 0 abstract classes so no entry point is skipped), lists every public
+  non-static, non-magic method, and fails naming the offending `Class::method` when a
+  mutating action has no `$this->authorize()` call and no documented exemption.
+  **460 methods enumerated, 196 mutating, 186 guarded. 7 tests / 15 assertions.**
+- **Exclusions** per the AC: `render`/`mount`/`mountCommon`/`boot*`/`hydrate*`/
+  `dehydrate*`/`updated*`/`updating*`/`get*Property`, plus anything inherited from
+  `Livewire\Component`, `WithPagination` or `Toast`. The framework exclusion is a
+  `str_starts_with($method->getFileName(), $livewireDir)` check rather than a class-name
+  list, so it covers every vendor trait automatically.
+- **Methods are keyed by the file that physically declares them**, not by
+  `getDeclaringClass()`. PHP treats `use SomeTrait` as compile-time copy-paste so
+  `getDeclaringClass()` returns the *using* class; `getFileName()` is the only reliable
+  discriminator. It also collapses a trait method shared by five components into one
+  entry, which is what makes `SAFE_METHODS` entries like `HasPersonCommon::addPhone`
+  resolvable at all.
+- **`SAFE_METHODS`** carries every AC-named in-memory exemption (`ModelPhones`/
+  `ModelEmails`/`ModelAddresses`/`ModelProducts::add|remove|delete`, `RelatedDeals::add|remove`,
+  `QuoteSend::toggle`, `SettingEdit::addPhone|deletePhone`, the four `Has*Common` phone/
+  email/address/product draft helpers, `HasCustomFieldCommon::removeOption`) plus
+  `ProductCreate::createProduct`, which only delegates to the already-guarded `save(false)`.
+  `SAFE_NAMESPACES` holds `Auth/`, `Profile/`, `Portal/`, each with a comment on why the
+  category is excluded (pre-authentication; actor-is-subject; signed-URL/portal guard).
+  A companion test re-asserts every `SAFE_METHODS` entry still resolves **and still
+  performs no writes**, so an entry can never silently start covering a real mutation.
+- **Scoping decision (deviation from the AC's literal wording, stated plainly).** The AC
+  says to require `authorize()` on *every* remaining method. Measured against the tree
+  that is 460 methods, ~264 of which are the read-only computed data providers this
+  codebase calls from `render()` (`DealIndex::deals()`, `ChatIndex::headers()`, …). Listing
+  them all in `SAFE_METHODS` would make the allow-list longer than the thing it guards and
+  stop it meaning anything. The test therefore scopes to methods whose body matches a
+  `PERSISTENCE_SIGNALS` entry — and a dedicated test audits that list for false negatives
+  by re-scanning every "non-mutating" method for write-adjacent calls (`DB::`, `Storage::`,
+  `->touch(`, …) with three documented read-only exceptions.
+- **Closed a real hole in the AC's "removing a guard must fail" contract.** Seven guarded
+  methods matched no persistence signal, so deleting *their* `authorize()` would have
+  passed silently. Widened `PERSISTENCE_SIGNALS` with `'$service->'` (all 12 call sites in
+  `src/Livewire` are writes) and `'::dispatch'` (job dispatch; does not catch Livewire's own
+  `$this->dispatch()` browser events), which reclassified three of them, then pinned the
+  remaining four in a new `GUARDED_WITHOUT_PERSISTENCE_SIGNAL` const with a test asserting
+  both directions — see the new entry at the top of Codebase Patterns.
+- `KNOWN_UNGUARDED` records the 13 pre-existing gaps the US-002..US-007 backfill never
+  reached (Monitors, Teams, EmailCampaign create/edit, the User create/edit/show/invite
+  paths — the last already flagged in US-005). A ratchet test fails if an entry becomes
+  guarded or disappears, so the list can only shrink.
+- A further test asserts no file in `Feature/Livewire/Authorization/` (23 files) uses
+  `Gate::before`, comparing **executable tokens only** via `token_get_all()` so it cannot
+  match its own docblock or failure message.
+
+### Verification
+- **Mutation-tested all four guard mechanisms** with a content-backup harness that reports
+  a non-zero count of mutations examined: removing a guard from a *mutating* method
+  (`DealIndex::delete`), removing one from a *pinned* unsignalled method
+  (`TemplateSettings::save`), *adding* a guard to a `KNOWN_UNGUARDED` entry
+  (`TeamShow::delete`), and introducing `Gate::before(fn () => true)` into a sibling authz
+  suite. **All four fail the suite and name the offending `Class::method`**; all four
+  restored byte-identically (`git diff` on `src/` and `Authorization/` empty afterwards).
+- `./vendor/bin/pint --dirty --test` → **passed**.
+- `composer test` → **947 passed / 1 failed / 3221 assertions** (US-007 baseline
+  940/1/3206): **+7 passing = exactly the 7 new tests, +15 assertions, zero net new
+  failures.** The 1 failure is the standing flake `PublicFeatureTest > admin reply renders
+  with is_admin_reply true` — **0** scope-keyword hits in that file and not in the changed set.
+- `composer format-test` → **still fails on the same 21 pre-existing files, none of them
+  mine.** Proven by set arithmetic on parsed pint JSON: 21 failing ∩ 1 changed = **0**, both
+  sets non-empty. Deliberately not fixed — they belong to other series (invite-users,
+  Api/V2, seeders) and `composer format` would inject a large unrelated diff into a commit
+  labelled `[US-008]`.
+
+### Files changed
+- **Added** `tests/Feature/Livewire/ActionAuthorizationCoverageTest.php` (7 tests / 15
+  assertions).
+
+### Learnings for future iterations
+- **A scoped coverage guard has a blind spot exactly where its scope filter is wrong, and
+  the blind spot is invisible to every test in the file.** Promoted to Codebase Patterns.
+  The tell that found it: enumerate `guarded && ! inScope` and expect the set to be empty.
+  If it is not, each member is a guard nobody can miss removing.
+- **`$service->` is a reliable write signal in this codebase.** Several components inject
+  the service as an action-method argument (`public function cancel(EmailCampaignService
+  $service)`), so the existing `Service::` / `Service->` signals miss them — the variable is
+  `$service`, not the class name. All 12 `$service->` call sites in `src/Livewire` are
+  `create`/`update`/`schedule`/`cancel`. Worth checking with
+  `grep -rhno '\$service->[a-zA-Z]*' src/Livewire | sort | uniq -c` before assuming a
+  service-delegating method is read-only.
+- **`'::dispatch'` distinguishes job dispatch from Livewire events for free.** Jobs are
+  dispatched statically (`RunMonitorCheck::dispatchSync(...)`, `SendImportPasswordReset::dispatch(...)`)
+  while Livewire browser events are `$this->dispatch(...)`. Matching on `::dispatch` catches
+  every side-effecting job without a single false positive on the event API.
+- **Pest only loads the test files you name on the command line.** A throwaway audit test
+  calling a helper defined in another test file fails with `1 failed (0 assertions)` and no
+  useful message. Pass both paths, or the helper is undefined.
+- **A guarded method is not necessarily a mutating one, and that is fine.** The three
+  `*Import::startImport` methods validate, seed a chunk cursor and dispatch a browser event;
+  the rows are written by the separately-guarded `processNextChunk()`. Guarding the entry
+  point too is correct — every public Livewire method is independently invokable — it just
+  means the coverage test needs the pin rather than a signal.
+- **Mutation-harness anchors fail loudly when they should.** Two of my four anchors did not
+  match (`substr_count(...) !== 1`) and the harness reported `ANCHOR not unique (0)` instead
+  of quietly skipping — which is the whole reason to assert the anchor count before writing.
+  A harness that silently examines nothing prints a triumphant pass.
