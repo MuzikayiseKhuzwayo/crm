@@ -2,6 +2,7 @@
 
 namespace VentureDrake\LaravelCrm\Livewire\Quotes;
 
+use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
 use Livewire\Component;
 use VentureDrake\LaravelCrm\Livewire\Quotes\Traits\HasQuoteCommon;
 use VentureDrake\LaravelCrm\Livewire\Traits\HasOrganizationSuggest;
@@ -12,7 +13,7 @@ use VentureDrake\LaravelCrm\Models\Quote;
 
 class QuoteEdit extends Component
 {
-    use HasOrganizationSuggest;
+    use AuthorizesRequests, HasOrganizationSuggest;
     use HasPersonSuggest;
     use HasQuoteCommon;
 
@@ -51,6 +52,8 @@ class QuoteEdit extends Component
 
     public function save()
     {
+        $this->authorize('update', $this->quote);
+
         $this->validate();
 
         // Create a request object to pass to services

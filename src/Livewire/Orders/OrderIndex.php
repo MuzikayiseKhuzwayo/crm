@@ -4,6 +4,7 @@ namespace VentureDrake\LaravelCrm\Livewire\Orders;
 
 use App\Models\User;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
 use Illuminate\Pagination\LengthAwarePaginator;
 use Illuminate\Support\Collection;
 use Livewire\Component;
@@ -18,7 +19,7 @@ use VentureDrake\LaravelCrm\Traits\ResetsPaginationWhenPropsChanges;
 
 class OrderIndex extends Component
 {
-    use ClearsProperties, ResetsPaginationWhenPropsChanges, SearchesEncryptableContacts, Toast, WithPagination;
+    use AuthorizesRequests, ClearsProperties, ResetsPaginationWhenPropsChanges, SearchesEncryptableContacts, Toast, WithPagination;
 
     public $layout = 'index';
 
@@ -127,6 +128,8 @@ class OrderIndex extends Component
     public function delete($id)
     {
         if ($order = Order::find($id)) {
+            $this->authorize('delete', $order);
+
             $order->delete();
 
             $this->success(ucfirst(trans('laravel-crm::lang.order_deleted')));

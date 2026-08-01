@@ -5,6 +5,7 @@ namespace VentureDrake\LaravelCrm\Livewire\Deals;
 use App\Models\User;
 use Carbon\Carbon;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
 use Illuminate\Support\Collection;
 use Mary\Traits\Toast;
 use VentureDrake\LaravelCrm\Livewire\KanbanBoard;
@@ -14,7 +15,7 @@ use VentureDrake\LaravelCrm\Models\Pipeline;
 
 class DealBoard extends KanbanBoard
 {
-    use Toast;
+    use AuthorizesRequests, Toast;
 
     public $layout = 'board';
 
@@ -60,6 +61,10 @@ class DealBoard extends KanbanBoard
 
     public function onStageSorted($orderedIds)
     {
+        if ($record = Deal::whereIn('id', $orderedIds)->first()) {
+            $this->authorize('update', $record);
+        }
+
         foreach ($orderedIds as $orderNumber => $dealId) {
             Deal::find($dealId)->update([
                 'pipeline_stage_order' => $orderNumber + 1,
@@ -69,7 +74,13 @@ class DealBoard extends KanbanBoard
 
     public function onStageChanged($recordId, $stageId, $fromOrderedIds, $toOrderedIds)
     {
-        Deal::find($recordId)->update([
+        if (! $record = Deal::find($recordId)) {
+            return;
+        }
+
+        $this->authorize('update', $record);
+
+        $record->update([
             'pipeline_stage_id' => $stageId,
         ]);
 
@@ -132,6 +143,8 @@ class DealBoard extends KanbanBoard
     public function won($id)
     {
         if ($deal = Deal::find($id)) {
+            $this->authorize('update', $deal);
+
             $deal->update([
                 'closed_status' => 'won',
                 'closed_at' => Carbon::now(),
@@ -145,6 +158,8 @@ class DealBoard extends KanbanBoard
     public function lost($id)
     {
         if ($deal = Deal::find($id)) {
+            $this->authorize('update', $deal);
+
             $deal->update([
                 'closed_status' => 'lost',
                 'closed_at' => Carbon::now(),
@@ -158,6 +173,8 @@ class DealBoard extends KanbanBoard
     public function reopen($id)
     {
         if ($deal = Deal::find($id)) {
+            $this->authorize('update', $deal);
+
             $deal->update([
                 'closed_status' => null,
                 'closed_at' => null,

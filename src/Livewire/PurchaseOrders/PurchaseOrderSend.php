@@ -3,6 +3,7 @@
 namespace VentureDrake\LaravelCrm\Livewire\PurchaseOrders;
 
 use Barryvdh\DomPDF\Facade\Pdf;
+use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
 use Illuminate\Support\Facades\File;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\URL;
@@ -14,7 +15,7 @@ use VentureDrake\LaravelCrm\Support\PdfTemplateRegistry;
 
 class PurchaseOrderSend extends Component
 {
-    use Toast;
+    use AuthorizesRequests, Toast;
 
     public bool $showSendPurchaseOrder = false;
 
@@ -56,6 +57,8 @@ class PurchaseOrderSend extends Component
 
     public function send()
     {
+        $this->authorize('update', $this->purchaseOrder);
+
         $this->validate();
 
         $this->generateUrl();

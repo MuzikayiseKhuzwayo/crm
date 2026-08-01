@@ -2,13 +2,14 @@
 
 namespace VentureDrake\LaravelCrm\Livewire\Products;
 
+use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
 use Livewire\Component;
 use VentureDrake\LaravelCrm\Livewire\Products\Traits\HasProductCommon;
 use VentureDrake\LaravelCrm\Models\Product;
 
 class ProductEdit extends Component
 {
-    use HasProductCommon;
+    use AuthorizesRequests, HasProductCommon;
 
     public Product $product;
 
@@ -37,6 +38,8 @@ class ProductEdit extends Component
 
     public function save()
     {
+        $this->authorize('update', $this->product);
+
         $this->validate();
 
         // Create a request object to pass to services

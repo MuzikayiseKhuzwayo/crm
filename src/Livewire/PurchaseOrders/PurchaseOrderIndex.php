@@ -4,6 +4,7 @@ namespace VentureDrake\LaravelCrm\Livewire\PurchaseOrders;
 
 use App\Models\User;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
 use Illuminate\Pagination\LengthAwarePaginator;
 use Illuminate\Support\Collection;
 use Livewire\Component;
@@ -18,7 +19,7 @@ use VentureDrake\LaravelCrm\Traits\ResetsPaginationWhenPropsChanges;
 
 class PurchaseOrderIndex extends Component
 {
-    use ClearsProperties, ResetsPaginationWhenPropsChanges, SearchesEncryptableContacts, Toast, WithPagination;
+    use AuthorizesRequests, ClearsProperties, ResetsPaginationWhenPropsChanges, SearchesEncryptableContacts, Toast, WithPagination;
 
     public $layout = 'index';
 
@@ -125,6 +126,8 @@ class PurchaseOrderIndex extends Component
     public function delete($id)
     {
         if ($purchaseOrder = PurchaseOrder::find($id)) {
+            $this->authorize('delete', $purchaseOrder);
+
             $purchaseOrder->delete();
 
             $this->success(ucfirst(trans('laravel-crm::lang.purchase_order_deleted')));

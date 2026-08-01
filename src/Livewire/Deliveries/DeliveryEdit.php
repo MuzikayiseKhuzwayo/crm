@@ -2,6 +2,7 @@
 
 namespace VentureDrake\LaravelCrm\Livewire\Deliveries;
 
+use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
 use Livewire\Component;
 use VentureDrake\LaravelCrm\Livewire\Deliveries\Traits\HasDeliveryCommon;
 use VentureDrake\LaravelCrm\Models\AddressType;
@@ -10,7 +11,7 @@ use VentureDrake\LaravelCrm\Models\Order;
 
 class DeliveryEdit extends Component
 {
-    use HasDeliveryCommon;
+    use AuthorizesRequests, HasDeliveryCommon;
 
     public ?Order $order = null;
 
@@ -56,6 +57,8 @@ class DeliveryEdit extends Component
 
     public function save()
     {
+        $this->authorize('update', $this->delivery);
+
         // $this->validate();
 
         // Create a request object to pass to services

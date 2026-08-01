@@ -26,6 +26,12 @@ abstract class TestCase extends OrchestraTestCase
     {
         parent::setUp();
 
+        // Several CRM Livewire components import App\Models\User directly. Testbench
+        // ships no such class, so alias the stub before anything tries to render them.
+        if (! class_exists('App\\Models\\User')) {
+            class_alias(User::class, 'App\\Models\\User');
+        }
+
         SettingsComposer::$cachedParameters = null;
         Cache::flush();
 

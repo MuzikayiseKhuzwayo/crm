@@ -2,6 +2,7 @@
 
 namespace VentureDrake\LaravelCrm\Livewire\PurchaseOrders;
 
+use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
 use Livewire\Component;
 use Mary\Traits\Toast;
 use VentureDrake\LaravelCrm\Models\Pipeline;
@@ -9,7 +10,7 @@ use VentureDrake\LaravelCrm\Models\PurchaseOrder;
 
 class PurchaseOrderShow extends Component
 {
-    use Toast;
+    use AuthorizesRequests, Toast;
 
     public PurchaseOrder $purchaseOrder;
 
@@ -50,6 +51,8 @@ class PurchaseOrderShow extends Component
     public function delete($id)
     {
         if ($purchaseOrder = PurchaseOrder::find($id)) {
+            $this->authorize('delete', $purchaseOrder);
+
             $purchaseOrder->delete();
 
             $this->success(ucfirst(trans('laravel-crm::lang.purchase_order_deleted')), redirectTo: route('laravel-crm.purchase-orders.index'));

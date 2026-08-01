@@ -4,6 +4,7 @@ namespace VentureDrake\LaravelCrm\Livewire\Leads;
 
 use App\Models\User;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
 use Illuminate\Support\Collection;
 use Mary\Traits\Toast;
 use VentureDrake\LaravelCrm\Livewire\KanbanBoard;
@@ -13,7 +14,7 @@ use VentureDrake\LaravelCrm\Models\Pipeline;
 
 class LeadBoard extends KanbanBoard
 {
-    use Toast;
+    use AuthorizesRequests, Toast;
 
     public $layout = 'board';
 
@@ -57,6 +58,10 @@ class LeadBoard extends KanbanBoard
 
     public function onStageSorted($orderedIds)
     {
+        if ($record = Lead::whereIn('id', $orderedIds)->first()) {
+            $this->authorize('update', $record);
+        }
+
         foreach ($orderedIds as $orderNumber => $leadId) {
             Lead::find($leadId)->update([
                 'pipeline_stage_order' => $orderNumber + 1,
@@ -66,7 +71,13 @@ class LeadBoard extends KanbanBoard
 
     public function onStageChanged($recordId, $stageId, $fromOrderedIds, $toOrderedIds)
     {
-        Lead::find($recordId)->update([
+        if (! $record = Lead::find($recordId)) {
+            return;
+        }
+
+        $this->authorize('update', $record);
+
+        $record->update([
             'pipeline_stage_id' => $stageId,
         ]);
 
@@ -130,6 +141,8 @@ class LeadBoard extends KanbanBoard
     public function delete($id)
     {
         if ($lead = Lead::find($id)) {
+            $this->authorize('delete', $lead);
+
             $lead->delete();
 
             $this->success(ucfirst(trans('laravel-crm::lang.lead_deleted')));

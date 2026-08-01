@@ -3,6 +3,7 @@
 namespace VentureDrake\LaravelCrm\Livewire\Quotes;
 
 use Carbon\Carbon;
+use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
 use Livewire\Component;
 use Mary\Traits\Toast;
 use VentureDrake\LaravelCrm\Models\Pipeline;
@@ -10,7 +11,7 @@ use VentureDrake\LaravelCrm\Models\Quote;
 
 class QuoteShow extends Component
 {
-    use Toast;
+    use AuthorizesRequests, Toast;
 
     public Quote $quote;
 
@@ -48,6 +49,8 @@ class QuoteShow extends Component
     public function delete($id)
     {
         if ($quote = Quote::find($id)) {
+            $this->authorize('delete', $quote);
+
             $quote->delete();
 
             $this->success(ucfirst(trans('laravel-crm::lang.quote_deleted')), redirectTo: route('laravel-crm.quotes.index'));
@@ -57,6 +60,8 @@ class QuoteShow extends Component
     public function accept($id): void
     {
         if ($quote = Quote::find($id)) {
+            $this->authorize('update', $quote);
+
             $quote->update([
                 'accepted_at' => Carbon::now(),
                 'pipeline_stage_id' => $this->pipeline->pipelineStages()->where('name', 'Accepted')->first()->id ?? null,
@@ -70,6 +75,8 @@ class QuoteShow extends Component
     public function reject($id): void
     {
         if ($quote = Quote::find($id)) {
+            $this->authorize('update', $quote);
+
             $quote->update([
                 'rejected_at' => Carbon::now(),
                 'pipeline_stage_id' => $this->pipeline->pipelineStages()->where('name', 'Rejected')->first()->id ?? null,
@@ -83,6 +90,8 @@ class QuoteShow extends Component
     public function unaccept($id): void
     {
         if ($quote = Quote::find($id)) {
+            $this->authorize('update', $quote);
+
             $quote->update([
                 'accepted_at' => null,
                 'pipeline_stage_id' => $this->pipeline->pipelineStages()->where('name', 'Draft')->first()->id ?? null,
@@ -96,6 +105,8 @@ class QuoteShow extends Component
     public function unreject($id): void
     {
         if ($quote = Quote::find($id)) {
+            $this->authorize('update', $quote);
+
             $quote->update([
                 'rejected_at' => null,
                 'pipeline_stage_id' => $this->pipeline->pipelineStages()->where('name', 'Draft')->first()->id ?? null,

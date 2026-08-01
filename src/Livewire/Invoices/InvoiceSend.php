@@ -3,6 +3,7 @@
 namespace VentureDrake\LaravelCrm\Livewire\Invoices;
 
 use Barryvdh\DomPDF\Facade\Pdf;
+use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
 use Illuminate\Support\Facades\File;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\URL;
@@ -14,7 +15,7 @@ use VentureDrake\LaravelCrm\Support\PdfTemplateRegistry;
 
 class InvoiceSend extends Component
 {
-    use Toast;
+    use AuthorizesRequests, Toast;
 
     public bool $showSendInvoice = false;
 
@@ -56,6 +57,8 @@ class InvoiceSend extends Component
 
     public function send()
     {
+        $this->authorize('update', $this->invoice);
+
         $this->validate();
 
         $this->generateUrl();

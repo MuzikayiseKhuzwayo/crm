@@ -2,13 +2,14 @@
 
 namespace VentureDrake\LaravelCrm\Livewire\Tasks;
 
+use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
 use Livewire\Component;
 use VentureDrake\LaravelCrm\Livewire\Tasks\Traits\HasTaskCommon;
 use VentureDrake\LaravelCrm\Models\Task;
 
 class TaskEdit extends Component
 {
-    use HasTaskCommon;
+    use AuthorizesRequests, HasTaskCommon;
 
     public ?Task $task = null;
 
@@ -26,6 +27,8 @@ class TaskEdit extends Component
 
     public function save()
     {
+        $this->authorize('update', $this->task);
+
         $this->validate();
 
         $request = \VentureDrake\LaravelCrm\Http\Helpers\PublicProperties\asRequest($this);

@@ -3,6 +3,7 @@
 namespace VentureDrake\LaravelCrm\Livewire\Invoices;
 
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
 use Illuminate\Support\Collection;
 use Livewire\Attributes\Computed;
 use Livewire\Component;
@@ -12,7 +13,7 @@ use VentureDrake\LaravelCrm\Models\Pipeline;
 
 class InvoiceRelatedIndex extends Component
 {
-    use Toast;
+    use AuthorizesRequests, Toast;
 
     public Model $model;
 
@@ -53,6 +54,8 @@ class InvoiceRelatedIndex extends Component
     public function delete($id): void
     {
         if ($invoice = Invoice::find($id)) {
+            $this->authorize('delete', $invoice);
+
             $invoice->delete();
 
             $this->success(ucfirst(trans('laravel-crm::lang.invoice_deleted')));

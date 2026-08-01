@@ -2,13 +2,14 @@
 
 namespace VentureDrake\LaravelCrm\Livewire\Tasks;
 
+use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
 use Livewire\Component;
 use Mary\Traits\Toast;
 use VentureDrake\LaravelCrm\Models\Task;
 
 class TaskItem extends Component
 {
-    use Toast;
+    use AuthorizesRequests, Toast;
 
     public Task $task;
 
@@ -65,6 +66,8 @@ class TaskItem extends Component
 
     public function update(): void
     {
+        $this->authorize('update', $this->task);
+
         $this->validate([
             'name' => 'required|max:255',
         ]);
@@ -87,6 +90,8 @@ class TaskItem extends Component
 
     public function complete(): void
     {
+        $this->authorize('update', $this->task);
+
         $this->task->update(['completed_at' => now()]);
         $this->completed_at = $this->task->completed_at->toDateTimeString();
 
@@ -98,6 +103,8 @@ class TaskItem extends Component
 
     public function delete(): void
     {
+        $this->authorize('delete', $this->task);
+
         $this->task->delete();
 
         $this->success(ucfirst(trans('laravel-crm::lang.task_deleted')));

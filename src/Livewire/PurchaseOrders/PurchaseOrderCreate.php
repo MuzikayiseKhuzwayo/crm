@@ -2,6 +2,7 @@
 
 namespace VentureDrake\LaravelCrm\Livewire\PurchaseOrders;
 
+use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
 use Livewire\Component;
 use VentureDrake\LaravelCrm\Livewire\PurchaseOrders\Traits\HasPurchaseOrderCommon;
 use VentureDrake\LaravelCrm\Livewire\Traits\HasOrganizationSuggest;
@@ -9,12 +10,13 @@ use VentureDrake\LaravelCrm\Livewire\Traits\HasPersonSuggest;
 use VentureDrake\LaravelCrm\Models\Order;
 use VentureDrake\LaravelCrm\Models\Organization;
 use VentureDrake\LaravelCrm\Models\Person;
+use VentureDrake\LaravelCrm\Models\PurchaseOrder;
 use VentureDrake\LaravelCrm\Models\Quote;
 use VentureDrake\LaravelCrm\Models\Setting;
 
 class PurchaseOrderCreate extends Component
 {
-    use HasOrganizationSuggest;
+    use AuthorizesRequests, HasOrganizationSuggest;
     use HasPersonSuggest;
     use HasPurchaseOrderCommon;
 
@@ -71,6 +73,8 @@ class PurchaseOrderCreate extends Component
 
     public function save()
     {
+        $this->authorize('create', PurchaseOrder::class);
+
         $this->validate();
 
         // Create a request object to pass to services

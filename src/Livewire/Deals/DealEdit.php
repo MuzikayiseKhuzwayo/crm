@@ -2,6 +2,7 @@
 
 namespace VentureDrake\LaravelCrm\Livewire\Deals;
 
+use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
 use Livewire\Component;
 use VentureDrake\LaravelCrm\Livewire\Deals\Traits\HasDealCommon;
 use VentureDrake\LaravelCrm\Livewire\Traits\HasOrganizationSuggest;
@@ -13,7 +14,7 @@ use VentureDrake\LaravelCrm\Models\Pipeline;
 
 class DealEdit extends Component
 {
-    use HasDealCommon;
+    use AuthorizesRequests, HasDealCommon;
     use HasOrganizationSuggest;
     use HasPersonSuggest;
 
@@ -73,6 +74,8 @@ class DealEdit extends Component
 
     public function save()
     {
+        $this->authorize('update', $this->deal);
+
         $this->validate();
 
         // Create a request object to pass to services

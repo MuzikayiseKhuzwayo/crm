@@ -534,6 +534,78 @@ class TestSchema
             $table->softDeletes();
         });
 
+        Schema::create($prefix.'deal_products', function (Blueprint $table) {
+            $table->bigIncrements('id');
+            $table->string('external_id')->nullable();
+            $table->unsignedBigInteger('team_id')->nullable();
+            $table->unsignedBigInteger('deal_id');
+            $table->unsignedBigInteger('product_id')->nullable();
+            $table->unsignedBigInteger('product_variation_id')->nullable();
+            $table->text('comments')->nullable();
+            $table->integer('order')->nullable();
+            $table->integer('quantity')->nullable();
+            $table->integer('price')->nullable();
+            $table->decimal('tax_rate')->nullable();
+            $table->integer('tax_amount')->nullable();
+            $table->integer('amount')->nullable();
+            $table->string('currency', 3)->default('USD');
+            $table->timestamps();
+            $table->softDeletes();
+        });
+
+        Schema::create($prefix.'delivery_products', function (Blueprint $table) {
+            $table->bigIncrements('id');
+            $table->string('external_id')->nullable();
+            $table->unsignedBigInteger('team_id')->nullable();
+            $table->unsignedBigInteger('delivery_id');
+            $table->unsignedBigInteger('product_id')->nullable();
+            $table->unsignedBigInteger('product_variation_id')->nullable();
+            $table->text('comments')->nullable();
+            $table->integer('order')->nullable();
+            $table->integer('quantity')->nullable();
+            $table->integer('price')->nullable();
+            $table->decimal('tax_rate')->nullable();
+            $table->integer('tax_amount')->nullable();
+            $table->integer('amount')->nullable();
+            $table->string('currency', 3)->default('USD');
+            $table->timestamps();
+            $table->softDeletes();
+        });
+
+        Schema::create($prefix.'address_types', function (Blueprint $table) {
+            $table->bigIncrements('id');
+            $table->unsignedBigInteger('team_id')->nullable();
+            $table->string('name');
+            $table->text('description')->nullable();
+            $table->timestamps();
+            $table->softDeletes();
+        });
+
+        Schema::create($prefix.'deliveries', function (Blueprint $table) {
+            $table->bigIncrements('id');
+            $table->string('external_id')->nullable();
+            $table->unsignedBigInteger('team_id')->nullable();
+            $table->unsignedBigInteger('order_id')->nullable();
+            $table->string('delivery_id')->nullable();
+            $table->string('prefix')->nullable();
+            $table->integer('number')->nullable();
+            $table->string('reference')->nullable();
+            $table->datetime('delivery_initiated')->nullable();
+            $table->datetime('delivery_shipped')->nullable();
+            $table->datetime('delivery_expected')->nullable();
+            $table->datetime('delivered_on')->nullable();
+            $table->text('description')->nullable();
+            $table->text('terms')->nullable();
+            $table->unsignedBigInteger('user_created_id')->nullable();
+            $table->unsignedBigInteger('user_updated_id')->nullable();
+            $table->unsignedBigInteger('user_deleted_id')->nullable();
+            $table->unsignedBigInteger('user_restored_id')->nullable();
+            $table->unsignedBigInteger('user_owner_id')->nullable();
+            $table->unsignedBigInteger('user_assigned_id')->nullable();
+            $table->timestamps();
+            $table->softDeletes();
+        });
+
         Schema::create($prefix.'quote_products', function (Blueprint $table) {
             $table->bigIncrements('id');
             $table->string('external_id')->nullable();

@@ -2,6 +2,7 @@
 
 namespace VentureDrake\LaravelCrm\Livewire\Invoices;
 
+use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
 use Livewire\Component;
 use Mary\Traits\Toast;
 use VentureDrake\LaravelCrm\Models\Invoice;
@@ -9,7 +10,7 @@ use VentureDrake\LaravelCrm\Models\Pipeline;
 
 class InvoiceShow extends Component
 {
-    use Toast;
+    use AuthorizesRequests, Toast;
 
     public Invoice $invoice;
 
@@ -50,6 +51,8 @@ class InvoiceShow extends Component
     public function delete($id)
     {
         if ($invoice = Invoice::find($id)) {
+            $this->authorize('delete', $invoice);
+
             $invoice->delete();
 
             $this->success(ucfirst(trans('laravel-crm::lang.invoice_deleted')), redirectTo: route('laravel-crm.invoices.index'));

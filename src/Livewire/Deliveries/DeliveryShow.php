@@ -2,6 +2,7 @@
 
 namespace VentureDrake\LaravelCrm\Livewire\Deliveries;
 
+use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
 use Livewire\Component;
 use Mary\Traits\Toast;
 use VentureDrake\LaravelCrm\Models\Delivery;
@@ -9,7 +10,7 @@ use VentureDrake\LaravelCrm\Models\Pipeline;
 
 class DeliveryShow extends Component
 {
-    use Toast;
+    use AuthorizesRequests, Toast;
 
     public Delivery $delivery;
 
@@ -31,6 +32,8 @@ class DeliveryShow extends Component
     public function delete($id)
     {
         if ($delivery = Delivery::find($id)) {
+            $this->authorize('delete', $delivery);
+
             $delivery->delete();
 
             $this->success(ucfirst(trans('laravel-crm::lang.delivery_deleted')), redirectTo: route('laravel-crm.deliveries.index'));

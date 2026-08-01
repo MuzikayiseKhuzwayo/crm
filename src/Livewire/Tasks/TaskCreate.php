@@ -2,12 +2,14 @@
 
 namespace VentureDrake\LaravelCrm\Livewire\Tasks;
 
+use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
 use Livewire\Component;
 use VentureDrake\LaravelCrm\Livewire\Tasks\Traits\HasTaskCommon;
+use VentureDrake\LaravelCrm\Models\Task;
 
 class TaskCreate extends Component
 {
-    use HasTaskCommon;
+    use AuthorizesRequests, HasTaskCommon;
 
     public function mount()
     {
@@ -17,6 +19,8 @@ class TaskCreate extends Component
 
     public function save()
     {
+        $this->authorize('create', Task::class);
+
         $this->validate();
 
         $request = \VentureDrake\LaravelCrm\Http\Helpers\PublicProperties\asRequest($this);

@@ -4,6 +4,7 @@ namespace VentureDrake\LaravelCrm\Livewire\Products;
 
 use App\Models\User;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
 use Illuminate\Pagination\LengthAwarePaginator;
 use Illuminate\Support\Collection;
 use Livewire\Component;
@@ -16,7 +17,7 @@ use VentureDrake\LaravelCrm\Traits\ResetsPaginationWhenPropsChanges;
 
 class ProductIndex extends Component
 {
-    use ClearsProperties, ResetsPaginationWhenPropsChanges, Toast, WithPagination;
+    use AuthorizesRequests, ClearsProperties, ResetsPaginationWhenPropsChanges, Toast, WithPagination;
 
     public $layout = 'index';
 
@@ -89,6 +90,8 @@ class ProductIndex extends Component
     public function delete($id)
     {
         if ($product = Product::find($id)) {
+            $this->authorize('delete', $product);
+
             $product->delete();
 
             $this->success(ucfirst(trans('laravel-crm::lang.product_deleted')));

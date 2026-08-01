@@ -3,10 +3,13 @@
 namespace VentureDrake\LaravelCrm\Livewire\Organizations;
 
 use Livewire\Component;
+use Mary\Traits\Toast;
 use VentureDrake\LaravelCrm\Models\Organization;
 
 class OrganizationShow extends Component
 {
+    use Toast;
+
     public Organization $organization;
 
     public function delete($id)

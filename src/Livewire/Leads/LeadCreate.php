@@ -2,6 +2,7 @@
 
 namespace VentureDrake\LaravelCrm\Livewire\Leads;
 
+use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
 use Livewire\Component;
 use VentureDrake\LaravelCrm\Livewire\Leads\Traits\HasLeadCommon;
 use VentureDrake\LaravelCrm\Livewire\Traits\HasOrganizationSuggest;
@@ -14,7 +15,7 @@ use VentureDrake\LaravelCrm\Models\Setting;
 
 class LeadCreate extends Component
 {
-    use HasLeadCommon;
+    use AuthorizesRequests, HasLeadCommon;
     use HasOrganizationSuggest;
     use HasPersonSuggest;
 
@@ -73,6 +74,8 @@ class LeadCreate extends Component
 
     public function save()
     {
+        $this->authorize('create', Lead::class);
+
         $this->validate();
 
         // Create a request object to pass to services

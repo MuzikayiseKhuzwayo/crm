@@ -3,6 +3,7 @@
 namespace VentureDrake\LaravelCrm\Livewire\Quotes;
 
 use Barryvdh\DomPDF\Facade\Pdf;
+use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
 use Illuminate\Support\Facades\File;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\URL;
@@ -14,7 +15,7 @@ use VentureDrake\LaravelCrm\Support\PdfTemplateRegistry;
 
 class QuoteSend extends Component
 {
-    use Toast;
+    use AuthorizesRequests, Toast;
 
     public bool $showSendQuote = false;
 
@@ -66,6 +67,8 @@ class QuoteSend extends Component
 
     public function send()
     {
+        $this->authorize('update', $this->quote);
+
         $this->validate();
 
         $this->generateUrl();

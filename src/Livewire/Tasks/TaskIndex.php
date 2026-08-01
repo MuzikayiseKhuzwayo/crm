@@ -4,6 +4,7 @@ namespace VentureDrake\LaravelCrm\Livewire\Tasks;
 
 use App\Models\User;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
 use Illuminate\Pagination\LengthAwarePaginator;
 use Illuminate\Support\Collection;
 use Livewire\Component;
@@ -15,7 +16,7 @@ use VentureDrake\LaravelCrm\Traits\ResetsPaginationWhenPropsChanges;
 
 class TaskIndex extends Component
 {
-    use ClearsProperties, ResetsPaginationWhenPropsChanges, Toast, WithPagination;
+    use AuthorizesRequests, ClearsProperties, ResetsPaginationWhenPropsChanges, Toast, WithPagination;
 
     public $layout = 'index';
 
@@ -71,6 +72,8 @@ class TaskIndex extends Component
     public function delete($id): void
     {
         if ($task = Task::find($id)) {
+            $this->authorize('delete', $task);
+
             $task->delete();
 
             $this->success(ucfirst(trans('laravel-crm::lang.task_deleted')));
@@ -80,6 +83,8 @@ class TaskIndex extends Component
     public function complete($id): void
     {
         if ($task = Task::find($id)) {
+            $this->authorize('update', $task);
+
             $task->update(['completed_at' => now()]);
 
             $this->success(ucfirst(trans('laravel-crm::lang.task_completed')));

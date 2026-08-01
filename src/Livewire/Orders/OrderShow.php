@@ -2,6 +2,7 @@
 
 namespace VentureDrake\LaravelCrm\Livewire\Orders;
 
+use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
 use Livewire\Component;
 use Mary\Traits\Toast;
 use VentureDrake\LaravelCrm\Models\Order;
@@ -9,7 +10,7 @@ use VentureDrake\LaravelCrm\Models\Pipeline;
 
 class OrderShow extends Component
 {
-    use Toast;
+    use AuthorizesRequests, Toast;
 
     public Order $order;
 
@@ -47,6 +48,8 @@ class OrderShow extends Component
     public function delete($id)
     {
         if ($order = Order::find($id)) {
+            $this->authorize('delete', $order);
+
             $order->delete();
 
             $this->success(ucfirst(trans('laravel-crm::lang.order_deleted')), redirectTo: route('laravel-crm.orders.index'));

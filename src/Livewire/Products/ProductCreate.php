@@ -2,14 +2,16 @@
 
 namespace VentureDrake\LaravelCrm\Livewire\Products;
 
+use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
 use Livewire\Attributes\Modelable;
 use Livewire\Component;
 use VentureDrake\LaravelCrm\Livewire\Products\Traits\HasProductCommon;
+use VentureDrake\LaravelCrm\Models\Product;
 use VentureDrake\LaravelCrm\Models\TaxRate;
 
 class ProductCreate extends Component
 {
-    use HasProductCommon;
+    use AuthorizesRequests, HasProductCommon;
 
     public $layout = 'full';
 
@@ -40,6 +42,8 @@ class ProductCreate extends Component
 
     public function save($redirect = true)
     {
+        $this->authorize('create', Product::class);
+
         $this->validate();
 
         // Create a request object to pass to services

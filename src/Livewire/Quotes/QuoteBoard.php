@@ -5,6 +5,7 @@ namespace VentureDrake\LaravelCrm\Livewire\Quotes;
 use App\Models\User;
 use Carbon\Carbon;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
 use Illuminate\Support\Collection;
 use Mary\Traits\Toast;
 use VentureDrake\LaravelCrm\Livewire\KanbanBoard;
@@ -14,7 +15,7 @@ use VentureDrake\LaravelCrm\Models\Quote;
 
 class QuoteBoard extends KanbanBoard
 {
-    use Toast;
+    use AuthorizesRequests, Toast;
 
     public $layout = 'board';
 
@@ -60,6 +61,10 @@ class QuoteBoard extends KanbanBoard
 
     public function onStageSorted($orderedIds)
     {
+        if ($record = Quote::whereIn('id', $orderedIds)->first()) {
+            $this->authorize('update', $record);
+        }
+
         foreach ($orderedIds as $orderNumber => $quoteId) {
             Quote::find($quoteId)->update([
                 'pipeline_stage_order' => $orderNumber + 1,
@@ -69,7 +74,13 @@ class QuoteBoard extends KanbanBoard
 
     public function onStageChanged($recordId, $stageId, $fromOrderedIds, $toOrderedIds)
     {
-        Quote::find($recordId)->update([
+        if (! $record = Quote::find($recordId)) {
+            return;
+        }
+
+        $this->authorize('update', $record);
+
+        $record->update([
             'pipeline_stage_id' => $stageId,
         ]);
 
@@ -132,6 +143,8 @@ class QuoteBoard extends KanbanBoard
     public function delete($id)
     {
         if ($quote = Quote::find($id)) {
+            $this->authorize('delete', $quote);
+
             $quote->delete();
 
             $this->success(ucfirst(trans('laravel-crm::lang.quote_deleted')));
@@ -141,6 +154,8 @@ class QuoteBoard extends KanbanBoard
     public function accept($id): void
     {
         if ($quote = Quote::find($id)) {
+            $this->authorize('update', $quote);
+
             $quote->update([
                 'accepted_at' => Carbon::now(),
                 'pipeline_stage_id' => $this->pipeline->pipelineStages()->where('name', 'Accepted')->first()->id ?? null,
@@ -153,6 +168,8 @@ class QuoteBoard extends KanbanBoard
     public function reject($id): void
     {
         if ($quote = Quote::find($id)) {
+            $this->authorize('update', $quote);
+
             $quote->update([
                 'rejected_at' => Carbon::now(),
                 'pipeline_stage_id' => $this->pipeline->pipelineStages()->where('name', 'Rejected')->first()->id ?? null,
@@ -165,6 +182,8 @@ class QuoteBoard extends KanbanBoard
     public function unaccept($id): void
     {
         if ($quote = Quote::find($id)) {
+            $this->authorize('update', $quote);
+
             $quote->update([
                 'accepted_at' => null,
                 'pipeline_stage_id' => $this->pipeline->pipelineStages()->where('name', 'Draft')->first()->id ?? null,
@@ -177,6 +196,8 @@ class QuoteBoard extends KanbanBoard
     public function unreject($id): void
     {
         if ($quote = Quote::find($id)) {
+            $this->authorize('update', $quote);
+
             $quote->update([
                 'rejected_at' => null,
                 'pipeline_stage_id' => $this->pipeline->pipelineStages()->where('name', 'Draft')->first()->id ?? null,

@@ -2,6 +2,7 @@
 
 namespace VentureDrake\LaravelCrm\Livewire\Tasks;
 
+use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
 use Livewire\Attributes\On;
 use Livewire\Component;
 use Mary\Traits\Toast;
@@ -9,7 +10,7 @@ use VentureDrake\LaravelCrm\Models\Task;
 
 class TaskRelated extends Component
 {
-    use Toast;
+    use AuthorizesRequests, Toast;
 
     public $model = null;
 
@@ -37,6 +38,8 @@ class TaskRelated extends Component
 
     public function save(): void
     {
+        $this->authorize('create', Task::class);
+
         $this->validate([
             'name' => 'required|max:255',
             'description' => 'nullable',

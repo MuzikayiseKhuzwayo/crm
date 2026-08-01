@@ -2,13 +2,14 @@
 
 namespace VentureDrake\LaravelCrm\Livewire\Leads;
 
+use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
 use Livewire\Component;
 use Mary\Traits\Toast;
 use VentureDrake\LaravelCrm\Models\Lead;
 
 class LeadShow extends Component
 {
-    use Toast;
+    use AuthorizesRequests, Toast;
 
     public $lead;
 
@@ -29,6 +30,8 @@ class LeadShow extends Component
     public function delete($id)
     {
         if ($lead = Lead::find($id)) {
+            $this->authorize('delete', $lead);
+
             $lead->delete();
 
             $this->success(ucfirst(trans('laravel-crm::lang.lead_deleted')), redirectTo: route('laravel-crm.leads.index'));

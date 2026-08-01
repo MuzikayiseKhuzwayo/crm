@@ -3,6 +3,7 @@
 namespace VentureDrake\LaravelCrm\Livewire\Deals;
 
 use Carbon\Carbon;
+use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
 use Livewire\Component;
 use VentureDrake\LaravelCrm\Livewire\Deals\Traits\HasDealCommon;
 use VentureDrake\LaravelCrm\Livewire\Traits\HasOrganizationSuggest;
@@ -16,7 +17,7 @@ use VentureDrake\LaravelCrm\Models\Setting;
 
 class DealCreate extends Component
 {
-    use HasDealCommon;
+    use AuthorizesRequests, HasDealCommon;
     use HasOrganizationSuggest;
     use HasPersonSuggest;
 
@@ -96,6 +97,8 @@ class DealCreate extends Component
 
     public function save()
     {
+        $this->authorize('create', Deal::class);
+
         $this->validate();
 
         // Create a request object to pass to services

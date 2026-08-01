@@ -2,6 +2,7 @@
 
 namespace VentureDrake\LaravelCrm\Livewire\Orders;
 
+use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
 use Livewire\Component;
 use VentureDrake\LaravelCrm\Livewire\Orders\Traits\HasOrderCommon;
 use VentureDrake\LaravelCrm\Livewire\Traits\HasOrganizationSuggest;
@@ -13,7 +14,7 @@ use VentureDrake\LaravelCrm\Models\Person;
 
 class OrderEdit extends Component
 {
-    use HasOrderCommon;
+    use AuthorizesRequests, HasOrderCommon;
     use HasOrganizationSuggest;
     use HasPersonSuggest;
 
@@ -89,6 +90,8 @@ class OrderEdit extends Component
 
     public function save()
     {
+        $this->authorize('update', $this->order);
+
         $this->validate();
 
         // Create a request object to pass to services

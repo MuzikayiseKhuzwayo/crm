@@ -5,6 +5,7 @@ namespace VentureDrake\LaravelCrm\Livewire\Deals;
 use App\Models\User;
 use Carbon\Carbon;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
 use Illuminate\Pagination\LengthAwarePaginator;
 use Illuminate\Support\Collection;
 use Livewire\Component;
@@ -19,7 +20,7 @@ use VentureDrake\LaravelCrm\Traits\ResetsPaginationWhenPropsChanges;
 
 class DealIndex extends Component
 {
-    use ClearsProperties, ResetsPaginationWhenPropsChanges, SearchesEncryptableContacts, Toast, WithPagination;
+    use AuthorizesRequests, ClearsProperties, ResetsPaginationWhenPropsChanges, SearchesEncryptableContacts, Toast, WithPagination;
 
     public $layout = 'index';
 
@@ -125,6 +126,8 @@ class DealIndex extends Component
     public function won($id)
     {
         if ($deal = Deal::find($id)) {
+            $this->authorize('update', $deal);
+
             $deal->update([
                 'closed_status' => 'won',
                 'closed_at' => Carbon::now(),
@@ -138,6 +141,8 @@ class DealIndex extends Component
     public function lost($id)
     {
         if ($deal = Deal::find($id)) {
+            $this->authorize('update', $deal);
+
             $deal->update([
                 'closed_status' => 'lost',
                 'closed_at' => Carbon::now(),
@@ -151,6 +156,8 @@ class DealIndex extends Component
     public function reopen($id)
     {
         if ($deal = Deal::find($id)) {
+            $this->authorize('update', $deal);
+
             $deal->update([
                 'closed_status' => null,
                 'closed_at' => null,
@@ -164,6 +171,8 @@ class DealIndex extends Component
     public function delete($id)
     {
         if ($deal = Deal::find($id)) {
+            $this->authorize('delete', $deal);
+
             $deal->delete();
 
             $this->success(ucfirst(trans('laravel-crm::lang.deal_deleted')));

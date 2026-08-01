@@ -2,11 +2,13 @@
 
 namespace VentureDrake\LaravelCrm\Livewire\Orders;
 
+use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
 use Livewire\Component;
 use VentureDrake\LaravelCrm\Livewire\Orders\Traits\HasOrderCommon;
 use VentureDrake\LaravelCrm\Livewire\Traits\HasOrganizationSuggest;
 use VentureDrake\LaravelCrm\Livewire\Traits\HasPersonSuggest;
 use VentureDrake\LaravelCrm\Models\AddressType;
+use VentureDrake\LaravelCrm\Models\Order;
 use VentureDrake\LaravelCrm\Models\Organization;
 use VentureDrake\LaravelCrm\Models\Person;
 use VentureDrake\LaravelCrm\Models\Quote;
@@ -14,7 +16,7 @@ use VentureDrake\LaravelCrm\Models\Setting;
 
 class OrderCreate extends Component
 {
-    use HasOrderCommon;
+    use AuthorizesRequests, HasOrderCommon;
     use HasOrganizationSuggest;
     use HasPersonSuggest;
 
@@ -94,6 +96,8 @@ class OrderCreate extends Component
 
     public function save()
     {
+        $this->authorize('create', Order::class);
+
         $this->validate();
 
         // Create a request object to pass to services

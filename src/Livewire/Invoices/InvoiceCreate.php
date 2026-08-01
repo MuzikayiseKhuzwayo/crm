@@ -2,10 +2,12 @@
 
 namespace VentureDrake\LaravelCrm\Livewire\Invoices;
 
+use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
 use Livewire\Component;
 use VentureDrake\LaravelCrm\Livewire\Invoices\Traits\HasInvoiceCommon;
 use VentureDrake\LaravelCrm\Livewire\Traits\HasOrganizationSuggest;
 use VentureDrake\LaravelCrm\Livewire\Traits\HasPersonSuggest;
+use VentureDrake\LaravelCrm\Models\Invoice;
 use VentureDrake\LaravelCrm\Models\Order;
 use VentureDrake\LaravelCrm\Models\Organization;
 use VentureDrake\LaravelCrm\Models\Person;
@@ -13,7 +15,7 @@ use VentureDrake\LaravelCrm\Models\Quote;
 
 class InvoiceCreate extends Component
 {
-    use HasInvoiceCommon;
+    use AuthorizesRequests, HasInvoiceCommon;
     use HasOrganizationSuggest;
     use HasPersonSuggest;
 
@@ -67,6 +69,8 @@ class InvoiceCreate extends Component
 
     public function save()
     {
+        $this->authorize('create', Invoice::class);
+
         $this->validate();
 
         // Create a request object to pass to services

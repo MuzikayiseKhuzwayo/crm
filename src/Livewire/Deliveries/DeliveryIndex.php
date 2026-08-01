@@ -4,6 +4,7 @@ namespace VentureDrake\LaravelCrm\Livewire\Deliveries;
 
 use App\Models\User;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
 use Illuminate\Pagination\LengthAwarePaginator;
 use Illuminate\Support\Collection;
 use Livewire\Component;
@@ -17,7 +18,7 @@ use VentureDrake\LaravelCrm\Traits\ResetsPaginationWhenPropsChanges;
 
 class DeliveryIndex extends Component
 {
-    use ClearsProperties, ResetsPaginationWhenPropsChanges, Toast, WithPagination;
+    use AuthorizesRequests, ClearsProperties, ResetsPaginationWhenPropsChanges, Toast, WithPagination;
 
     public $layout = 'index';
 
@@ -108,6 +109,8 @@ class DeliveryIndex extends Component
     public function delete($id)
     {
         if ($delivery = Delivery::find($id)) {
+            $this->authorize('delete', $delivery);
+
             $delivery->delete();
 
             $this->success(ucfirst(trans('laravel-crm::lang.delivery_deleted')));

@@ -4,6 +4,7 @@ namespace VentureDrake\LaravelCrm\Livewire\Leads;
 
 use App\Models\User;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
 use Illuminate\Pagination\LengthAwarePaginator;
 use Illuminate\Support\Collection;
 use Livewire\Component;
@@ -18,7 +19,7 @@ use VentureDrake\LaravelCrm\Traits\ResetsPaginationWhenPropsChanges;
 
 class LeadIndex extends Component
 {
-    use ClearsProperties, ResetsPaginationWhenPropsChanges, SearchesEncryptableContacts, Toast, WithPagination;
+    use AuthorizesRequests, ClearsProperties, ResetsPaginationWhenPropsChanges, SearchesEncryptableContacts, Toast, WithPagination;
 
     public $layout = 'index';
 
@@ -124,6 +125,8 @@ class LeadIndex extends Component
     public function delete($id)
     {
         if ($lead = Lead::find($id)) {
+            $this->authorize('delete', $lead);
+
             $lead->delete();
 
             $this->success(ucfirst(trans('laravel-crm::lang.lead_deleted')));

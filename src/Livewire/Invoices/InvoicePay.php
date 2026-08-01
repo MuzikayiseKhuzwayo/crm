@@ -3,13 +3,14 @@
 namespace VentureDrake\LaravelCrm\Livewire\Invoices;
 
 use Carbon\Carbon;
+use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
 use Livewire\Component;
 use Mary\Traits\Toast;
 use VentureDrake\LaravelCrm\Models\Invoice;
 
 class InvoicePay extends Component
 {
-    use Toast;
+    use AuthorizesRequests, Toast;
 
     public bool $showPayInvoice = false;
 
@@ -47,6 +48,8 @@ class InvoicePay extends Component
 
     public function pay()
     {
+        $this->authorize('update', $this->invoice);
+
         $this->validate();
 
         $this->amount_due = ($this->invoice->amount_due / 100) - ($this->amount + ($this->invoice->amount_paid / 100));

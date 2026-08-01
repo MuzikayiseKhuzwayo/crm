@@ -3,6 +3,7 @@
 namespace VentureDrake\LaravelCrm\Livewire\Orders;
 
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
 use Illuminate\Support\Collection;
 use Livewire\Attributes\Computed;
 use Livewire\Component;
@@ -12,7 +13,7 @@ use VentureDrake\LaravelCrm\Models\Pipeline;
 
 class OrderRelatedIndex extends Component
 {
-    use Toast;
+    use AuthorizesRequests, Toast;
 
     public Model $model;
 
@@ -51,6 +52,8 @@ class OrderRelatedIndex extends Component
     public function delete($id): void
     {
         if ($order = Order::find($id)) {
+            $this->authorize('delete', $order);
+
             $order->delete();
 
             $this->success(ucfirst(trans('laravel-crm::lang.order_deleted')));

@@ -3,6 +3,7 @@
 namespace VentureDrake\LaravelCrm\Livewire\Deliveries;
 
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
 use Illuminate\Support\Collection;
 use Livewire\Attributes\Computed;
 use Livewire\Component;
@@ -12,7 +13,7 @@ use VentureDrake\LaravelCrm\Models\Pipeline;
 
 class DeliveryRelatedIndex extends Component
 {
-    use Toast;
+    use AuthorizesRequests, Toast;
 
     public Model $model;
 
@@ -46,6 +47,8 @@ class DeliveryRelatedIndex extends Component
     public function delete($id): void
     {
         if ($delivery = Delivery::find($id)) {
+            $this->authorize('delete', $delivery);
+
             $delivery->delete();
 
             $this->success(ucfirst(trans('laravel-crm::lang.delivery_deleted')));

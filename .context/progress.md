@@ -32997,3 +32997,341 @@ stories.
   — 1 failure across every story). Same "pre-existing baseline
   preserved" discipline documented across every prior autopilot story
   in this codebase.
+
+
+## US-001: Add missing policies, manageProducts abilities, and the permission-scoped test helper (livewire-authz-checks series kickoff)
+- **Foundational authz story** for the upcoming Livewire `authorize()`
+  backfill. Ships every policy + ability + test helper the guards will
+  depend on, BEFORE any guard lands — so adding `authorize()` calls in
+  follow-up stories cannot lock out Owners or Managers.
+- **New `src/Policies/ActivityPolicy.php`** (~99 lines) copied from
+  `TaskPolicy` with `Task` → `Activity` and `'crm tasks'` →
+  `'crm activities'` swapped throughout. Exposes the standard 7-method
+  set (`viewAny` / `view` / `create` / `update` / `delete` / `restore` /
+  `forceDelete`) keyed on the `view|create|edit|delete crm activities`
+  permissions. `forceDelete` returns `false` verbatim from the
+  TaskPolicy shape. No `isEnabled()` module gate — matches TaskPolicy
+  (activities aren't module-gated in `config('laravel-crm.modules')`).
+  - **AC precondition verified**: the 4 `crm activities` permissions
+    are already seeded at
+    `database/seeders/LaravelCrmTablesSeeder.php:472-475` AND already
+    granted to both Manager (lines 617-620) and Employee (lines
+    724-727). No re-seed needed; the AC's claim held exactly.
+- **Registered 2 policies in `LaravelCrmServiceProvider::$policies`**:
+  - `'VentureDrake\LaravelCrm\Models\Activity' => ActivityPolicy::class`
+    placed at the head of the activity-family block (before Task /
+    Note / Call / Meeting / Lunch / File).
+  - `'VentureDrake\LaravelCrm\Models\ProductAttribute' => ProductAttributePolicy::class`
+    placed after ProductCategory. `ProductAttributePolicy` was
+    **orphaned** — the class file existed at
+    `src/Policies/ProductAttributePolicy.php` with a full 7-method
+    body but had zero references in the provider, so
+    `Gate::getPolicyFor(ProductAttribute::class)` returned null and
+    every `authorize()` call against a ProductAttribute would fall
+    through to Laravel's deny-by-default. Registering it closes a
+    latent authz gap independent of this series.
+  - 2 matching imports added alphabetically (`ActivityPolicy` before
+    `CallPolicy`; `ProductAttributePolicy` before
+    `ProductCategoryPolicy`).
+- **3 new `manageProducts(User $user)` abilities** on `DealPolicy`,
+  `QuotePolicy`, `OrderPolicy` — each inserted between `forceDelete()`
+  and the `isEnabled()` helper, mirroring
+  `FeaturePolicy::manageStatuses()` (line 102) byte-for-byte in shape:
+  ```php
+  public function manageProducts(User $user)
+  {
+      if ($this->isEnabled() && $user->hasPermissionTo('edit crm deals')) {
+          return true;
+      }
+  }
+  ```
+  - **No model argument** per AC — the ability answers "can this user
+    edit line items on this entity type at all", not "on this specific
+    record". Matches `manageStatuses`'s no-model shape.
+  - **Gated on `edit crm deals|quotes|orders`, NOT on ProductPolicy** —
+    the AC's critical constraint, verified independently: grep of the
+    seeder's Manager block (lines 590-690) and Employee block (lines
+    695-800) confirms **neither role holds ANY `crm products`
+    permission**, while both hold `edit crm deals`, `edit crm quotes`,
+    AND `edit crm orders`. Gating line-item editing on ProductPolicy
+    would stop a Manager from building a quote. Each method carries a
+    3-line docblock stating this rationale inline so a future reader
+    doesn't "fix" it to point at ProductPolicy.
+  - Each retains the sibling `$this->isEnabled() &&` module gate
+    (deals / quotes / orders respectively) matching every other method
+    on the same policy.
+- **`tests/TestCase.php` gained
+  `protected actingAsUserWithPermissions(array $permissions, array $attributes = []): User`**
+  alongside the pre-existing `actingAsUser()`. Delegates to
+  `actingAsUser()` with `crm_access => 1` and
+  `crm_permissions => json_encode($permissions)` merged in (caller
+  `$attributes` win on conflict via `array_merge` ordering). Docblock
+  explains the User stub grants everything when `crm_permissions` is
+  null, so an explicit list is required to exercise a denial path —
+  and that `[]` means "no CRM permissions at all".
+  - **`actingAsUser()` semantics unchanged** per AC — no Spatie tables
+    added, no `HasRoles` user swapped in. The existing stub's
+    `hasPermissionTo()` already reads `crm_permissions` (json string
+    or array) and returns `true` when null, so the helper needed zero
+    stub changes. Both `crm_access` and `crm_permissions` columns
+    already exist in `tests/TestSchema.php` (lines 21-22).
+- **`tests/Feature/ServiceProviderTest.php`** gained 2 assertions in
+  the pre-existing "policies are registered" test:
+  `Gate::getPolicyFor(Activity::class)` and
+  `Gate::getPolicyFor(ProductAttribute::class)` both `->not->toBeNull()`,
+  plus the 2 matching model imports.
+- **New `tests/Feature/PolicyRegistrationTest.php`** (3 tests / 8
+  assertions) — kept as a permanent regression gate rather than a
+  throwaway verification, because it locks the AC's `manageProducts`
+  bullet which no AC-named test covers:
+  1. **`manageProducts` granted by the entity edit permission** —
+     `actingAsUserWithPermissions(['edit crm deals', 'edit crm quotes',
+     'edit crm orders'])` then asserts
+     `Gate::allows('manageProducts', Deal::class)` (and Quote / Order)
+     all true. Exercises the new helper end-to-end.
+  2. **`manageProducts` denied without the matching edit permission** —
+     the critical anti-regression guard. Signs in with
+     `['view crm deals', 'edit crm products']` and asserts all three
+     abilities are **false**. If a future refactor re-gates
+     `manageProducts` on ProductPolicy, this test fires immediately.
+  3. **Activity + ProductAttribute policies resolve through the gate** —
+     `['view crm activities']` grants
+     `Gate::allows('viewAny', Activity::class)` and correctly denies
+     `Gate::allows('viewAny', ProductAttribute::class)` (user lacks
+     `view crm product attributes`). Proves both newly-registered
+     policies are actually reachable via the Gate, not just present in
+     the array.
+- **No new permission name introduced anywhere** per AC — every
+  permission string referenced (`view|create|edit|delete crm activities`,
+  `edit crm deals|quotes|orders`, `view|create|edit|delete crm product
+  attributes`) already exists in the seeder or the pre-existing
+  ProductAttributePolicy.
+- **Quality gates green**:
+  - `php -l` on all 7 modified/new source+test files → "No syntax
+    errors detected".
+  - `./vendor/bin/pint --dirty --test` →
+    `{"tool":"pint","result":"passed"}` (no auto-fixes needed; files
+    landed pint-clean on first write).
+  - Targeted
+    `pest tests/Feature/PolicyRegistrationTest.php tests/Feature/ServiceProviderTest.php --no-coverage`
+    → **15 tests / 55 assertions**, zero failures.
+  - Full `pest --no-coverage` → **2566 assertions / 1 failed / 715
+    deprecated** in 246s. The single failure is the pre-existing
+    baseline flake
+    `Tests\Feature\Portal\PublicFeatureTest > admin reply renders with…`
+    documented across every prior story in this codebase (the
+    invite-users series, the shared TeamObserver helper series, the
+    pdf-templates series — ~20 consecutive entries record this exact
+    single failure). Confirmed unrelated to this story's scope via
+    `grep -icE "policy|activity|productattribute|manageProducts|actingAsUserWithPermissions"`
+    on the failing test file → **0 matches**. Zero net new failures.
+- Commit `c271cd00` on branch `livewire-authz-checks` — 8 files
+  changed / +205 insertions / -0 deletions. Working tree clean at
+  session start AND after commit.
+
+### Files changed (in `/Users/andrewdrake/.polyscope/clones/66571e70/jolly-iguana`)
+- **Added** `src/Policies/ActivityPolicy.php` (~99 lines; TaskPolicy
+  shape with Task→Activity and 'crm tasks'→'crm activities')
+- **Modified** `src/LaravelCrmServiceProvider.php` (+4 lines: 2 policy
+  imports + 2 `$policies` array entries for Activity and
+  ProductAttribute)
+- **Modified** `src/Policies/DealPolicy.php` (+16 lines:
+  `manageProducts(User)` gated on `edit crm deals` + isEnabled, with
+  a docblock explaining the deliberate non-use of ProductPolicy)
+- **Modified** `src/Policies/QuotePolicy.php` (+16 lines; same shape
+  gated on `edit crm quotes`)
+- **Modified** `src/Policies/OrderPolicy.php` (+16 lines; same shape
+  gated on `edit crm orders`)
+- **Modified** `tests/TestCase.php` (+17 lines:
+  `actingAsUserWithPermissions(array, array): User` delegating to
+  `actingAsUser()` with crm_access + json-encoded crm_permissions)
+- **Modified** `tests/Feature/ServiceProviderTest.php` (+4 lines: 2
+  model imports + 2 `Gate::getPolicyFor(...)` assertions)
+- **Added** `tests/Feature/PolicyRegistrationTest.php` (33 lines; 3
+  tests / 8 assertions locking the manageProducts contract including
+  the anti-ProductPolicy guard, and proving both new policy
+  registrations resolve through the Gate)
+
+### Learnings for future iterations
+- **An orphaned policy class produces a silent deny-by-default, not an
+  error.** `ProductAttributePolicy` existed with a complete 7-method
+  body but was absent from `$policies`, so
+  `Gate::getPolicyFor(ProductAttribute::class)` returned null and every
+  `authorize('view', $attr)` call fell through to Laravel's
+  deny-by-default — a latent gap that produces 403s rather than a
+  loud "policy not found". Reusable audit recipe for any Laravel
+  package: `ls src/Policies/*.php` and diff the basenames against the
+  `$policies` array keys. Any class in the directory but not the array
+  is either dead code OR an authz gap. Cheap check; worth running
+  before any authz-backfill series.
+- **When adding a "can manage the child collection" ability, gate it
+  on the PARENT's edit permission, not the child's.** Line items on a
+  deal/quote/order are part of building that entity, not part of
+  managing the product catalog. Verified concretely here: the seeder
+  grants Manager and Employee `edit crm deals|quotes|orders` but ZERO
+  `crm products` permissions — so a ProductPolicy-gated `manageProducts`
+  would have locked every non-Owner out of quote building. **Always
+  cross-check the seeder's per-role permission blocks before choosing
+  which permission a new ability keys on.** Grep shape:
+  `grep -n "roleArray = \['name' => 'Manager'" -A 120 <seeder>` then
+  scan for the candidate permission strings. Two minutes of grep
+  prevents a production lockout.
+- **`FeaturePolicy::manageStatuses()` is the canonical no-model
+  ability shape in this codebase.** Signature is
+  `public function manageStatuses(User $user)` with body
+  `if ($this->isEnabled() && $user->hasPermissionTo('...')) { return true; }`
+  — no model parameter, no explicit `return false` (implicit null is
+  falsy to the Gate), module gate ANDed in front. Call site is
+  `Gate::allows('manageProducts', Deal::class)` — passing the class
+  string, not an instance. Reusable template for any future
+  "capability on an entity type" ability (bulk actions, imports,
+  exports, settings toggles scoped to an entity family).
+- **The `User` test stub's `hasPermissionTo()` returns `true` when
+  `crm_permissions` is null.** This is deliberate — it lets the ~700
+  pre-existing tests use the permissive `actingAsUser()` without
+  seeding Spatie tables. The consequence: **a test that wants to
+  exercise a DENIAL path must pass an explicit permission list**, or
+  the policy will always grant. That's exactly the gap
+  `actingAsUserWithPermissions()` fills. Any future story writing an
+  authz-denial test MUST use the new helper, not `actingAsUser()`.
+- **A permission-scoped helper is the right foundation to ship BEFORE
+  the guards it supports.** This story adds zero `authorize()` calls —
+  it only makes them *safe to add*. Splitting "make the policies exist"
+  from "wire the guards" means the guard stories can't accidentally
+  ship a lockout, and each guard story stays a small mechanical diff.
+  Same build-now-wire-later discipline documented across many prior
+  series in this codebase.
+- **The 1-pre-existing-failure baseline (`PublicFeatureTest > admin
+  reply renders with…`) continues to hold byte-for-byte** across this
+  new `livewire-authz-checks` branch — ~20 consecutive stories now.
+  Any future deviation from exactly 1 failure is a regression to
+  investigate, not a baseline shift.
+
+## US-002: Backfill authorization across Deals, Leads, Quotes, Orders, Invoices, PurchaseOrders, Deliveries, Products and Tasks (livewire-authz-checks series)
+- Added **79 `$this->authorize(...)` guards** across **50 Livewire components** in the nine
+  AC-named domains, plus the `AuthorizesRequests` trait + import on each. Every guard uses
+  the `FeatureIndex.php:72` shape: placed INSIDE the existing `if ($model = X::find($id)) {`
+  block, immediately before the mutation, followed by a blank line.
+- **Ability map applied exactly as specified**:
+  | Action | Ability | Components |
+  |---|---|---|
+  | `delete($id)` | `authorize('delete', $model)` | all 9 Index + Show + RelatedIndex + Board |
+  | Deals `won`/`lost`/`reopen` | `authorize('update', $deal)` | DealBoard, DealIndex, DealShow |
+  | Quotes `accept`/`reject`/`unaccept`/`unreject` | `authorize('update', $quote)` | QuoteBoard, QuoteIndex, QuoteShow |
+  | Tasks `complete()` | `authorize('update', $task)` | TaskIndex, TaskItem, TaskShow |
+  | `*Create::save()` | `authorize('create', Model::class)` | 9 Create components |
+  | `*Edit::save()` | `authorize('update', $this->model)` | 9 Edit components |
+  | Quote/Invoice/PO `send()` | `authorize('update', $this->model)` | 3 Send components |
+  | `InvoicePay::pay()` | `authorize('update', $this->invoice)` | InvoicePay |
+  | Board `onStageSorted`/`onStageChanged` | `authorize('update', $model)` once | Deal/Lead/QuoteBoard |
+  - `TaskItem::update()` and `TaskRelated::save()` were **not** in the AC's literal map but
+    are DB-mutating public action methods in scope, so they got `update`/`create`
+    respectively. `ProductCreate::createProduct()` delegates to the already-guarded
+    `save(false)` — no double guard.
+- **`Deal::class`/`Quote::class` etc. model imports added** to the 7 Create components that
+  didn't already import their own model (Deal + Lead already did).
+- **Board `onStage*` rewrites** (the only non-mechanical change). `onStageChanged` now
+  resolves the primary record first and returns early when missing, then authorizes ONCE
+  before the update — replacing a `Model::find($recordId)->update([...])` that would fatal
+  on a missing record. `onStageSorted` authorizes once against
+  `Model::whereIn('id', $orderedIds)->first()` (resolves *a* record from the set in a single
+  query, so a missing first element can't silently skip the guard). The reorder loops are
+  untouched.
+- **Incidental bug fix per AC**: `DealShow` and `OrganizationShow` both called
+  `$this->success(...)` without `use Mary\Traits\Toast;` — every mutation fatalled with
+  "Call to undefined method" on the success path. Both now use the trait.
+- **In-memory methods left unguarded per AC**: `HasDealCommon::addProduct|deleteProduct($index)`,
+  `QuoteSend::toggle($id)`, and the `Has*Common` phone/email/address array helpers. Verified
+  by an automated audit (0 authorize calls in any of them). **No shared trait was modified** —
+  `git diff --name-only | grep Traits/` returns nothing, so no consumer can fatal with
+  "Call to undefined method authorize()".
+- **`QuoteBoard::send($id)` deliberately left unguarded** — it only `dispatch()`es a browser
+  event; the actual PDF-and-email path is `QuoteSend::send()`, which IS guarded.
+
+### Tests — `tests/Feature/Livewire/Authorization/` (9 files, 60 tests / 90 assertions)
+One file per domain, each with deny + allow coverage for `delete`, `create`, and the domain's
+representative `update` action (won / accept / complete / pay / edit-save), plus board
+reorder deny+allow for Deals/Leads/Quotes. Every deny case asserts
+`Livewire::test(...)->call(...)->assertForbidden()` **and** that the record survives
+(`expect(Model::find($id))->not->toBeNull()` / the mutated column is still null).
+**No `Gate::before(fn () => true)` anywhere** — denial is exercised through the real policies
+via the US-001 `actingAsUserWithPermissions()` helper.
+
+**Mutation-tested**: removing the `delete` guard from `DealIndex` makes the deny test fail;
+restoring it makes it pass. The tests are not vacuous.
+
+### Test-environment scaffolding (necessary dependency of the AC's assertion shape)
+`Livewire::test()` renders on mount, and these components' mount/render paths hit gaps the
+minimal TestSchema doesn't cover. Fixed the genuine gaps and stubbed only the view:
+- **`tests/TestSchema.php`** — added 4 genuinely-missing tables: `crm_deal_products`,
+  `crm_delivery_products`, `crm_address_types`, `crm_deliveries` (columns taken from the
+  production migration stubs, FKs omitted per the file's existing convention).
+- **`tests/TestCase.php`** — aliases `App\Models\User` → the test stub. Many CRM components
+  `use App\Models\User;` directly and Testbench ships no such class, so nothing that renders
+  them could previously boot.
+- **`tests/Pest.php`** — a `beforeEach` **scoped to `Feature/Livewire/Authorization`** seeding
+  the baseline records the components' `mount()` reads: the `currency` and `team` Setting
+  rows, a Pipeline + stages per pipeline-backed model, and the Billing/Shipping AddressTypes.
+  Scoped so no existing test's fixtures change.
+- **Render-stub subclasses** (`class AuthzDealIndex extends DealIndex { render() {...} }`).
+  Overriding *only* `render()` leaves the real action methods, the real trait, and the real
+  `authorize()` calls intact — so the production authorization path is genuinely exercised
+  against the real policies. This is the codebase's established hot-patch-subclass idiom.
+
+### Quality gates
+- `php -l` — clean on all 50 changed source files.
+- `./vendor/bin/pint --dirty --test` → **passed**.
+- `composer format-test` → **fails on 21 files, none of them mine** (LaravelCrmSampleDataSeeder,
+  14 Api/V2 Request classes, CurrentTeamController, HostTeamController,
+  UserInvitationNotification + its test, FeatureService, lang/fa/passwords). Verified via
+  `comm -12` of the pint-failure list against my changed-file list → **empty intersection**.
+  This is a pre-existing repo-wide baseline failure, not a regression from this story.
+- `composer test` (full pest) → **775 passed / 1 failed / 2709 assertions**. The single failure
+  is the documented pre-existing flake `Tests\Feature\Portal\PublicFeatureTest > admin reply
+  renders with is_admin_reply true` (grep of that file for `authorize|livewire.(deals|...)`
+  → 0 hits). Baseline was 715 passed / 1 failed / 2566 assertions at US-001 of this series,
+  so: **+60 passing (exactly the 60 new tests), +143 assertions, zero net new failures.**
+
+### Files changed (in `/Users/andrewdrake/.polyscope/clones/66571e70/jolly-iguana`)
+- **Modified** 50 Livewire components across `src/Livewire/{Deals,Leads,Quotes,Orders,Invoices,PurchaseOrders,Deliveries,Products,Tasks}/`
+  plus `src/Livewire/Organizations/OrganizationShow.php` (Toast fix only).
+- **Added** 9 test files under `tests/Feature/Livewire/Authorization/`.
+- **Modified** `tests/TestSchema.php`, `tests/TestCase.php`, `tests/Pest.php`.
+
+### Learnings for future iterations
+- **A `?? null` tail does not make a chain null-safe.** `$this->pipeline->pipelineStages->first()->id ?? null`
+  and `$purchaseOrder->issue_date->format('Y-m-d') ?? null` both fatal when the *intermediate*
+  is null — `??` only catches a null *result*, not a null *dereference*. This idiom appears in
+  at least 6 `mount()` methods (Order/Invoice/Delivery/PurchaseOrder/Deal Create, PurchaseOrder/Delivery
+  Edit) and is why those components can't mount without seeded pipelines/dates. The fix is
+  `?->` (`$this->pipeline?->pipelineStages?->first()?->id`), not a trailing `??`. Worth a
+  dedicated hardening story — it's a live production crash whenever a tenant has no pipeline
+  for a model.
+- **Guard placement matters for what the deny test can assert.** Putting `authorize()` as the
+  *first* statement of `save()` (before `$this->validate()`) means the deny case needs no valid
+  form data at all — the 403 fires before validation. It also makes the allow case expressible
+  as "not forbidden" (`assertOk()`), which is exactly the AC's "no seeded role lost access"
+  contract without having to drive a full valid form through the service layer.
+- **`Livewire::test()` renders on mount, so render-path gaps masquerade as guard failures.**
+  All 25 initial failures were `ViewException`/`QueryException` from blades and `mount()`,
+  never from `authorize()`. Diagnostic recipe: if the failure message names a *table*, a
+  *view*, or a *null property*, it's fixtures — not the guard. Confirm by mutation-testing one
+  guard (remove it, watch exactly one test flip to fail) before touching any component code.
+- **Overriding only `render()` in a subclass is the cheapest faithful Livewire authz test.**
+  It keeps the class hierarchy, the trait, the real method bodies, and real policy resolution —
+  only the view is stubbed. Far cheaper than building out the ~12 tables the full activity/contact
+  blade tree needs, and it doesn't reshape shared test infrastructure that 700+ tests depend on.
+- **Beware `grep "\$prefix.'table'"` in double quotes in bash** — `$prefix` expands to empty and
+  every lookup returns a false MISSING. I "found" 12 missing TestSchema tables that way; only 4
+  were genuinely absent. Use single quotes or escape the `$` when grepping PHP source for
+  variable-prefixed strings.
+- **Do not `git stash` to prove a baseline in a repo with pre-existing stashes.** This repo
+  carries 11 unrelated stashes. `git stash push --include-untracked` + `pop` tried to apply a
+  *pre-existing* entry over my tree and aborted with conflicts across all 9 new test files. It
+  failed safely this time, but the progress log already warns about exactly this. The safe way
+  to prove "these failures are pre-existing" is set arithmetic on the failure list vs the
+  changed-file list (`comm -12`), which is what settled the `composer format-test` question here.
+- **Pest buffers all output when not attached to a TTY.** A backgrounded `pest` run left a
+  0-byte output file for ~5 minutes then emitted everything at exit. Use Monitor with an
+  `until grep -q "Tests:"` loop rather than polling the file — and never read an empty output
+  file as "still starting up".

@@ -4,6 +4,7 @@ namespace VentureDrake\LaravelCrm\Livewire\Invoices;
 
 use App\Models\User;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
 use Illuminate\Pagination\LengthAwarePaginator;
 use Illuminate\Support\Collection;
 use Livewire\Component;
@@ -17,7 +18,7 @@ use VentureDrake\LaravelCrm\Traits\ResetsPaginationWhenPropsChanges;
 
 class InvoiceIndex extends Component
 {
-    use ClearsProperties, ResetsPaginationWhenPropsChanges, Toast, WithPagination;
+    use AuthorizesRequests, ClearsProperties, ResetsPaginationWhenPropsChanges, Toast, WithPagination;
 
     public $layout = 'index';
 
@@ -130,6 +131,8 @@ class InvoiceIndex extends Component
     public function delete($id)
     {
         if ($invoice = Invoice::find($id)) {
+            $this->authorize('delete', $invoice);
+
             $invoice->delete();
 
             $this->success(ucfirst(trans('laravel-crm::lang.invoice_deleted')));

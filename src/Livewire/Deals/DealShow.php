@@ -3,11 +3,15 @@
 namespace VentureDrake\LaravelCrm\Livewire\Deals;
 
 use Carbon\Carbon;
+use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
 use Livewire\Component;
+use Mary\Traits\Toast;
 use VentureDrake\LaravelCrm\Models\Deal;
 
 class DealShow extends Component
 {
+    use AuthorizesRequests, Toast;
+
     public $deal;
 
     public $email;
@@ -37,6 +41,8 @@ class DealShow extends Component
     public function won($id)
     {
         if ($deal = Deal::find($id)) {
+            $this->authorize('update', $deal);
+
             $pipeline = $deal->pipeline;
             $deal->update([
                 'closed_status' => 'won',
@@ -52,6 +58,8 @@ class DealShow extends Component
     public function lost($id)
     {
         if ($deal = Deal::find($id)) {
+            $this->authorize('update', $deal);
+
             $pipeline = $deal->pipeline;
             $deal->update([
                 'closed_status' => 'lost',
@@ -67,6 +75,8 @@ class DealShow extends Component
     public function reopen($id)
     {
         if ($deal = Deal::find($id)) {
+            $this->authorize('update', $deal);
+
             $pipeline = $deal->pipeline;
             $deal->update([
                 'closed_status' => null,
@@ -82,6 +92,8 @@ class DealShow extends Component
     public function delete($id)
     {
         if ($deal = Deal::find($id)) {
+            $this->authorize('delete', $deal);
+
             $deal->delete();
 
             $this->success(ucfirst(trans('laravel-crm::lang.deal_deleted')), redirectTo: route('laravel-crm.deals.index'));

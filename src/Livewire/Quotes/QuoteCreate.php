@@ -2,6 +2,7 @@
 
 namespace VentureDrake\LaravelCrm\Livewire\Quotes;
 
+use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
 use Livewire\Component;
 use VentureDrake\LaravelCrm\Livewire\Quotes\Traits\HasQuoteCommon;
 use VentureDrake\LaravelCrm\Livewire\Traits\HasOrganizationSuggest;
@@ -10,10 +11,11 @@ use VentureDrake\LaravelCrm\Models\Deal;
 use VentureDrake\LaravelCrm\Models\Lead;
 use VentureDrake\LaravelCrm\Models\Organization;
 use VentureDrake\LaravelCrm\Models\Person;
+use VentureDrake\LaravelCrm\Models\Quote;
 
 class QuoteCreate extends Component
 {
-    use HasOrganizationSuggest;
+    use AuthorizesRequests, HasOrganizationSuggest;
     use HasPersonSuggest;
     use HasQuoteCommon;
 
@@ -112,6 +114,8 @@ class QuoteCreate extends Component
 
     public function save()
     {
+        $this->authorize('create', Quote::class);
+
         $this->validate();
 
         // Create a request object to pass to services

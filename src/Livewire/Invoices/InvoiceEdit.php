@@ -2,6 +2,7 @@
 
 namespace VentureDrake\LaravelCrm\Livewire\Invoices;
 
+use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
 use Livewire\Component;
 use VentureDrake\LaravelCrm\Livewire\Invoices\Traits\HasInvoiceCommon;
 use VentureDrake\LaravelCrm\Livewire\Traits\HasOrganizationSuggest;
@@ -12,7 +13,7 @@ use VentureDrake\LaravelCrm\Models\Person;
 
 class InvoiceEdit extends Component
 {
-    use HasInvoiceCommon;
+    use AuthorizesRequests, HasInvoiceCommon;
     use HasOrganizationSuggest;
     use HasPersonSuggest;
 
@@ -44,6 +45,8 @@ class InvoiceEdit extends Component
 
     public function save()
     {
+        $this->authorize('update', $this->invoice);
+
         $this->validate();
 
         // Create a request object to pass to services
