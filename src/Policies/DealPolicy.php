@@ -97,6 +97,22 @@ class DealPolicy
         return false;
     }
 
+    /**
+     * Determine whether the user can manage the products (line items) on deals.
+     *
+     * Gated on the deal permission rather than the product permission: line-item
+     * editing is part of building a deal, and neither Manager nor Employee holds
+     * any 'crm products' permission.
+     *
+     * @return mixed
+     */
+    public function manageProducts(User $user)
+    {
+        if ($this->isEnabled() && $user->hasPermissionTo('edit crm deals')) {
+            return true;
+        }
+    }
+
     protected function isEnabled()
     {
         if (is_array(config('laravel-crm.modules')) && in_array('deals', config('laravel-crm.modules'))) {

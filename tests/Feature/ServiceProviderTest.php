@@ -5,12 +5,14 @@ use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\Route;
 use VentureDrake\LaravelCrm\LaravelCrm;
+use VentureDrake\LaravelCrm\Models\Activity;
 use VentureDrake\LaravelCrm\Models\Deal;
 use VentureDrake\LaravelCrm\Models\Invoice;
 use VentureDrake\LaravelCrm\Models\Lead;
 use VentureDrake\LaravelCrm\Models\Order;
 use VentureDrake\LaravelCrm\Models\Organization;
 use VentureDrake\LaravelCrm\Models\Person;
+use VentureDrake\LaravelCrm\Models\ProductAttribute;
 use VentureDrake\LaravelCrm\Models\Quote;
 use VentureDrake\LaravelCrm\Services\SettingService;
 
@@ -67,6 +69,8 @@ test('policies are registered for core models', function () {
     expect(Gate::getPolicyFor(Quote::class))->not->toBeNull();
     expect(Gate::getPolicyFor(Order::class))->not->toBeNull();
     expect(Gate::getPolicyFor(Invoice::class))->not->toBeNull();
+    expect(Gate::getPolicyFor(Activity::class))->not->toBeNull();
+    expect(Gate::getPolicyFor(ProductAttribute::class))->not->toBeNull();
 });
 
 test('blade components are namespaced under crm', function () {

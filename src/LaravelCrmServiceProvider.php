@@ -396,6 +396,7 @@ use VentureDrake\LaravelCrm\Observers\XeroItemObserver;
 use VentureDrake\LaravelCrm\Observers\XeroPersonObserver;
 use VentureDrake\LaravelCrm\Observers\XeroPurchaseOrderObserver;
 use VentureDrake\LaravelCrm\Observers\XeroTokenObserver;
+use VentureDrake\LaravelCrm\Policies\ActivityPolicy;
 use VentureDrake\LaravelCrm\Policies\CallPolicy;
 use VentureDrake\LaravelCrm\Policies\ChatConversationPolicy;
 use VentureDrake\LaravelCrm\Policies\ChatWidgetPolicy;
@@ -425,6 +426,7 @@ use VentureDrake\LaravelCrm\Policies\PermissionPolicy;
 use VentureDrake\LaravelCrm\Policies\PersonPolicy;
 use VentureDrake\LaravelCrm\Policies\PipelinePolicy;
 use VentureDrake\LaravelCrm\Policies\PipelineStagePolicy;
+use VentureDrake\LaravelCrm\Policies\ProductAttributePolicy;
 use VentureDrake\LaravelCrm\Policies\ProductCategoryPolicy;
 use VentureDrake\LaravelCrm\Policies\ProductPolicy;
 use VentureDrake\LaravelCrm\Policies\PurchaseOrderPolicy;
@@ -474,9 +476,11 @@ class LaravelCrmServiceProvider extends ServiceProvider
         'VentureDrake\LaravelCrm\Models\Contact' => ContactPolicy::class,
         'VentureDrake\LaravelCrm\Models\Product' => ProductPolicy::class,
         'VentureDrake\LaravelCrm\Models\ProductCategory' => ProductCategoryPolicy::class,
+        'VentureDrake\LaravelCrm\Models\ProductAttribute' => ProductAttributePolicy::class,
         'VentureDrake\LaravelCrm\Models\TaxRate' => TaxRatePolicy::class,
         'VentureDrake\LaravelCrm\Models\Label' => LabelPolicy::class,
         'VentureDrake\LaravelCrm\Models\LeadSource' => LeadSourcePolicy::class,
+        'VentureDrake\LaravelCrm\Models\Activity' => ActivityPolicy::class,
         'VentureDrake\LaravelCrm\Models\Task' => TaskPolicy::class,
         'VentureDrake\LaravelCrm\Models\Note' => NotePolicy::class,
         'VentureDrake\LaravelCrm\Models\Call' => CallPolicy::class,

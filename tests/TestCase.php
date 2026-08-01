@@ -133,4 +133,21 @@ abstract class TestCase extends OrchestraTestCase
 
         return $user;
     }
+
+    /**
+     * Sign in a user scoped to an explicit permission list.
+     *
+     * The User stub grants everything when `crm_permissions` is null, so pass an
+     * explicit list here to exercise a policy denial path. An empty array means
+     * "no CRM permissions at all".
+     *
+     * @param  array<int, string>  $permissions
+     */
+    protected function actingAsUserWithPermissions(array $permissions, array $attributes = []): User
+    {
+        return $this->actingAsUser(array_merge([
+            'crm_access' => 1,
+            'crm_permissions' => json_encode($permissions),
+        ], $attributes));
+    }
 }
