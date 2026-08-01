@@ -2,7 +2,6 @@
     Compact PDF template layout.
 
     Visual language:
-      * Smaller type (base 9.5px vs 11px)
       * Tighter row padding (4-6px vs 8-10px)
       * Monochrome — pure black text on white, gray dividers only
       * Dense two-column meta at top
@@ -19,7 +18,7 @@
     .compact-pdf {
         font-family: 'Nunito', 'Helvetica', sans-serif;
         color: #000000;
-        font-size: 10.5px;
+        font-size: 13.5px;
         line-height: 1.25;
     }
 
@@ -38,20 +37,20 @@
     }
 
     .compact-pdf .compact-brand-logo {
-        max-height: 54px;
-        max-width: 195px;
+        max-height: 81px;
+        max-width: 292px;
         display: block;
         margin-bottom: 3px;
     }
 
     .compact-pdf .compact-brand-name {
-        font-size: 11.5px;
+        font-size: 15px;
         font-weight: 600;
         color: #000000;
     }
 
     .compact-pdf .compact-doc-title {
-        font-size: 15px;
+        font-size: 19.5px;
         font-weight: 700;
         color: #000000;
         text-align: right;
@@ -68,7 +67,7 @@
 
     .compact-pdf .compact-meta td {
         padding: 2px 6px 2px 0;
-        font-size: 10.5px;
+        font-size: 13.5px;
         vertical-align: top;
     }
 
@@ -95,7 +94,7 @@
 
     .compact-pdf .compact-party-heading {
         color: #000000;
-        font-size: 10px;
+        font-size: 13px;
         font-weight: 700;
         text-transform: uppercase;
         letter-spacing: 0.06em;
@@ -117,7 +116,7 @@
         border-bottom: 1px solid #000000;
         color: #000000;
         font-weight: 700;
-        font-size: 10px;
+        font-size: 13px;
         text-transform: uppercase;
         letter-spacing: 0.04em;
     }
@@ -151,7 +150,7 @@
 
     .compact-pdf .compact-totals td {
         padding: 3px 6px;
-        font-size: 10.5px;
+        font-size: 13.5px;
     }
 
     .compact-pdf .compact-totals .compact-totals-label {
@@ -170,7 +169,7 @@
         border-top: 1px solid #000000;
         font-weight: 700;
         color: #000000;
-        font-size: 11.5px;
+        font-size: 15px;
     }
 
     .compact-pdf .compact-footer {
@@ -185,7 +184,7 @@
 
     .compact-pdf .compact-footer-heading {
         color: #000000;
-        font-size: 10px;
+        font-size: 13px;
         font-weight: 700;
         text-transform: uppercase;
         letter-spacing: 0.04em;
