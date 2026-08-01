@@ -72,6 +72,12 @@
         font-size: 11.5px;
     }
 
+    /* The final meta underline sat immediately above .prof-parties'
+       border-top, drawing two rules where the design calls for one. */
+    .professional-pdf .prof-meta tr:last-child td {
+        border-bottom: 0;
+    }
+
     .professional-pdf .prof-meta .prof-meta-label {
         color: #7a7a7a;
         width: 42%;
