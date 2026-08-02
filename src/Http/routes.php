@@ -255,25 +255,32 @@ Route::group(['prefix' => 'deals', 'middleware' => 'auth.laravel-crm'], function
     // would be denied. Mirrors the shipped can:manageStatuses,...\Feature precedent.
     Route::group(['prefix' => '{deal}/products', 'middleware' => ['auth.laravel-crm', 'can:manageProducts,VentureDrake\LaravelCrm\Models\Deal']], function () {
         Route::get('', 'VentureDrake\LaravelCrm\Http\Controllers\DealProductController@index')
-            ->name('laravel-crm.deal-products.index');
+            ->name('laravel-crm.deal-products.index')
+            ->middleware(['can:view,deal']);
 
         Route::get('create', 'VentureDrake\LaravelCrm\Http\Controllers\DealProductController@create')
-            ->name('laravel-crm.deal-products.create');
+            ->name('laravel-crm.deal-products.create')
+            ->middleware(['can:update,deal']);
 
         Route::post('', 'VentureDrake\LaravelCrm\Http\Controllers\DealProductController@store')
-            ->name('laravel-crm.deal-products.store');
+            ->name('laravel-crm.deal-products.store')
+            ->middleware(['can:update,deal']);
 
         Route::get('{product}', 'VentureDrake\LaravelCrm\Http\Controllers\DealProductController@show')
-            ->name('laravel-crm.deal-products.show');
+            ->name('laravel-crm.deal-products.show')
+            ->middleware(['can:view,deal']);
 
         Route::get('{product}/edit', 'VentureDrake\LaravelCrm\Http\Controllers\DealProductController@edit')
-            ->name('laravel-crm.deal-products.edit');
+            ->name('laravel-crm.deal-products.edit')
+            ->middleware(['can:update,deal']);
 
         Route::put('{product}', 'VentureDrake\LaravelCrm\Http\Controllers\DealProductController@update')
-            ->name('laravel-crm.deal-products.update');
+            ->name('laravel-crm.deal-products.update')
+            ->middleware(['can:update,deal']);
 
         Route::delete('{product}', 'VentureDrake\LaravelCrm\Http\Controllers\DealProductController@destroy')
-            ->name('laravel-crm.deal-products.destroy');
+            ->name('laravel-crm.deal-products.destroy')
+            ->middleware(['can:update,deal']);
     });
 });
 
@@ -334,25 +341,32 @@ Route::group(['prefix' => 'quotes', 'middleware' => 'auth.laravel-crm'], functio
     // so {quote} never becomes a model and can:update,quote would deny everyone.
     Route::group(['prefix' => '{quote}/products', 'middleware' => ['auth.laravel-crm', 'can:manageProducts,VentureDrake\LaravelCrm\Models\Quote']], function () {
         Route::get('', 'VentureDrake\LaravelCrm\Http\Controllers\QuoteProductController@index')
-            ->name('laravel-crm.quote-products.index');
+            ->name('laravel-crm.quote-products.index')
+            ->middleware(['can:view,quote']);
 
         Route::get('create', 'VentureDrake\LaravelCrm\Http\Controllers\QuoteProductController@create')
-            ->name('laravel-crm.quote-products.create');
+            ->name('laravel-crm.quote-products.create')
+            ->middleware(['can:update,quote']);
 
         Route::post('', 'VentureDrake\LaravelCrm\Http\Controllers\QuoteProductController@store')
-            ->name('laravel-crm.quote-products.store');
+            ->name('laravel-crm.quote-products.store')
+            ->middleware(['can:update,quote']);
 
         Route::get('{product}', 'VentureDrake\LaravelCrm\Http\Controllers\QuoteProductController@show')
-            ->name('laravel-crm.quote-products.show');
+            ->name('laravel-crm.quote-products.show')
+            ->middleware(['can:view,quote']);
 
         Route::get('{product}/edit', 'VentureDrake\LaravelCrm\Http\Controllers\QuoteProductController@edit')
-            ->name('laravel-crm.quote-products.edit');
+            ->name('laravel-crm.quote-products.edit')
+            ->middleware(['can:update,quote']);
 
         Route::put('{product}', 'VentureDrake\LaravelCrm\Http\Controllers\QuoteProductController@update')
-            ->name('laravel-crm.quote-products.update');
+            ->name('laravel-crm.quote-products.update')
+            ->middleware(['can:update,quote']);
 
         Route::delete('{product}', 'VentureDrake\LaravelCrm\Http\Controllers\QuoteProductController@destroy')
-            ->name('laravel-crm.quote-products.destroy');
+            ->name('laravel-crm.quote-products.destroy')
+            ->middleware(['can:update,quote']);
     });
 });
 
@@ -409,25 +423,32 @@ Route::group(['prefix' => 'orders', 'middleware' => 'auth.laravel-crm'], functio
     // so {order} never becomes a model and can:update,order would deny everyone.
     Route::group(['prefix' => '{order}/products', 'middleware' => ['auth.laravel-crm', 'can:manageProducts,VentureDrake\LaravelCrm\Models\Order']], function () {
         Route::get('', 'VentureDrake\LaravelCrm\Http\Controllers\OrderProductController@index')
-            ->name('laravel-crm.order-products.index');
+            ->name('laravel-crm.order-products.index')
+            ->middleware(['can:view,order']);
 
         Route::get('create', 'VentureDrake\LaravelCrm\Http\Controllers\OrderProductController@create')
-            ->name('laravel-crm.order-products.create');
+            ->name('laravel-crm.order-products.create')
+            ->middleware(['can:update,order']);
 
         Route::post('', 'VentureDrake\LaravelCrm\Http\Controllers\OrderProductController@store')
-            ->name('laravel-crm.order-products.store');
+            ->name('laravel-crm.order-products.store')
+            ->middleware(['can:update,order']);
 
         Route::get('{product}', 'VentureDrake\LaravelCrm\Http\Controllers\OrderProductController@show')
-            ->name('laravel-crm.order-products.show');
+            ->name('laravel-crm.order-products.show')
+            ->middleware(['can:view,order']);
 
         Route::get('{product}/edit', 'VentureDrake\LaravelCrm\Http\Controllers\OrderProductController@edit')
-            ->name('laravel-crm.order-products.edit');
+            ->name('laravel-crm.order-products.edit')
+            ->middleware(['can:update,order']);
 
         Route::put('{product}', 'VentureDrake\LaravelCrm\Http\Controllers\OrderProductController@update')
-            ->name('laravel-crm.order-products.update');
+            ->name('laravel-crm.order-products.update')
+            ->middleware(['can:update,order']);
 
         Route::delete('{product}', 'VentureDrake\LaravelCrm\Http\Controllers\OrderProductController@destroy')
-            ->name('laravel-crm.order-products.destroy');
+            ->name('laravel-crm.order-products.destroy')
+            ->middleware(['can:update,order']);
     });
 });
 
