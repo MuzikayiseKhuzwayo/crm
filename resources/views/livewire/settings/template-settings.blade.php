@@ -18,7 +18,7 @@
                     <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-5 gap-4">
                         @foreach ($templates as $slug => $template)
                             @php($isSelected = ($selected[$docType] ?? null) === $slug)
-                            @php($thumbnailPath = 'vendor/laravel-crm/img/pdf-templates/'.$slug.'.svg')
+                            @php($thumbnailUrl = route('laravel-crm.settings.templates.thumbnail', ['slug' => $slug]))
                             @php($previewUrl = route('laravel-crm.settings.templates.preview', ['docType' => $docType, 'slug' => $slug]))
                             <div
                                 wire:key="template-card-{{ $docType }}-{{ $slug }}"
@@ -42,15 +42,11 @@
                                     @endif
                                 </div>
                                 <div class="bg-base-200/50 rounded flex items-center justify-center overflow-hidden" style="height: 140px;">
-                                    @if (file_exists(public_path($thumbnailPath)))
-                                        <img
-                                            src="{{ asset($thumbnailPath) }}"
-                                            alt="{{ $template['label'] }}"
-                                            class="max-h-full max-w-full object-contain"
-                                        />
-                                    @else
-                                        <div class="text-xs text-base-content/40 p-3 text-center">{{ ucfirst($template['label']) }}</div>
-                                    @endif
+                                    <img
+                                        src="{{ $thumbnailUrl }}"
+                                        alt="{{ ucfirst($template['label']) }}"
+                                        class="max-h-full max-w-full object-contain"
+                                    />
                                 </div>
                                 <p class="text-xs text-base-content/70">{{ $template['description'] }}</p>
                                 <a

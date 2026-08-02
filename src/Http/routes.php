@@ -1271,6 +1271,14 @@ Route::group(['prefix' => 'settings', 'middleware' => 'auth.laravel-crm'], funct
         ->name('laravel-crm.settings.templates.preview')
         ->middleware(['can:update,VentureDrake\LaravelCrm\Models\Setting']);
 
+    /* PDF Template Thumbnail — serves the picker's preview artwork from the
+       package when the host's published assets predate it, so the picker
+       never degrades to text-only placeholders. Same permission gate as the
+       picker page that embeds it. */
+    Route::get('templates/thumbnail/{slug}', 'VentureDrake\LaravelCrm\Http\Controllers\TemplatePreviewController@thumbnail')
+        ->name('laravel-crm.settings.templates.thumbnail')
+        ->middleware(['can:update,VentureDrake\LaravelCrm\Models\Setting']);
+
     /* Templates settings — the admin picker for per-doc-type template
        preference. Same settings-edit permission gate as General Settings
        AND the preview route above so all three surfaces are governed by
