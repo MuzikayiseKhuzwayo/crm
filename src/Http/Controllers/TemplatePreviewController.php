@@ -73,6 +73,34 @@ class TemplatePreviewController extends Controller
     }
 
     /**
+     * Serve the picker thumbnail SVG for `{slug}`.
+     *
+     * Called via `GET /settings/templates/thumbnail/{slug}` from the
+     * Templates picker's `<img>` tags. Resolving through the registry
+     * (published copy first, packaged copy second) rather than linking
+     * `asset()` directly means the picker still renders artwork on a host
+     * whose published assets predate these thumbnails — the previous
+     * `asset()` link 404'd there and the picker fell back to text-only
+     * placeholders.
+     *
+     * The SVGs are identical for every user and carry no tenant data, so
+     * they are safe to cache publicly for a day.
+     */
+    public function thumbnail(string $slug)
+    {
+        $path = PdfTemplateRegistry::thumbnailFile($slug);
+
+        if ($path === null) {
+            throw new NotFoundHttpException('Unknown PDF template thumbnail.');
+        }
+
+        return response()->file($path, [
+            'Content-Type' => 'image/svg+xml',
+            'Cache-Control' => 'public, max-age=86400',
+        ]);
+    }
+
+    /**
      * Build the view data array for a given doc type, mirroring the
      * variable set the real download controllers pass to their Blade
      * templates. Every model in the returned array is unsaved (via

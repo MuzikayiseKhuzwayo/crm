@@ -148,3 +148,76 @@ test('preview works on a brand-new install with zero real records', function () 
         $response->assertHeader('Content-Type', 'application/pdf');
     }
 });
+
+test('thumbnail route is registered under the settings-permission middleware group', function () {
+    $route = Route::getRoutes()->getByName('laravel-crm.settings.templates.thumbnail');
+
+    expect($route)->not->toBeNull();
+    expect($route->uri())->toContain('settings/templates/thumbnail/{slug}');
+    expect($route->methods())->toContain('GET');
+    expect($route->middleware())->toContain('auth.laravel-crm');
+    expect($route->middleware())->toContain('can:update,VentureDrake\LaravelCrm\Models\Setting');
+});
+
+test('thumbnail serves SVG artwork for every slug', function () {
+    foreach (PdfTemplateRegistry::SLUGS as $slug) {
+        $response = $this->get(route('laravel-crm.settings.templates.thumbnail', ['slug' => $slug]));
+
+        $response->assertOk();
+        $response->assertHeader('Content-Type', 'image/svg+xml');
+        expect($response->baseResponse->getFile()->getContent())->toContain('<svg');
+    }
+});
+
+test('thumbnail falls back to the packaged artwork when the host has not published assets', function () {
+    // The regression this guards: a host whose `vendor:publish --tag=assets`
+    // predates the thumbnails has no `public/vendor/laravel-crm/img/
+    // pdf-templates` directory, and the picker silently degraded to
+    // text-only placeholders. Point public_path() at an empty directory to
+    // reproduce that host exactly.
+    $this->app->usePublicPath(sys_get_temp_dir().'/laravel-crm-no-published-assets');
+
+    foreach (PdfTemplateRegistry::SLUGS as $slug) {
+        expect(file_exists(public_path(PdfTemplateRegistry::THUMBNAIL_DIR.'/'.$slug.'.svg')))->toBeFalse();
+
+        $path = PdfTemplateRegistry::thumbnailFile($slug);
+
+        expect($path)->not->toBeNull();
+        expect(is_file($path))->toBeTrue();
+        expect(file_get_contents($path))->toContain('<svg');
+
+        $response = $this->get(route('laravel-crm.settings.templates.thumbnail', ['slug' => $slug]));
+
+        $response->assertOk();
+        $response->assertHeader('Content-Type', 'image/svg+xml');
+    }
+});
+
+test('thumbnail prefers a host override over the packaged artwork', function () {
+    $publicPath = sys_get_temp_dir().'/laravel-crm-override-assets';
+    $dir = $publicPath.'/'.PdfTemplateRegistry::THUMBNAIL_DIR;
+
+    if (! is_dir($dir)) {
+        mkdir($dir, 0777, true);
+    }
+
+    $override = $dir.'/modern.svg';
+    file_put_contents($override, '<svg xmlns="http://www.w3.org/2000/svg"><!-- host override --></svg>');
+
+    $this->app->usePublicPath($publicPath);
+
+    expect(PdfTemplateRegistry::thumbnailFile('modern'))->toBe($override);
+
+    $response = $this->get(route('laravel-crm.settings.templates.thumbnail', ['slug' => 'modern']));
+
+    $response->assertOk();
+    expect($response->baseResponse->getFile()->getContent())->toContain('host override');
+
+    unlink($override);
+});
+
+test('thumbnail 404s for an unknown slug', function () {
+    $response = $this->get(route('laravel-crm.settings.templates.thumbnail', ['slug' => 'not-a-template']));
+
+    $response->assertNotFound();
+});

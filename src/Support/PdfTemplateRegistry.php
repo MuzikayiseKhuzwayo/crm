@@ -30,6 +30,24 @@ class PdfTemplateRegistry
     ];
 
     /**
+     * The 5 shipped template slugs, in picker display order.
+     *
+     * @var array<int, string>
+     */
+    public const SLUGS = [
+        'modern',
+        'classic',
+        'bold',
+        'compact',
+        'professional',
+    ];
+
+    /**
+     * Public-relative directory holding the picker thumbnails.
+     */
+    public const THUMBNAIL_DIR = 'vendor/laravel-crm/img/pdf-templates';
+
+    /**
      * The default template slug — always resolvable via `viewFor(...)` for
      * every doc type, and used as the fallback when a caller passes an
      * unknown slug.
@@ -52,16 +70,49 @@ class PdfTemplateRegistry
     {
         $entries = [];
 
-        foreach (['modern', 'classic', 'bold', 'compact', 'professional'] as $slug) {
+        foreach (self::SLUGS as $slug) {
             $entries[$slug] = [
                 'slug' => $slug,
                 'label' => ucfirst(__('laravel-crm::lang.pdf_template_'.$slug)),
                 'description' => __('laravel-crm::lang.pdf_template_'.$slug.'_description'),
-                'thumbnail' => 'vendor/laravel-crm/img/pdf-templates/'.$slug.'.svg',
+                'thumbnail' => self::THUMBNAIL_DIR.'/'.$slug.'.svg',
             ];
         }
 
         return $entries;
+    }
+
+    /**
+     * Resolve the on-disk path of a template's picker thumbnail, or null
+     * when the slug is unknown / the file is missing.
+     *
+     * Checks the host's published copy first so an app that has overridden
+     * the shipped artwork keeps its override, then falls back to the copy
+     * inside the package. The fallback is what makes the picker work on a
+     * host whose `vendor:publish --tag=assets` predates this artwork — the
+     * thumbnails ship with the package, so requiring a re-publish just to
+     * see them silently degraded the picker to text-only placeholders.
+     */
+    public static function thumbnailFile(string $slug): ?string
+    {
+        if (! in_array($slug, self::SLUGS, true)) {
+            return null;
+        }
+
+        $relative = self::THUMBNAIL_DIR.'/'.$slug.'.svg';
+
+        $candidates = [
+            public_path($relative),
+            __DIR__.'/../../public/'.$relative,
+        ];
+
+        foreach ($candidates as $path) {
+            if (is_file($path) && is_readable($path)) {
+                return $path;
+            }
+        }
+
+        return null;
     }
 
     /**
