@@ -52,9 +52,11 @@ trait HasUserCommon
 
     public function mountCommon()
     {
-        // Role::assignable() is the single source of truth for "roles this caller
-        // may hand out" -- the dropdown and the validation rule must not diverge.
-        foreach (Role::assignable()->get() as $role) {
+        // Role::assignableBy() is the single source of truth for "roles this caller
+        // may hand out" -- the dropdown and the AssignableRole validation rule on
+        // UserCreate/UserEdit must not diverge. assignable() would keep Owner in the
+        // set for everyone, offering a non-Owner an option the rule then rejects.
+        foreach (Role::assignableBy()->get() as $role) {
             $this->roles[] = [
                 'id' => $role->id,
                 'name' => $role->name,

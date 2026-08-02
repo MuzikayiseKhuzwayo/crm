@@ -31,7 +31,18 @@ class UserEdit extends Component
         $this->name = $this->user->name;
         $this->email = $this->user->email;
         $this->crm_access = (bool) $this->user->crm_access;
-        $this->role = optional($this->user->roles()->first())->id;
+        // Prefill from the target's current CRM role, but only when this caller could
+        // actually hand that role out again. roles() is the unfiltered Spatie relation,
+        // so a host-app role (crm_role = 0) or an Owner being edited by a non-Owner
+        // would otherwise be bounced by the AssignableRole rule on a save that never
+        // touched the field -- making the whole record unsaveable, name and phone
+        // included. Leaving it null is a safe no-op: save() only removes and reassigns
+        // when a role was actually chosen.
+        $currentRole = $this->user->roles()->where('crm_role', 1)->first();
+
+        $this->role = $currentRole && Role::assignableBy()->whereKey($currentRole->getKey())->exists()
+            ? $currentRole->getKey()
+            : null;
 
         if (method_exists($this->user, 'crmTeams')) {
             $this->userTeams = $this->user->crmTeams()->pluck('crm_team_user.crm_team_id')->toArray();

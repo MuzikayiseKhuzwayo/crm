@@ -7,6 +7,7 @@ use Illuminate\Support\Facades\Schema;
 use Livewire\Livewire;
 use VentureDrake\LaravelCrm\Livewire\Teams\TeamIndex;
 use VentureDrake\LaravelCrm\Livewire\Users\UserCreate;
+use VentureDrake\LaravelCrm\Livewire\Users\UserEdit;
 use VentureDrake\LaravelCrm\Livewire\Users\UserIndex;
 use VentureDrake\LaravelCrm\Livewire\Users\UserInvite;
 use VentureDrake\LaravelCrm\Models\Role;
@@ -59,6 +60,13 @@ class AuthzTeamIndex extends TeamIndex
     }
 }
 class AuthzUserInvite extends UserInvite
+{
+    public function render()
+    {
+        return '<div></div>';
+    }
+}
+class AuthzUserEdit extends UserEdit
 {
     public function render()
     {
@@ -580,4 +588,130 @@ it('falls open rather than erroring when the host ships no team_user pivot', fun
         ->all();
 
     expect($listed)->toContain($other->email);
+});
+
+/*
+ * ---------------------------------------------------------------------------
+ * Dropdown / validation-rule parity.
+ *
+ * Role::assignable() deliberately keeps Owner in the set so ownership transfer
+ * stays possible, but every option surfaced to a user is later validated by
+ * AssignableRole -> Role::assignableBy(). Building a dropdown from assignable()
+ * therefore offers a non-Owner an option the rule always rejects.
+ * ---------------------------------------------------------------------------
+ */
+
+it('keeps the Owner role out of the create/edit dropdown for a non-Owner', function () {
+    $this->actingAsUserWithPermissions(
+        ['create crm users'],
+        ['crm_roles' => json_encode(['Admin'])]
+    );
+
+    us005MakeRole('Owner');
+    us005MakeRole('Editor');
+
+    $roles = collect(Livewire::test(AuthzUserCreate::class)->get('roles'))
+        ->pluck('name')
+        ->filter()
+        ->all();
+
+    expect($roles)->toContain('Editor')
+        ->and($roles)->not->toContain('Owner');
+});
+
+it('offers the Owner role in the create/edit dropdown to an Owner', function () {
+    $this->actingAsUserWithPermissions(
+        ['create crm users'],
+        ['crm_roles' => json_encode(['Owner'])]
+    );
+
+    us005MakeRole('Owner');
+
+    $roles = collect(Livewire::test(AuthzUserCreate::class)->get('roles'))
+        ->pluck('name')
+        ->filter()
+        ->all();
+
+    expect($roles)->toContain('Owner');
+});
+
+/*
+ * ---------------------------------------------------------------------------
+ * UserEdit prefill.
+ *
+ * rules() validates `role` on every save, so mount() must not seed it with a
+ * value this caller could never re-submit -- otherwise editing an unrelated
+ * field bounces on a role the editor never touched and nothing persists.
+ * ---------------------------------------------------------------------------
+ */
+
+it('lets a non-Owner save an unrelated edit to a user who holds the Owner role', function () {
+    $this->actingAsUserWithPermissions(
+        ['edit crm users'],
+        ['crm_roles' => json_encode(['Admin'])]
+    );
+
+    $ownerRoleId = us005MakeRole('Owner');
+
+    $target = us005MakeUser('the-owner@example.test');
+    DB::table('model_has_roles')->insert([
+        'role_id' => $ownerRoleId,
+        'model_type' => $target->getMorphClass(),
+        'model_id' => $target->id,
+    ]);
+
+    Livewire::test(AuthzUserEdit::class, ['user' => $target])
+        ->set('name', 'Renamed owner')
+        ->call('save')
+        ->assertHasNoErrors();
+
+    expect(User::find($target->id)->name)->toBe('Renamed owner')
+        // The Owner role is left alone -- the prefill is null, so save() never
+        // reaches the remove/reassign branch.
+        ->and(DB::table('model_has_roles')
+            ->where('role_id', $ownerRoleId)
+            ->where('model_id', $target->id)
+            ->count())->toBe(1);
+});
+
+it('lets an admin save an edit to a user who holds a non-CRM host app role', function () {
+    $this->actingAsUserWithPermissions(
+        ['edit crm users'],
+        ['crm_roles' => json_encode(['Admin'])]
+    );
+
+    $hostRoleId = us005MakeRole('Billing Manager', crmRole: 0);
+
+    $target = us005MakeUser('billing@example.test');
+    DB::table('model_has_roles')->insert([
+        'role_id' => $hostRoleId,
+        'model_type' => $target->getMorphClass(),
+        'model_id' => $target->id,
+    ]);
+
+    Livewire::test(AuthzUserEdit::class, ['user' => $target])
+        ->set('name', 'Renamed billing')
+        ->call('save')
+        ->assertHasNoErrors();
+
+    expect(User::find($target->id)->name)->toBe('Renamed billing');
+});
+
+it('prefills the edit form with a CRM role the caller may actually reassign', function () {
+    $this->actingAsUserWithPermissions(
+        ['edit crm users'],
+        ['crm_roles' => json_encode(['Admin'])]
+    );
+
+    $editorRoleId = us005MakeRole('Editor');
+
+    $target = us005MakeUser('editor@example.test');
+    DB::table('model_has_roles')->insert([
+        'role_id' => $editorRoleId,
+        'model_type' => $target->getMorphClass(),
+        'model_id' => $target->id,
+    ]);
+
+    expect(Livewire::test(AuthzUserEdit::class, ['user' => $target])->get('role'))
+        ->toBe($editorRoleId);
 });

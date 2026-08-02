@@ -131,10 +131,20 @@ class UserImport extends Component
 
             $roleName = $row['role'] ?? '';
 
+            // Both role sources are attacker-controlled -- the CSV `role` column and
+            // the wire:model-bound $defaultRole -- so both go through assignableBy(),
+            // the same predicate AssignableRole applies on the create/edit/invite
+            // forms. A bare name match here would let anyone holding `create crm
+            // users` import a row with role=Owner, or assign a host-app role such as
+            // super-admin, or a role belonging to another tenant.
+            //
+            // An unassignable role is dropped rather than failing the row, matching
+            // UserController::invitationRole(): the user is still imported with CRM
+            // access and an Owner can set their role afterwards.
             if (! empty($roleName)) {
-                $role = Role::where('name', $roleName)->first();
+                $role = Role::assignableBy()->where('name', $roleName)->first();
             } elseif ($this->defaultRole) {
-                $role = Role::find($this->defaultRole);
+                $role = Role::assignableBy()->find($this->defaultRole);
             } else {
                 $role = null;
             }
@@ -245,8 +255,12 @@ class UserImport extends Component
         $lastPage = $total > 0 ? (int) ceil($total / self::PER_PAGE) : 1;
         $pageRows = array_slice($allRows, ($this->page - 1) * self::PER_PAGE, self::PER_PAGE);
 
-        $roles = Role::crm()
-            ->when(config('laravel-crm.teams'), fn ($q) => $q->where('team_id', auth()->user()->currentTeam->id))
+        // Same predicate the $defaultRole assignment above is vetted against, so the
+        // options offered and the values accepted cannot diverge. The old
+        // `where('team_id', currentTeam->id)` filter also rendered an empty list under
+        // teams (the seeded roles carry team_id => null) and had no null-safe
+        // navigation, 500ing for a user with no current team.
+        $roles = Role::assignableBy()
             ->get(['id', 'name'])
             ->map(fn ($r) => ['id' => (string) $r->id, 'name' => $r->name])
             ->prepend(['id' => '', 'name' => '— '.ucfirst(__('laravel-crm::lang.no_default_role')).' —'])
