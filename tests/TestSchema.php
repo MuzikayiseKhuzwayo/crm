@@ -296,6 +296,25 @@ class TestSchema
             $table->softDeletes();
         });
 
+        Schema::create($prefix.'deal_products', function (Blueprint $table) {
+            $table->bigIncrements('id');
+            $table->string('external_id')->nullable();
+            $table->unsignedBigInteger('team_id')->nullable();
+            $table->unsignedBigInteger('deal_id');
+            $table->unsignedBigInteger('product_id')->nullable();
+            $table->unsignedBigInteger('product_variation_id')->nullable();
+            $table->text('comments')->nullable();
+            $table->integer('order')->nullable();
+            $table->integer('price')->nullable();
+            $table->integer('quantity')->nullable();
+            $table->decimal('tax_rate')->nullable();
+            $table->integer('tax_amount')->nullable();
+            $table->integer('amount')->nullable();
+            $table->string('currency', 3)->default('USD');
+            $table->timestamps();
+            $table->softDeletes();
+        });
+
         Schema::create($prefix.'labels', function (Blueprint $table) {
             $table->bigIncrements('id');
             $table->string('external_id')->nullable();

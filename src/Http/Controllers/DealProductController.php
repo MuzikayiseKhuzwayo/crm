@@ -69,10 +69,9 @@ class DealProductController extends Controller
     /**
      * Show the form for editing the specified resource.
      *
-     * @param  int  $id
      * @return Response
      */
-    public function edit(DealProduct $dealProduct)
+    public function edit(Deal $deal, DealProduct $product)
     {
         return view('laravel-crm::deal-products.edit');
     }

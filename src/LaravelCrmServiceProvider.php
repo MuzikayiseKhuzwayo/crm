@@ -483,6 +483,7 @@ class LaravelCrmServiceProvider extends ServiceProvider
         'VentureDrake\LaravelCrm\Models\Activity' => ActivityPolicy::class,
         'VentureDrake\LaravelCrm\Models\Task' => TaskPolicy::class,
         'VentureDrake\LaravelCrm\Models\Note' => NotePolicy::class,
+        'VentureDrake\LaravelCrm\Models\Activity' => ActivityPolicy::class,
         'VentureDrake\LaravelCrm\Models\Call' => CallPolicy::class,
         'VentureDrake\LaravelCrm\Models\Meeting' => MeetingPolicy::class,
         'VentureDrake\LaravelCrm\Models\Lunch' => LunchPolicy::class,
