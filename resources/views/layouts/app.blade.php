@@ -274,7 +274,10 @@
                     <x-mary-menu-separator />
                     <x-mary-menu-sub title="{{ ucfirst(__('laravel-crm::lang.settings')) }}" icon="fas.cog" link="###">
                         @can('view crm settings')
-                            <x-mary-menu-item link="{{ url(route('laravel-crm.settings.edit')) }}" title="{{ ucwords(__('laravel-crm::lang.general_settings')) }}" />
+                            {{-- `exact` is required here: MaryUI marks an item active on URL
+                                 prefix match, so /crm/settings would also light up for its
+                                 nested pages (/crm/settings/templates, feature-statuses). --}}
+                            <x-mary-menu-item exact link="{{ url(route('laravel-crm.settings.edit')) }}" title="{{ ucwords(__('laravel-crm::lang.general_settings')) }}" />
                             <x-mary-menu-item link="{{ url(route('laravel-crm.settings.templates.edit')) }}" title="{{ ucwords(__('laravel-crm::lang.templates')) }}" />
                         @endcan
                         @can('view crm roles')
