@@ -66,6 +66,15 @@ class UserController extends Controller
      */
     public function store(StoreUserRequest $request)
     {
+        // Resolve and vet the role *before* the user row is written. StoreUserRequest
+        // already rejects an unassignable role, so this is belt-and-braces for any
+        // caller that skips the form request -- but it has to abort before the
+        // forceCreate() or a 403 leaves an orphaned, role-less user behind and burns
+        // the email address against the unique index.
+        $role = $request->role ? Role::assignable()->find($request->role) : null;
+
+        abort_if($role && $role->name === 'Owner' && ! auth()->user()->hasRole('Owner'), 403);
+
         $user = User::forceCreate([
             'name' => $request->name,
             'email' => $request->email,
@@ -73,16 +82,12 @@ class UserController extends Controller
             'crm_access' => (($request->crm_access == 'on') ? 1 : 0),
         ]);
 
-        if ($request->role) {
-            if ($role = Role::assignable()->find($request->role)) {
-                abort_if($role->name === 'Owner' && ! auth()->user()->hasRole('Owner'), 403);
-
-                if ($removeRole = $user->roles()->where('crm_role', 1)->first()) { // THIS COULD BE A BUG
-                    $user->removeRole($removeRole);
-                }
-
-                $user->assignRole($role);
+        if ($role) {
+            if ($removeRole = $user->roles()->where('crm_role', 1)->first()) { // THIS COULD BE A BUG
+                $user->removeRole($removeRole);
             }
+
+            $user->assignRole($role);
         }
 
         $this->updateUserPhones($user, $request->phones);
@@ -155,6 +160,11 @@ class UserController extends Controller
      */
     public function update(UpdateUserRequest $request, User $user)
     {
+        // Vet the role before any of the record is persisted -- see store().
+        $role = $request->role ? Role::assignable()->find($request->role) : null;
+
+        abort_if($role && $role->name === 'Owner' && ! auth()->user()->hasRole('Owner'), 403);
+
         $user->forceFill([
             'name' => $request->name,
             'email' => $request->email,
@@ -165,16 +175,12 @@ class UserController extends Controller
         $this->updateUserEmails($user, $request->emails);
         $this->updateUserAddresses($user, $request->addresses);
 
-        if ($request->role) {
-            if ($role = Role::assignable()->find($request->role)) {
-                abort_if($role->name === 'Owner' && ! auth()->user()->hasRole('Owner'), 403);
-
-                if ($removeRole = $user->roles()->where('crm_role', 1)->first()) {
-                    $user->removeRole($removeRole);
-                }
-
-                $user->assignRole($role);
+        if ($role) {
+            if ($removeRole = $user->roles()->where('crm_role', 1)->first()) {
+                $user->removeRole($removeRole);
             }
+
+            $user->assignRole($role);
         }
 
         if ($request->user_teams) {
@@ -398,6 +404,33 @@ class UserController extends Controller
     }
 
     /**
+     * Resolve the CRM role an invitation may actually confer.
+     *
+     * Defence in depth for the Owner escalation. UserInvite only offers Owner
+     * to an existing Owner, but an invitation minted before that guard -- or
+     * written by any other path -- must not be redeemable into an Owner
+     * either. The entitlement that matters at redemption time is the
+     * *inviter's*, not the invitee's, so re-check against invited_by.
+     *
+     * An inviter that can no longer be verified as an Owner is treated as not
+     * entitled and the role is dropped: the invitee still gets CRM access, and
+     * an Owner can set their role afterwards. Failing closed here is cheap;
+     * silently minting an Owner is not.
+     */
+    protected function invitationRole(UserInvitation $invitation): ?Role
+    {
+        if (! $invitation->role_id || ! $role = Role::find($invitation->role_id)) {
+            return null;
+        }
+
+        if ($role->name === 'Owner' && ! optional(User::find($invitation->invited_by))->hasRole('Owner')) {
+            return null;
+        }
+
+        return $role;
+    }
+
+    /**
      * Handle the accept-invitation POST. Existing users hit the
      * same three-branch flow as showAcceptInvite so that a POST
      * from a logged-out browser still redirects to login and a
@@ -451,11 +484,14 @@ class UserController extends Controller
         DB::transaction(function () use ($invitation, $user) {
             $user->forceFill(['crm_access' => 1])->save();
 
-            if ($invitation->role_id && $role = Role::find($invitation->role_id)) {
-                if (config('laravel-crm.teams') && $invitation->team_id) {
-                    app(PermissionRegistrar::class)->setPermissionsTeamId($invitation->team_id);
-                }
+            // Set the permissions team context before resolving the role:
+            // invitationRole() checks the inviter's roles, which under Spatie
+            // teams are only visible once the team id is set.
+            if (config('laravel-crm.teams') && $invitation->team_id) {
+                app(PermissionRegistrar::class)->setPermissionsTeamId($invitation->team_id);
+            }
 
+            if ($role = $this->invitationRole($invitation)) {
                 if ($removeRole = $user->roles()->where('crm_role', 1)->first()) {
                     $user->removeRole($removeRole);
                 }
@@ -520,11 +556,12 @@ class UserController extends Controller
                 'crm_access' => 1,
             ]);
 
-            if ($invitation->role_id && $role = Role::find($invitation->role_id)) {
-                if (config('laravel-crm.teams') && $invitation->team_id) {
-                    app(PermissionRegistrar::class)->setPermissionsTeamId($invitation->team_id);
-                }
+            // See acceptExistingUser(): team context first, then the role.
+            if (config('laravel-crm.teams') && $invitation->team_id) {
+                app(PermissionRegistrar::class)->setPermissionsTeamId($invitation->team_id);
+            }
 
+            if ($role = $this->invitationRole($invitation)) {
                 $user->assignRole($role);
             }
 

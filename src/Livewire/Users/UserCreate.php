@@ -39,6 +39,15 @@ class UserCreate extends Component
     {
         $this->validate();
 
+        // Resolve and vet the role *before* the user row is written. The
+        // AssignableRole rule above already rejects an unassignable role, so this
+        // is belt-and-braces -- but it has to abort before the forceCreate() or a
+        // 403 leaves an orphaned, role-less user behind and burns the email
+        // address against the unique index.
+        $role = $this->role ? Role::assignable()->find($this->role) : null;
+
+        abort_if($role && $role->name === 'Owner' && ! auth()->user()->hasRole('Owner'), 403);
+
         $user = User::forceCreate([
             'name' => $this->name,
             'email' => $this->email,
@@ -46,16 +55,12 @@ class UserCreate extends Component
             'crm_access' => $this->crm_access,
         ]);
 
-        if ($this->role) {
-            if ($role = Role::assignable()->find($this->role)) {
-                abort_if($role->name === 'Owner' && ! auth()->user()->hasRole('Owner'), 403);
-
-                if ($removeRole = $user->roles()->where('crm_role', 1)->first()) { // THIS COULD BE A BUG
-                    $user->removeRole($removeRole);
-                }
-
-                $user->assignRole($role);
+        if ($role) {
+            if ($removeRole = $user->roles()->where('crm_role', 1)->first()) { // THIS COULD BE A BUG
+                $user->removeRole($removeRole);
             }
+
+            $user->assignRole($role);
         }
 
         $this->updateUserPhones($user, $this->phones);

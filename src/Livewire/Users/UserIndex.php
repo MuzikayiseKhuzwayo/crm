@@ -11,6 +11,7 @@ use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\Notification;
+use Illuminate\Support\Facades\Schema;
 use Livewire\Attributes\Url;
 use Livewire\Component;
 use Livewire\WithPagination;
@@ -103,13 +104,36 @@ class UserIndex extends Component
             // current team resolves this matches nothing, which fails closed the same
             // way TeamMembership::inCurrentTeam() does.
             ->when(config('laravel-crm.teams'), function (Builder $q) {
-                $currentTeamId = auth()->user()?->currentTeam?->id;
+                $currentTeam = auth()->user()?->currentTeam;
+                $currentTeamId = $currentTeam->id ?? null;
 
-                $q->whereExists(function ($query) use ($currentTeamId) {
-                    $query->select(DB::raw(1))
-                        ->from('team_user')
-                        ->whereColumn('team_user.user_id', 'users.id')
-                        ->where('team_user.team_id', $currentTeamId);
+                // A host can enable laravel-crm.teams without shipping Jetstream's
+                // pivot (Spark Classic names it `team_users`), in which case there is
+                // no queryable membership boundary. Fail open rather than 500 on a
+                // read page -- the same call TeamMembership::inCurrentTeam() makes
+                // when it cannot probe the host user's teams.
+                if (! Schema::hasTable('team_user')) {
+                    return;
+                }
+
+                $usersTable = (new User)->getTable();
+
+                $q->where(function (Builder $q) use ($currentTeam, $currentTeamId, $usersTable) {
+                    $q->whereExists(function ($query) use ($currentTeamId, $usersTable) {
+                        $query->select(DB::raw(1))
+                            ->from('team_user')
+                            ->whereColumn('team_user.user_id', $usersTable.'.id')
+                            ->where('team_user.team_id', $currentTeamId);
+                    });
+
+                    // Jetstream keeps the team owner out of the pivot entirely --
+                    // CreateTeam writes through ownedTeams() and Team::allUsers()
+                    // merges the owner back in by hand. Without this the owner,
+                    // usually the CRM Owner themselves, vanishes from their own
+                    // user list.
+                    if ($ownerId = $currentTeam->user_id ?? null) {
+                        $q->orWhere($usersTable.'.id', $ownerId);
+                    }
                 });
             })
             ->orderBy(...array_values($this->sortBy))

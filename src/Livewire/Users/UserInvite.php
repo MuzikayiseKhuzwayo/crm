@@ -27,9 +27,10 @@ class UserInvite extends Component
 
     public function mount(): void
     {
-        // Role::assignable() is the single source of truth for "roles this caller
-        // may hand out" -- the dropdown and the validation rule must not diverge.
-        foreach (Role::assignable()->get() as $role) {
+        // Role::assignableBy() is the single source of truth for "roles this
+        // caller may hand out" -- the dropdown and the validation rule must not
+        // diverge, and neither may offer Owner to a non-Owner.
+        foreach (Role::assignableBy()->get() as $role) {
             $this->roles[] = [
                 'id' => $role->id,
                 'name' => $role->name,
@@ -77,7 +78,7 @@ class UserInvite extends Component
             'role_id' => [
                 'required',
                 function (string $attribute, $value, $fail) {
-                    $exists = Role::assignable()
+                    $exists = Role::assignableBy()
                         ->whereKey($value)
                         ->exists();
 

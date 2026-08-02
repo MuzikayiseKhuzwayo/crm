@@ -78,22 +78,24 @@ class UserEdit extends Component
     {
         $this->validate();
 
+        // Vet the role before any of the record is persisted -- otherwise a 403
+        // still commits the name/email/crm_access changes. See UserCreate::save().
+        $role = $this->role ? Role::assignable()->find($this->role) : null;
+
+        abort_if($role && $role->name === 'Owner' && ! auth()->user()->hasRole('Owner'), 403);
+
         $this->user->forceFill([
             'name' => $this->name,
             'email' => $this->email,
             'crm_access' => $this->crm_access,
         ])->save();
 
-        if ($this->role) {
-            if ($role = Role::assignable()->find($this->role)) {
-                abort_if($role->name === 'Owner' && ! auth()->user()->hasRole('Owner'), 403);
-
-                if ($removeRole = $this->user->roles()->where('crm_role', 1)->first()) { // THIS COULD BE A BUG
-                    $this->user->removeRole($removeRole);
-                }
-
-                $this->user->assignRole($role);
+        if ($role) {
+            if ($removeRole = $this->user->roles()->where('crm_role', 1)->first()) { // THIS COULD BE A BUG
+                $this->user->removeRole($removeRole);
             }
+
+            $this->user->assignRole($role);
         }
 
         $this->updateUserPhones($this->user, $this->phones);

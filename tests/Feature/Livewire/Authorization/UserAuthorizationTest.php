@@ -2,13 +2,16 @@
 
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Notification;
 use Illuminate\Support\Facades\Schema;
 use Livewire\Livewire;
 use VentureDrake\LaravelCrm\Livewire\Teams\TeamIndex;
 use VentureDrake\LaravelCrm\Livewire\Users\UserCreate;
 use VentureDrake\LaravelCrm\Livewire\Users\UserIndex;
+use VentureDrake\LaravelCrm\Livewire\Users\UserInvite;
 use VentureDrake\LaravelCrm\Models\Role;
 use VentureDrake\LaravelCrm\Models\Team;
+use VentureDrake\LaravelCrm\Models\UserInvitation;
 use VentureDrake\LaravelCrm\Support\TeamMembership;
 use VentureDrake\LaravelCrm\Tests\Stubs\User;
 
@@ -49,6 +52,13 @@ class AuthzUserCreate extends UserCreate
     }
 }
 class AuthzTeamIndex extends TeamIndex
+{
+    public function render()
+    {
+        return '<div></div>';
+    }
+}
+class AuthzUserInvite extends UserInvite
 {
     public function render()
     {
@@ -357,7 +367,7 @@ it('rejects a role belonging to another team and creates no user', function () {
         ->and(DB::table('model_has_roles')->where('role_id', $foreignRoleId)->count())->toBe(0);
 });
 
-it('403s when a non-Owner assigns the Owner role', function () {
+it('rejects the Owner role for a non-Owner and creates no user', function () {
     $this->actingAsUserWithPermissions(
         ['create crm users'],
         ['crm_roles' => json_encode(['Admin'])]
@@ -365,6 +375,10 @@ it('403s when a non-Owner assigns the Owner role', function () {
 
     $ownerRoleId = us005MakeRole('Owner');
 
+    // Rejected by the AssignableRole rule rather than the abort_if, so it fails
+    // before User::forceCreate() runs. Asserting the absent user row is the point:
+    // a post-write 403 would leave an orphaned, role-less account behind and burn
+    // the email address against the unique index.
     Livewire::test(AuthzUserCreate::class)
         ->set('name', 'New user')
         ->set('email', 'escalate@example.test')
@@ -373,9 +387,10 @@ it('403s when a non-Owner assigns the Owner role', function () {
         ->set('crm_access', true)
         ->set('role', $ownerRoleId)
         ->call('save')
-        ->assertForbidden();
+        ->assertHasErrors('role');
 
-    expect(DB::table('model_has_roles')->where('role_id', $ownerRoleId)->count())->toBe(0);
+    expect(User::where('email', 'escalate@example.test')->exists())->toBeFalse()
+        ->and(DB::table('model_has_roles')->where('role_id', $ownerRoleId)->count())->toBe(0);
 });
 
 it('lets an Owner assign the Owner role', function () {
@@ -430,4 +445,139 @@ it('assigns a non-Owner role without tripping the escalation guard', function ()
             ->where('role_id', $editorRoleId)
             ->where('model_id', $created->id)
             ->count())->toBe(1);
+});
+
+/*
+ * ---------------------------------------------------------------------------
+ * UserInvite -- the invitation is the fifth role-assignment path, and the one
+ * that reaches an Owner role via a stored row rather than an immediate write.
+ * ---------------------------------------------------------------------------
+ */
+
+it('keeps the Owner role out of the invite dropdown for a non-Owner', function () {
+    $this->actingAsUserWithPermissions(
+        ['create crm users'],
+        ['crm_roles' => json_encode(['Admin'])]
+    );
+
+    us005MakeRole('Owner');
+    us005MakeRole('Editor');
+
+    $roles = collect(Livewire::test(AuthzUserInvite::class)->get('roles'))
+        ->pluck('name')
+        ->filter()
+        ->all();
+
+    expect($roles)->toContain('Editor')
+        ->and($roles)->not->toContain('Owner');
+});
+
+it('offers the Owner role in the invite dropdown to an Owner', function () {
+    $this->actingAsUserWithPermissions(
+        ['create crm users'],
+        ['crm_roles' => json_encode(['Owner'])]
+    );
+
+    us005MakeRole('Owner');
+
+    $roles = collect(Livewire::test(AuthzUserInvite::class)->get('roles'))
+        ->pluck('name')
+        ->filter()
+        ->all();
+
+    expect($roles)->toContain('Owner');
+});
+
+it('rejects an Owner-role invitation from a non-Owner and stores nothing', function () {
+    Notification::fake();
+
+    $this->actingAsUserWithPermissions(
+        ['create crm users'],
+        ['crm_roles' => json_encode(['Admin'])]
+    );
+
+    $ownerRoleId = us005MakeRole('Owner');
+
+    Livewire::test(AuthzUserInvite::class)
+        ->set('email', 'escalate-by-invite@example.test')
+        ->set('role_id', $ownerRoleId)
+        ->call('save')
+        ->assertHasErrors('role_id');
+
+    expect(UserInvitation::where('email', 'escalate-by-invite@example.test')->exists())->toBeFalse();
+
+    Notification::assertNothingSent();
+});
+
+it('lets an Owner invite another Owner', function () {
+    Notification::fake();
+
+    $this->actingAsUserWithPermissions(
+        ['create crm users'],
+        ['crm_roles' => json_encode(['Owner'])]
+    );
+
+    $ownerRoleId = us005MakeRole('Owner');
+
+    Livewire::test(AuthzUserInvite::class)
+        ->set('email', 'new-owner-invite@example.test')
+        ->set('role_id', $ownerRoleId)
+        ->call('save')
+        ->assertHasNoErrors();
+
+    expect(UserInvitation::where('email', 'new-owner-invite@example.test')
+        ->where('role_id', $ownerRoleId)
+        ->exists())->toBeTrue();
+});
+
+/*
+ * ---------------------------------------------------------------------------
+ * UserIndex::users() -- team scoping edge cases the pivot lookup alone misses.
+ * ---------------------------------------------------------------------------
+ */
+
+it('lists the team owner even though Jetstream keeps them out of the pivot', function () {
+    config(['laravel-crm.teams' => true]);
+
+    $owner = us005MakeUser('team-owner@example.test');
+
+    // Jetstream's CreateTeam writes through ownedTeams() and never inserts a
+    // team_user row for the owner, so the pivot lookup alone would hide them.
+    $actor = $this->actingAsUserWithPermissions(['view crm users'], ['current_team_id' => 1]);
+    $actor->setRelation('currentTeam', (object) ['id' => 1, 'name' => 'Team 1', 'user_id' => $owner->id]);
+
+    DB::table('team_user')->insert(['team_id' => 1, 'user_id' => $actor->id, 'role' => 'editor']);
+
+    $member = us005MakeUser('member@example.test');
+    DB::table('team_user')->insert(['team_id' => 1, 'user_id' => $member->id, 'role' => 'editor']);
+
+    $outsider = us005MakeUser('outsider@example.test');
+
+    $listed = Livewire::test(AuthzUserIndex::class)
+        ->instance()
+        ->users()
+        ->pluck('email')
+        ->all();
+
+    expect($listed)->toContain('team-owner@example.test')
+        ->and($listed)->toContain('member@example.test')
+        ->and($listed)->not->toContain($outsider->email);
+});
+
+it('falls open rather than erroring when the host ships no team_user pivot', function () {
+    config(['laravel-crm.teams' => true]);
+
+    Schema::drop('team_user');
+
+    $this->actingAsUserWithPermissions(['view crm users'], ['current_team_id' => 1]);
+
+    $other = us005MakeUser('no-pivot@example.test');
+
+    $listed = Livewire::test(AuthzUserIndex::class)
+        ->instance()
+        ->users()
+        ->pluck('email')
+        ->all();
+
+    expect($listed)->toContain($other->email);
 });
