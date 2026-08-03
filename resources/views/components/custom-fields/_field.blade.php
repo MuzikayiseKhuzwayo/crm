@@ -35,6 +35,12 @@
                         />
                     @endforeach
                 </div>
+                @error($key)
+                    <div class="text-error label-text-alt p-1">{{ $message }}</div>
+                @enderror
+                @error($key.'.*')
+                    <div class="text-error label-text-alt p-1">{{ $message }}</div>
+                @enderror
             </fieldset>
         </div>
         @break

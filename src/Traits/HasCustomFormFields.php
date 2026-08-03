@@ -121,6 +121,7 @@ trait HasCustomFormFields
             $messages["{$key}.in"] = "The selected {$label} is invalid.";
             $messages["{$key}.date"] = "The {$label} must be a valid date.";
             $messages["{$key}.array"] = "The {$label} must be a valid selection.";
+            $messages["{$key}.*.in"] = "The selected {$label} is invalid.";
         }
 
         return $messages;
@@ -137,6 +138,7 @@ trait HasCustomFormFields
 
         foreach ($this->customFields() as $field) {
             $attributes["fields.{$field->id}"] = ucfirst(__($field->name));
+            $attributes["fields.{$field->id}.*"] = ucfirst(__($field->name));
         }
 
         return $attributes;
@@ -182,12 +184,41 @@ trait HasCustomFormFields
             if (in_array($fieldValue->field->type, ['checkbox_multiple'], true)) {
                 $decoded = is_string($value) ? json_decode($value, true) : $value;
                 $value = is_array($decoded) ? $decoded : [];
+                $value = array_map(fn ($v) => $this->customFieldOptionId($fieldValue->field, $v), $value);
+            } elseif (in_array($fieldValue->field->type, ['select', 'radio'], true)) {
+                $value = $this->customFieldOptionId($fieldValue->field, $value);
             } elseif ($fieldValue->field->type === 'checkbox') {
                 $value = (bool) $value;
             }
 
             $this->fields[$fieldValue->field_id] = $value;
         }
+    }
+
+    /**
+     * Resolve a stored option-backed value to its FieldOption id.
+     *
+     * Option-backed fields (select, radio, checkbox_multiple) are stored as the
+     * FieldOption id. Older rows stored the option's `value` string instead, so
+     * map those across on hydrate rather than failing validation on save.
+     */
+    protected function customFieldOptionId($field, $value): ?string
+    {
+        if ($value === null || $value === '') {
+            return null;
+        }
+
+        $options = $field->fieldOptions;
+
+        if ($options->contains(fn ($option) => (string) $option->id === (string) $value)) {
+            return (string) $value;
+        }
+
+        if ($option = $options->firstWhere('value', $value)) {
+            return (string) $option->id;
+        }
+
+        return (string) $value;
     }
 
     /**
