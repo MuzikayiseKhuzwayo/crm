@@ -314,9 +314,11 @@
                     </x-mary-menu-sub>
                 @endcanany
 
-                @can('view crm updates')
-                    <x-mary-menu-item title="{{ ucfirst(__('laravel-crm::lang.updates')) }}" icon="fas.cloud-download-alt" link="{{ url(route('laravel-crm.updates.index')) }}" />
-                @endcan
+                @if(config('laravel-crm.update_notifications'))
+                    @can('view crm updates') 
+                        <x-mary-menu-item title="{{ ucfirst(__('laravel-crm::lang.updates')) }}" icon="fas.cloud-download-alt" link="{{ url(route('laravel-crm.updates.index')) }}" />
+                    @endcan
+                @endif    
 
             </x-mary-menu>
         </x-slot:sidebar>
