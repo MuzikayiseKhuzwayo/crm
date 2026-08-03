@@ -3219,7 +3219,7 @@ class LaravelCrmSampleDataSeeder extends Seeder
                 if (mt_rand(1, 100) > 75) {
                     continue;
                 }
-                $this->setFieldValue($lead, $lf->get('Lead Source Channel'), fn ($f) => $f->fieldOptions->isNotEmpty() ? $f->fieldOptions->random()->value : null);
+                $this->setFieldValue($lead, $lf->get('Lead Source Channel'), fn ($f) => $f->fieldOptions->isNotEmpty() ? $f->fieldOptions->random()->id : null);
                 $this->setFieldValue($lead, $lf->get('Competitor Mentioned'), fn () => $competitors[array_rand($competitors)]);
                 $this->setFieldValue($lead, $lf->get('Decision Maker Contacted'), fn () => mt_rand(0, 1) ? '1' : '0');
                 $this->setFieldValue($lead, $lf->get('Initial Contact Date'), fn () => Carbon::now('UTC')->subDays(mt_rand(5, 400))->format('Y-m-d'));
@@ -3236,13 +3236,13 @@ class LaravelCrmSampleDataSeeder extends Seeder
                     continue;
                 }
                 $this->setFieldValue($deal, $df->get('Contract Reference'), fn () => 'CON-'.strtoupper(substr(md5(mt_rand()), 0, 6)));
-                $this->setFieldValue($deal, $df->get('Deal Priority'), fn ($f) => $f->fieldOptions->isNotEmpty() ? $f->fieldOptions->random()->value : null);
+                $this->setFieldValue($deal, $df->get('Deal Priority'), fn ($f) => $f->fieldOptions->isNotEmpty() ? $f->fieldOptions->random()->id : null);
                 $this->setFieldValue($deal, $df->get('NDA Signed'), fn () => mt_rand(0, 1) ? '1' : '0');
                 $this->setFieldValue($deal, $df->get('Expected Close Date'), fn () => Carbon::now('UTC')->addDays(mt_rand(10, 180))->format('Y-m-d'));
                 $this->setFieldValue($deal, $df->get('Products of Interest'), function ($f) {
                     $sample = $f->fieldOptions->random(mt_rand(1, min(3, $f->fieldOptions->count())));
 
-                    return json_encode($sample->pluck('value')->values()->all());
+                    return json_encode($sample->pluck('id')->map(fn ($id) => (string) $id)->values()->all());
                 });
             }
         });
@@ -3256,7 +3256,7 @@ class LaravelCrmSampleDataSeeder extends Seeder
                     continue;
                 }
                 $this->setFieldValue($quote, $qf->get('Project Code'), fn () => 'PROJ-'.mt_rand(1000, 9999));
-                $this->setFieldValue($quote, $qf->get('Delivery Region'), fn ($f) => $f->fieldOptions->isNotEmpty() ? $f->fieldOptions->random()->value : null);
+                $this->setFieldValue($quote, $qf->get('Delivery Region'), fn ($f) => $f->fieldOptions->isNotEmpty() ? $f->fieldOptions->random()->id : null);
                 $this->setFieldValue($quote, $qf->get('Promised Delivery Date'), fn () => Carbon::now('UTC')->addDays(mt_rand(14, 90))->format('Y-m-d'));
                 $this->setFieldValue($quote, $qf->get('Express Shipping'), fn () => mt_rand(1, 100) <= 20 ? '1' : '0');
                 $this->setFieldValue($quote, $qf->get('Special Instructions'), fn () => mt_rand(1, 100) <= 40 ? $specialInstr[array_rand($specialInstr)] : null);
@@ -3272,7 +3272,7 @@ class LaravelCrmSampleDataSeeder extends Seeder
                     continue;
                 }
                 $this->setFieldValue($order, $of->get('Project Code'), fn () => 'PROJ-'.mt_rand(1000, 9999));
-                $this->setFieldValue($order, $of->get('Delivery Region'), fn ($f) => $f->fieldOptions->isNotEmpty() ? $f->fieldOptions->random()->value : null);
+                $this->setFieldValue($order, $of->get('Delivery Region'), fn ($f) => $f->fieldOptions->isNotEmpty() ? $f->fieldOptions->random()->id : null);
                 $this->setFieldValue($order, $of->get('Promised Delivery Date'), fn () => Carbon::now('UTC')->addDays(mt_rand(7, 60))->format('Y-m-d'));
                 $this->setFieldValue($order, $of->get('Express Shipping'), fn () => mt_rand(1, 100) <= 20 ? '1' : '0');
                 $this->setFieldValue($order, $of->get('Special Instructions'), fn () => mt_rand(1, 100) <= 40 ? $specialInstr[array_rand($specialInstr)] : null);
@@ -3287,9 +3287,9 @@ class LaravelCrmSampleDataSeeder extends Seeder
                 if (mt_rand(1, 100) > 70) {
                     continue;
                 }
-                $this->setFieldValue($person, $pf->get('Preferred Contact Method'), fn ($f) => $f->fieldOptions->isNotEmpty() ? $f->fieldOptions->random()->value : null);
+                $this->setFieldValue($person, $pf->get('Preferred Contact Method'), fn ($f) => $f->fieldOptions->isNotEmpty() ? $f->fieldOptions->random()->id : null);
                 $this->setFieldValue($person, $pf->get('LinkedIn Profile URL'), fn () => 'https://linkedin.com/in/'.$linkedInPrefixes[array_rand($linkedInPrefixes)].'-'.mt_rand(10, 99));
-                $this->setFieldValue($person, $pf->get('Communication Frequency'), fn ($f) => $f->fieldOptions->isNotEmpty() ? $f->fieldOptions->random()->value : null);
+                $this->setFieldValue($person, $pf->get('Communication Frequency'), fn ($f) => $f->fieldOptions->isNotEmpty() ? $f->fieldOptions->random()->id : null);
                 $this->setFieldValue($person, $pf->get('Newsletter Subscriber'), fn () => mt_rand(1, 100) <= 60 ? '1' : '0');
                 $this->setFieldValue($person, $pf->get('Personal Notes'), fn () => mt_rand(1, 100) <= 50 ? $personalNotes[array_rand($personalNotes)] : null);
             }
@@ -3305,13 +3305,13 @@ class LaravelCrmSampleDataSeeder extends Seeder
                 if (mt_rand(1, 100) > 70) {
                     continue;
                 }
-                $this->setFieldValue($org, $orgAllFields->get('Preferred Contact Method'), fn ($f) => $f->fieldOptions->isNotEmpty() ? $f->fieldOptions->random()->value : null);
+                $this->setFieldValue($org, $orgAllFields->get('Preferred Contact Method'), fn ($f) => $f->fieldOptions->isNotEmpty() ? $f->fieldOptions->random()->id : null);
                 $this->setFieldValue($org, $orgAllFields->get('LinkedIn Profile URL'), fn () => 'https://linkedin.com/company/'.strtolower(preg_replace('/[^a-z0-9]/i', '-', $org->name)));
-                $this->setFieldValue($org, $orgAllFields->get('Communication Frequency'), fn ($f) => $f->fieldOptions->isNotEmpty() ? $f->fieldOptions->random()->value : null);
+                $this->setFieldValue($org, $orgAllFields->get('Communication Frequency'), fn ($f) => $f->fieldOptions->isNotEmpty() ? $f->fieldOptions->random()->id : null);
                 $this->setFieldValue($org, $orgAllFields->get('Newsletter Subscriber'), fn () => mt_rand(1, 100) <= 55 ? '1' : '0');
-                $this->setFieldValue($org, $orgAllFields->get('Industry Sector'), fn ($f) => $f->fieldOptions->isNotEmpty() ? $f->fieldOptions->random()->value : null);
+                $this->setFieldValue($org, $orgAllFields->get('Industry Sector'), fn ($f) => $f->fieldOptions->isNotEmpty() ? $f->fieldOptions->random()->id : null);
                 $this->setFieldValue($org, $orgAllFields->get('Company Registration Number'), fn () => 'REG-'.mt_rand(10000000, 99999999));
-                $this->setFieldValue($org, $orgAllFields->get('Company Size'), fn ($f) => $f->fieldOptions->isNotEmpty() ? $f->fieldOptions->random()->value : null);
+                $this->setFieldValue($org, $orgAllFields->get('Company Size'), fn ($f) => $f->fieldOptions->isNotEmpty() ? $f->fieldOptions->random()->id : null);
                 $this->setFieldValue($org, $orgAllFields->get('Publicly Listed'), fn () => mt_rand(1, 100) <= 15 ? '1' : '0');
                 $this->setFieldValue($org, $orgAllFields->get('Relationship Since'), fn () => Carbon::now('UTC')->subDays(mt_rand(180, 1800))->format('Y-m-d'));
             }
@@ -3323,9 +3323,9 @@ class LaravelCrmSampleDataSeeder extends Seeder
         Product::chunk(200, function ($products) use ($prdf, $productNotes) {
             foreach ($products as $product) {
                 $this->setFieldValue($product, $prdf->get('SKU'), fn () => 'SKU-'.strtoupper(substr(md5($product->name), 0, 4)).'-'.mt_rand(100, 999));
-                $this->setFieldValue($product, $prdf->get('Warranty Period'), fn ($f) => $f->fieldOptions->isNotEmpty() ? $f->fieldOptions->random()->value : null);
+                $this->setFieldValue($product, $prdf->get('Warranty Period'), fn ($f) => $f->fieldOptions->isNotEmpty() ? $f->fieldOptions->random()->id : null);
                 $this->setFieldValue($product, $prdf->get('Requires Installation'), fn () => mt_rand(1, 100) <= 30 ? '1' : '0');
-                $this->setFieldValue($product, $prdf->get('Availability'), fn ($f) => $f->fieldOptions->count() > 0 ? ($f->fieldOptions->count() > 2 ? $f->fieldOptions->first()->value : $f->fieldOptions->random()->value) : null);
+                $this->setFieldValue($product, $prdf->get('Availability'), fn ($f) => $f->fieldOptions->count() > 0 ? ($f->fieldOptions->count() > 2 ? $f->fieldOptions->first()->id : $f->fieldOptions->random()->id) : null);
                 $this->setFieldValue($product, $prdf->get('Product Notes'), fn () => mt_rand(1, 100) <= 60 ? $productNotes[array_rand($productNotes)] : null);
             }
         });

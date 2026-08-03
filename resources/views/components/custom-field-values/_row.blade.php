@@ -14,7 +14,9 @@
 
         case 'select':
         case 'radio':
-            $option = $field->fieldOptions->firstWhere('id', $raw);
+            // Values are stored as option ids; older rows stored the option value.
+            $option = $field->fieldOptions->firstWhere('id', $raw)
+                ?? $field->fieldOptions->firstWhere('value', $raw);
             $display = $option?->label;
             break;
 
@@ -22,7 +24,7 @@
             $values = is_string($raw) ? json_decode($raw, true) : $raw;
             $values = is_array($values) ? $values : [];
             $display = $field->fieldOptions
-                ->whereIn('id', $values)
+                ->filter(fn ($option) => in_array($option->id, $values) || in_array($option->value, $values, true))
                 ->pluck('label')
                 ->implode(', ');
             break;
