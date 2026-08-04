@@ -25,7 +25,7 @@ class QuoteEdit extends Component
 
     public function mount(Quote $quote)
     {
-        $this->mountCommon();
+        $this->mountCommon($quote);
 
         $this->quote = $quote;
         $this->organization_id = $quote->organization ? $quote->organization->id : null;

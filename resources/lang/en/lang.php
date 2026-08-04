@@ -1000,6 +1000,7 @@ return [
     // PDF templates (shared registry entries used across the 5 doc types)
     'templates' => 'templates',
     'pdf_template' => 'PDF template',
+    'pdf_template_use_default' => 'default (:template)',
     'pdf_template_modern' => 'modern',
     'pdf_template_modern_description' => 'A clean, contemporary layout with plenty of whitespace.',
     'pdf_template_classic' => 'classic',

@@ -3,12 +3,14 @@
 namespace VentureDrake\LaravelCrm\Livewire\Deliveries\Traits;
 
 use Mary\Traits\Toast;
+use VentureDrake\LaravelCrm\Livewire\Traits\HasPdfTemplate;
 use VentureDrake\LaravelCrm\Models\Invoice;
 use VentureDrake\LaravelCrm\Models\Pipeline;
 use VentureDrake\LaravelCrm\Services\DeliveryService;
 
 trait HasDeliveryCommon
 {
+    use HasPdfTemplate;
     use Toast;
 
     protected DeliveryService $deliveryService;
@@ -55,10 +57,16 @@ trait HasDeliveryCommon
         $this->deliveryService = $deliveryService;
     }
 
-    public function mountCommon()
+    public function mountCommon($delivery = null)
     {
         $this->countries = \VentureDrake\LaravelCrm\Http\Helpers\SelectOptions\countries();
         $this->pipeline = Pipeline::where('model', get_class(new Invoice))->first();
+        $this->mountPdfTemplate($delivery);
+    }
+
+    protected function pdfTemplateDocType(): string
+    {
+        return 'delivery';
     }
 
     public function updateProducts($products): void

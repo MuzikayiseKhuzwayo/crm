@@ -11,6 +11,7 @@ use VentureDrake\LaravelCrm\Models\Setting;
 use VentureDrake\LaravelCrm\Models\TaxRate;
 use VentureDrake\LaravelCrm\Models\XeroInvoice;
 use VentureDrake\LaravelCrm\Repositories\InvoiceRepository;
+use VentureDrake\LaravelCrm\Support\PdfTemplateRegistry;
 
 class InvoiceService
 {
@@ -41,6 +42,7 @@ class InvoiceService
             'subtotal' => $request->sub_total,
             'tax' => $request->tax,
             'total' => $request->total,
+            'pdf_template' => PdfTemplateRegistry::sanitize($request->pdf_template ?? null),
             'user_owner_id' => $request->user_owner_id ?? auth()->user()->id,
         ]);
 
@@ -146,6 +148,7 @@ class InvoiceService
             'tax' => $request->tax,
             'total' => $request->total,
             'amount_due' => $request->total - ($invoice->amount_paid / 100),
+            'pdf_template' => PdfTemplateRegistry::resolveUpdate($request->pdf_template ?? null, $invoice->pdf_template),
             'user_owner_id' => $request->user_owner_id ?? auth()->user()->id,
         ]);
 

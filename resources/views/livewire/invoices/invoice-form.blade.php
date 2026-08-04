@@ -48,6 +48,7 @@
                 <x-mary-datetime wire:model="due_date" label="{{ ucfirst(__('laravel-crm::lang.due_date')) }}" />
             </div>
             <x-mary-textarea wire:model="terms" label="{{ ucfirst(__('laravel-crm::lang.terms')) }}" rows="5" />
+            <x-mary-select label="{{ ucfirst(__('laravel-crm::lang.pdf_template')) }}" wire:model="pdf_template" :options="\VentureDrake\LaravelCrm\Support\PdfTemplateRegistry::options()" :placeholder="\VentureDrake\LaravelCrm\Support\PdfTemplateRegistry::defaultOptionLabel('invoice')" placeholder-value="" />
         </div>
     </x-mary-card>
 </div>

@@ -413,7 +413,7 @@ class OrderController extends Controller
             Storage::makeDirectory($pdfLocation);
         }*/
 
-        /*return view(PdfTemplateRegistry::viewFor('order', app('laravel-crm.settings')->get('pdf_template_order', PdfTemplateRegistry::defaultSlug())), [
+        /*return view(PdfTemplateRegistry::viewForModel('order', $order), [
             'order' => $order,
             'email' => $email ?? null,
             'phone' => $phone ?? null,
@@ -426,7 +426,7 @@ class OrderController extends Controller
         return Pdf::setOption([
             'fontDir' => public_path('vendor/laravel-crm/fonts'),
         ])
-            ->loadView(PdfTemplateRegistry::viewFor('order', app('laravel-crm.settings')->get('pdf_template_order', PdfTemplateRegistry::defaultSlug())), [
+            ->loadView(PdfTemplateRegistry::viewForModel('order', $order), [
                 'order' => $order,
                 'dateFormat' => app('laravel-crm.settings')->get('date_format', config('laravel-crm.date_format')),
                 'email' => $email ?? null,

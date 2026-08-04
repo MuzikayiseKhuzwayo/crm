@@ -92,7 +92,7 @@ class QuoteSend extends Component
         Pdf::setOption([
             'fontDir' => public_path('vendor/laravel-crm/fonts'),
         ])
-            ->loadView(PdfTemplateRegistry::viewFor('quote', app('laravel-crm.settings')->get('pdf_template_quote', PdfTemplateRegistry::defaultSlug())), [
+            ->loadView(PdfTemplateRegistry::viewForModel('quote', $this->quote), [
                 'quote' => $this->quote,
                 'dateFormat' => app('laravel-crm.settings')->get('date_format', config('laravel-crm.date_format')),
                 'email' => $email ?? null,

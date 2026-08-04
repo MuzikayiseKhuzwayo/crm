@@ -6,6 +6,7 @@ use Ramsey\Uuid\Uuid;
 use VentureDrake\LaravelCrm\Models\Address;
 use VentureDrake\LaravelCrm\Models\Delivery;
 use VentureDrake\LaravelCrm\Repositories\DeliveryRepository;
+use VentureDrake\LaravelCrm\Support\PdfTemplateRegistry;
 
 class DeliveryService
 {
@@ -28,6 +29,7 @@ class DeliveryService
             'order_id' => $request->order_id,
             'delivery_expected' => $request->delivery_expected,
             'delivered_on' => $request->delivered_on,
+            'pdf_template' => PdfTemplateRegistry::sanitize($request->pdf_template ?? null),
             'user_owner_id' => $request->user_owner_id ?? auth()->user()->id,
         ]);
 
@@ -71,6 +73,7 @@ class DeliveryService
         $delivery->update([
             'delivery_expected' => $request->delivery_expected,
             'delivered_on' => $request->delivered_on,
+            'pdf_template' => PdfTemplateRegistry::resolveUpdate($request->pdf_template ?? null, $delivery->pdf_template),
         ]);
 
         if ($request->addresses) {

@@ -128,4 +128,123 @@ class PdfTemplateRegistry
 
         return 'laravel-crm::pdfs.'.$resolved.'.'.$docType;
     }
+
+    /**
+     * The settings key holding the admin-chosen default template for
+     * `$docType`. Hyphenated doc types keep their hyphen
+     * (`pdf_template_purchase-order`) — the convention the settings
+     * screen writes with.
+     */
+    public static function settingKey(string $docType): string
+    {
+        return 'pdf_template_'.$docType;
+    }
+
+    /**
+     * The admin-chosen default template slug for `$docType`, falling back
+     * to `defaultSlug()` when nothing has been saved in settings (or the
+     * saved value references a template that no longer ships).
+     */
+    public static function defaultFor(string $docType): string
+    {
+        $slug = app('laravel-crm.settings')->get(self::settingKey($docType), self::defaultSlug());
+
+        return array_key_exists($slug, self::all()) ? $slug : self::defaultSlug();
+    }
+
+    /**
+     * Narrow an untrusted slug down to one this package actually ships,
+     * or null. Used on the write path so a record never persists a
+     * template that can't be rendered.
+     *
+     * A null return is meaningful rather than a failure: it is how a
+     * record says "follow the Settings → Templates default".
+     *
+     * @param  mixed  $slug
+     */
+    public static function sanitize($slug): ?string
+    {
+        return (is_string($slug) && array_key_exists($slug, self::all())) ? $slug : null;
+    }
+
+    /**
+     * The `pdf_template` to persist when updating a record.
+     *
+     * Only the document forms carry the picker. Every other writer — the
+     * REST API, the legacy controllers, the multi-purchase-order split —
+     * submits nothing at all for this field, and must leave whatever the
+     * record already carries alone rather than silently clearing it.
+     *
+     * A form that submits the blank option sends '' (not null), which is
+     * an explicit request to go back to tracking the settings default, so
+     * that clears the column.
+     *
+     * @param  mixed  $submitted  the submitted value, or null when the writer has no picker
+     */
+    public static function resolveUpdate($submitted, ?string $current): ?string
+    {
+        return $submitted === null ? $current : self::sanitize($submitted);
+    }
+
+    /**
+     * Resolve the template slug for a single record: the template picked
+     * on the record itself when it has one, otherwise the settings
+     * default for `$docType`. Records created before the per-record
+     * picker existed carry a null `pdf_template` and so keep tracking
+     * whatever settings says.
+     *
+     * @param  object|null  $model  an Invoice/Order/PurchaseOrder/Delivery/Quote
+     */
+    public static function slugFor(string $docType, $model = null): string
+    {
+        $slug = $model->pdf_template ?? null;
+
+        if ($slug && array_key_exists($slug, self::all())) {
+            return $slug;
+        }
+
+        return self::defaultFor($docType);
+    }
+
+    /**
+     * Resolve the Blade view path for a single record — the per-record
+     * template when set, else the settings default for `$docType`.
+     *
+     * @param  object|null  $model  an Invoice/Order/PurchaseOrder/Delivery/Quote
+     */
+    public static function viewForModel(string $docType, $model = null): string
+    {
+        return self::viewFor($docType, self::slugFor($docType, $model));
+    }
+
+    /**
+     * Template list shaped for a `<x-mary-select>` — `id`/`name` pairs in
+     * the registry's display order.
+     *
+     * The blank "follow the settings default" choice is not in here; it is
+     * rendered as the select's placeholder option, labelled by
+     * `defaultOptionLabel()`.
+     *
+     * @return array<int, array{id:string, name:string}>
+     */
+    public static function options(): array
+    {
+        return array_values(array_map(fn (array $template) => [
+            'id' => $template['slug'],
+            'name' => $template['label'],
+        ], self::all()));
+    }
+
+    /**
+     * Label for the picker's blank option — the one that leaves a record
+     * tracking Settings → Templates. Names the template that choice
+     * currently resolves to, e.g. "Default (Bold)", so the picker still
+     * tells you what you are going to get.
+     */
+    public static function defaultOptionLabel(string $docType): string
+    {
+        return ucfirst(__('laravel-crm::lang.pdf_template_use_default', [
+            'template' => self::all()[self::defaultFor($docType)]['label'],
+        ]));
+    }
 }

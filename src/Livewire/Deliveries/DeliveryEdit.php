@@ -25,7 +25,7 @@ class DeliveryEdit extends Component
 
     public function mount()
     {
-        $this->mountCommon();
+        $this->mountCommon($this->delivery);
 
         $this->delivery_expected = $this->delivery->delivery_expected->format('Y-m-d') ?? null;
         $this->delivered_on = $this->delivery->delivered_on->format('Y-m-d') ?? null;

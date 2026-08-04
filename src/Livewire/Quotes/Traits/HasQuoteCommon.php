@@ -3,6 +3,7 @@
 namespace VentureDrake\LaravelCrm\Livewire\Quotes\Traits;
 
 use Mary\Traits\Toast;
+use VentureDrake\LaravelCrm\Livewire\Traits\HasPdfTemplate;
 use VentureDrake\LaravelCrm\Models\Pipeline;
 use VentureDrake\LaravelCrm\Models\Quote;
 use VentureDrake\LaravelCrm\Services\OrganizationService;
@@ -13,6 +14,7 @@ use VentureDrake\LaravelCrm\Traits\HasCustomFormFields;
 trait HasQuoteCommon
 {
     use HasCustomFormFields;
+    use HasPdfTemplate;
     use Toast;
 
     protected QuoteService $quoteService;
@@ -92,6 +94,11 @@ trait HasQuoteCommon
         return Quote::class;
     }
 
+    protected function pdfTemplateDocType(): string
+    {
+        return 'quote';
+    }
+
     protected function rules()
     {
         return array_merge([
@@ -101,7 +108,7 @@ trait HasQuoteCommon
             'organization_id' => 'required_without_all:person_name,person_id,organization_name|max:255',
             'title' => 'required|max:255',
             'amount' => 'nullable|numeric',
-        ], $this->customFieldRules());
+        ], $this->pdfTemplateRules(), $this->customFieldRules());
     }
 
     protected function messages()
@@ -126,9 +133,10 @@ trait HasQuoteCommon
         $this->organizationService = $organizationService;
     }
 
-    public function mountCommon()
+    public function mountCommon($quote = null)
     {
         $this->pipeline = Pipeline::where('model', get_class(new Quote))->first();
+        $this->mountPdfTemplate($quote);
     }
 
     public function updateProducts($products, $sub_total = 0, $tax = 0, $total = 0): void

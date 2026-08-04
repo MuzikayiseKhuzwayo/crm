@@ -9,6 +9,7 @@ use VentureDrake\LaravelCrm\Models\QuoteProduct;
 use VentureDrake\LaravelCrm\Models\Setting;
 use VentureDrake\LaravelCrm\Models\TaxRate;
 use VentureDrake\LaravelCrm\Repositories\QuoteRepository;
+use VentureDrake\LaravelCrm\Support\PdfTemplateRegistry;
 
 class QuoteService
 {
@@ -44,6 +45,7 @@ class QuoteService
             'tax' => $request->tax,
             'adjustments' => $request->adjustment,
             'total' => $request->total,
+            'pdf_template' => PdfTemplateRegistry::sanitize($request->pdf_template ?? null),
             'user_owner_id' => $request->user_owner_id,
             'pipeline_id' => optional(PipelineStage::find($request->pipeline_stage_id))->pipeline?->id,
             'pipeline_stage_id' => $request->pipeline_stage_id ?? null,
@@ -103,6 +105,7 @@ class QuoteService
             'tax' => $request->tax,
             'adjustments' => $request->adjustment,
             'total' => $request->total,
+            'pdf_template' => PdfTemplateRegistry::resolveUpdate($request->pdf_template ?? null, $quote->pdf_template),
             'user_owner_id' => $request->user_owner_id,
             'pipeline_id' => optional(PipelineStage::find($request->pipeline_stage_id))->pipeline?->id,
             'pipeline_stage_id' => $request->pipeline_stage_id ?? null,

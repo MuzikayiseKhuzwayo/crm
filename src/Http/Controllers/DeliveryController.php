@@ -271,7 +271,7 @@ class DeliveryController extends Controller
         return Pdf::setOption([
             'fontDir' => public_path('vendor/laravel-crm/fonts'),
         ])
-            ->loadView(PdfTemplateRegistry::viewFor('delivery', app('laravel-crm.settings')->get('pdf_template_delivery', PdfTemplateRegistry::defaultSlug())), [
+            ->loadView(PdfTemplateRegistry::viewForModel('delivery', $delivery), [
                 'delivery' => $delivery,
                 'order' => $delivery->order,
                 'dateFormat' => app('laravel-crm.settings')->get('date_format', config('laravel-crm.date_format')),

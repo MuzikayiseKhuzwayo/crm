@@ -708,6 +708,7 @@ class TestSchema
             $table->integer('adjustments')->nullable();
             $table->integer('total')->nullable();
             $table->text('terms')->nullable();
+            $table->string('pdf_template')->nullable();
             $table->datetime('accepted_at')->nullable();
             $table->datetime('rejected_at')->nullable();
             $table->unsignedBigInteger('pipeline_id')->nullable();
@@ -759,6 +760,7 @@ class TestSchema
             $table->string('prefix')->nullable();
             $table->integer('number')->nullable();
             $table->string('reference')->nullable();
+            $table->string('pdf_template')->nullable();
             $table->datetime('delivery_initiated')->nullable();
             $table->datetime('delivery_shipped')->nullable();
             $table->datetime('delivery_expected')->nullable();
@@ -816,6 +818,7 @@ class TestSchema
             $table->integer('tax')->nullable();
             $table->integer('adjustments')->nullable();
             $table->integer('total')->nullable();
+            $table->string('pdf_template')->nullable();
             $table->text('terms')->nullable();
             $table->unsignedBigInteger('pipeline_id')->nullable();
             $table->unsignedBigInteger('pipeline_stage_id')->nullable();
@@ -869,6 +872,7 @@ class TestSchema
             $table->integer('adjustments')->nullable();
             $table->integer('total')->nullable();
             $table->text('terms')->nullable();
+            $table->string('pdf_template')->nullable();
             $table->boolean('sent')->default(false);
             $table->integer('amount_due')->nullable();
             $table->integer('amount_paid')->nullable();
@@ -927,6 +931,7 @@ class TestSchema
             $table->integer('adjustments')->nullable();
             $table->integer('total')->nullable();
             $table->string('delivery_type')->default('deliver');
+            $table->string('pdf_template')->nullable();
             $table->text('delivery_instructions')->nullable();
             $table->text('terms')->nullable();
             $table->boolean('sent')->default(false);

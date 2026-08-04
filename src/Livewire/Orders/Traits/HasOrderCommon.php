@@ -3,6 +3,7 @@
 namespace VentureDrake\LaravelCrm\Livewire\Orders\Traits;
 
 use Mary\Traits\Toast;
+use VentureDrake\LaravelCrm\Livewire\Traits\HasPdfTemplate;
 use VentureDrake\LaravelCrm\Models\Order;
 use VentureDrake\LaravelCrm\Models\Pipeline;
 use VentureDrake\LaravelCrm\Services\OrderService;
@@ -13,6 +14,7 @@ use VentureDrake\LaravelCrm\Traits\HasCustomFormFields;
 trait HasOrderCommon
 {
     use HasCustomFormFields;
+    use HasPdfTemplate;
     use Toast;
 
     protected OrderService $orderService;
@@ -111,6 +113,11 @@ trait HasOrderCommon
         return Order::class;
     }
 
+    protected function pdfTemplateDocType(): string
+    {
+        return 'order';
+    }
+
     protected function rules()
     {
         return array_merge([
@@ -119,7 +126,7 @@ trait HasOrderCommon
             'organization_name' => 'required_without_all:person_name,person_id|max:255',
             'organization_id' => 'required_without_all:person_name,person_id,organization_name|max:255',
             'amount' => 'nullable|numeric',
-        ], $this->customFieldRules());
+        ], $this->pdfTemplateRules(), $this->customFieldRules());
     }
 
     protected function messages()
@@ -144,10 +151,11 @@ trait HasOrderCommon
         $this->organizationService = $organizationService;
     }
 
-    public function mountCommon()
+    public function mountCommon($order = null)
     {
         $this->countries = \VentureDrake\LaravelCrm\Http\Helpers\SelectOptions\countries();
         $this->pipeline = Pipeline::where('model', get_class(new Order))->first();
+        $this->mountPdfTemplate($order);
     }
 
     public function updateProducts($products, $sub_total = 0, $tax = 0, $total = 0): void

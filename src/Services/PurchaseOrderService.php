@@ -13,6 +13,7 @@ use VentureDrake\LaravelCrm\Models\Setting;
 use VentureDrake\LaravelCrm\Models\TaxRate;
 use VentureDrake\LaravelCrm\Models\XeroPurchaseOrder;
 use VentureDrake\LaravelCrm\Repositories\PurchaseOrderRepository;
+use VentureDrake\LaravelCrm\Support\PdfTemplateRegistry;
 
 class PurchaseOrderService
 {
@@ -45,6 +46,7 @@ class PurchaseOrderService
             'subtotal' => $request->sub_total ?? null,
             'tax' => $request->tax ?? null,
             'total' => $request->total ?? null,
+            'pdf_template' => PdfTemplateRegistry::sanitize($request->pdf_template ?? null),
             'user_owner_id' => $request->user_owner_id ?? auth()->user()->id,
         ]);
 
@@ -171,6 +173,7 @@ class PurchaseOrderService
             'tax' => $request->tax,
             'total' => $request->total,
             'amount_due' => $request->total - ($purchaseOrder->amount_paid / 100),
+            'pdf_template' => PdfTemplateRegistry::resolveUpdate($request->pdf_template ?? null, $purchaseOrder->pdf_template),
             'user_owner_id' => $request->user_owner_id ?? auth()->user()->id,
         ]);
 

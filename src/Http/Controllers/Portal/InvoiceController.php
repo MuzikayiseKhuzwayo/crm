@@ -97,7 +97,7 @@ class InvoiceController extends Controller
                 return Pdf::setOption([
                     'fontDir' => public_path('vendor/laravel-crm/fonts'),
                 ])
-                    ->loadView(PdfTemplateRegistry::viewFor('invoice', app('laravel-crm.settings')->get('pdf_template_invoice', PdfTemplateRegistry::defaultSlug())), [
+                    ->loadView(PdfTemplateRegistry::viewForModel('invoice', $invoice), [
                         'invoice' => $invoice,
                         'dateFormat' => app('laravel-crm.settings')->get('date_format', config('laravel-crm.date_format')),
                         'taxName' => app('laravel-crm.settings')->get('tax_name', 'Tax'),

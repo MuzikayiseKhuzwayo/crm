@@ -26,7 +26,7 @@ class OrderEdit extends Component
 
     public function mount(Order $order)
     {
-        $this->mountCommon();
+        $this->mountCommon($order);
 
         $this->order = $order;
         $this->organization_id = $order->organization ? $order->organization->id : null;

@@ -27,7 +27,7 @@ class PurchaseOrderEdit extends Component
 
     public function mount(PurchaseOrder $purchaseOrder)
     {
-        $this->mountCommon();
+        $this->mountCommon($purchaseOrder);
 
         $this->purchaseOrder = $purchaseOrder;
         $this->organization_id = $purchaseOrder->organization ? $purchaseOrder->organization->id : null;
