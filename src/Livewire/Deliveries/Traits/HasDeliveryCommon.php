@@ -64,7 +64,7 @@ trait HasDeliveryCommon
         $this->mountPdfTemplate($delivery);
     }
 
-    protected function pdfTemplateDocType(): string
+    public function pdfTemplateDocType(): string
     {
         return 'delivery';
     }

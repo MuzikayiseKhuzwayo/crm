@@ -30,8 +30,13 @@ trait HasPdfTemplate
     /**
      * The doc type this component's records render as — one of
      * `PdfTemplateRegistry::DOC_TYPES`.
+     *
+     * Public so the form blade can reach it: the picker's blank option is
+     * labelled per doc type, and having the blade ask the component keeps
+     * that one literal in the component rather than repeating it in every
+     * partial that renders the picker.
      */
-    abstract protected function pdfTemplateDocType(): string;
+    abstract public function pdfTemplateDocType(): string;
 
     /**
      * Seed the picker. Pass the record when editing; omit it when
@@ -42,6 +47,26 @@ trait HasPdfTemplate
     protected function mountPdfTemplate($model = null): void
     {
         $this->pdf_template = PdfTemplateRegistry::sanitize($model->pdf_template ?? null) ?? '';
+    }
+
+    /**
+     * The picker's options — the shipped templates, in display order.
+     *
+     * @return array<int, array{id:string, name:string}>
+     */
+    public function pdfTemplateOptions(): array
+    {
+        return PdfTemplateRegistry::options();
+    }
+
+    /**
+     * Label for the picker's blank option — the one that leaves the record
+     * tracking Settings → Templates, named for the template that choice
+     * currently resolves to.
+     */
+    public function pdfTemplateDefaultLabel(): string
+    {
+        return PdfTemplateRegistry::defaultOptionLabel($this->pdfTemplateDocType());
     }
 
     /**

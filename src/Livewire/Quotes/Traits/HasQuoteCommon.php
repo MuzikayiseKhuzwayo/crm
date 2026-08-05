@@ -94,7 +94,7 @@ trait HasQuoteCommon
         return Quote::class;
     }
 
-    protected function pdfTemplateDocType(): string
+    public function pdfTemplateDocType(): string
     {
         return 'quote';
     }

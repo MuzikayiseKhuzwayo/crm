@@ -77,7 +77,7 @@ trait HasPurchaseOrderCommon
         return PurchaseOrder::class;
     }
 
-    protected function pdfTemplateDocType(): string
+    public function pdfTemplateDocType(): string
     {
         return 'purchase-order';
     }

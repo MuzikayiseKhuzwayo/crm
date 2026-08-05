@@ -17,6 +17,7 @@ use VentureDrake\LaravelCrm\Services\OrganizationService;
 use VentureDrake\LaravelCrm\Services\PersonService;
 use VentureDrake\LaravelCrm\Services\PurchaseOrderService;
 use VentureDrake\LaravelCrm\Services\SettingService;
+use VentureDrake\LaravelCrm\Support\PdfLogo;
 use VentureDrake\LaravelCrm\Support\PdfTemplateRegistry;
 
 class PurchaseOrderController extends Controller
@@ -327,7 +328,7 @@ class PurchaseOrderController extends Controller
                 'address' => $address ?? null,
                 'organization_address' => $organization_address ?? null,
                 'fromName' => app('laravel-crm.settings')->get('organization_name', null),
-                'logo' => app('laravel-crm.settings')->get('logo_file', null),
+                'logo' => PdfLogo::fromSettings(),
             ])->download('purchase-order-'.strtolower($purchaseOrder->xeroPurchaseOrder->number ?? $purchaseOrder->purchase_order_id).'.pdf');
     }
 }

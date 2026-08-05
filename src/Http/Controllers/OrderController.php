@@ -22,6 +22,7 @@ use VentureDrake\LaravelCrm\Services\OrderService;
 use VentureDrake\LaravelCrm\Services\OrganizationService;
 use VentureDrake\LaravelCrm\Services\PersonService;
 use VentureDrake\LaravelCrm\Services\SettingService;
+use VentureDrake\LaravelCrm\Support\PdfLogo;
 use VentureDrake\LaravelCrm\Support\PdfTemplateRegistry;
 
 class OrderController extends Controller
@@ -420,7 +421,7 @@ class OrderController extends Controller
             'address' => $address ?? null,
             'organization_address' => $organization_address ?? null,
             'fromName' => app('laravel-crm.settings')->get('organization_name', null),
-            'logo' => app('laravel-crm.settings')->get('logo_file', null),
+            'logo' => PdfLogo::fromSettings(),
         ]);*/
 
         return Pdf::setOption([
@@ -434,7 +435,7 @@ class OrderController extends Controller
                 'address' => $address ?? null,
                 'organization_address' => $organization_address ?? null,
                 'fromName' => app('laravel-crm.settings')->get('organization_name', null),
-                'logo' => app('laravel-crm.settings')->get('logo_file', null),
+                'logo' => PdfLogo::fromSettings(),
             ])->download('order-'.strtolower($order->order_id).'.pdf');
     }
 }

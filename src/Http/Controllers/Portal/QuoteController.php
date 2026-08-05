@@ -9,6 +9,7 @@ use Illuminate\Http\Response;
 use Illuminate\Routing\Controller;
 use VentureDrake\LaravelCrm\Models\Quote;
 use VentureDrake\LaravelCrm\Services\SettingService;
+use VentureDrake\LaravelCrm\Support\PdfLogo;
 use VentureDrake\LaravelCrm\Support\PdfTemplateRegistry;
 
 class QuoteController extends Controller
@@ -122,7 +123,7 @@ class QuoteController extends Controller
                         'address' => $address ?? null,
                         'organization_address' => $organization_address ?? null,
                         'fromName' => app('laravel-crm.settings')->get('organization_name', null),
-                        'logo' => app('laravel-crm.settings')->get('logo_file', null),
+                        'logo' => PdfLogo::fromSettings(),
                     ])->download('quote-'.strtolower($quote->quote_id).'.pdf');
 
                 break;

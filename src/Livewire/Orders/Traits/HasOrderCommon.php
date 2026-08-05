@@ -113,7 +113,7 @@ trait HasOrderCommon
         return Order::class;
     }
 
-    protected function pdfTemplateDocType(): string
+    public function pdfTemplateDocType(): string
     {
         return 'order';
     }

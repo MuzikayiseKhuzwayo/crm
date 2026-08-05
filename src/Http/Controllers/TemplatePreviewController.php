@@ -4,6 +4,7 @@ namespace VentureDrake\LaravelCrm\Http\Controllers;
 
 use Barryvdh\DomPDF\Facade\Pdf;
 use Symfony\Component\HttpKernel\Exception\NotFoundHttpException;
+use VentureDrake\LaravelCrm\Support\PdfLogo;
 use VentureDrake\LaravelCrm\Support\PdfSampleData;
 use VentureDrake\LaravelCrm\Support\PdfTemplateRegistry;
 
@@ -123,7 +124,7 @@ class TemplatePreviewController extends Controller
             'contactDetails' => $settings->get('invoice_contact_details', null),
             'paymentInstructions' => $settings->get('invoice_payment_instructions', null),
             'fromName' => $settings->get('organization_name', 'Sample Organization'),
-            'logo' => $this->resolveLogoSrc($settings->get('logo_file', null)),
+            'logo' => PdfLogo::src($settings->get('logo_file', null)),
             'email' => null,
             'phone' => null,
             'address' => PdfSampleData::address(),
@@ -166,38 +167,5 @@ class TemplatePreviewController extends Controller
         // Unreachable — docType is validated against DOC_TYPES above,
         // but PHP's static analyzer needs the explicit fallthrough.
         throw new NotFoundHttpException('Unknown PDF doc type.');
-    }
-
-    /**
-     * Resolve the uploaded brand logo into a form DomPDF can embed directly.
-     *
-     * The real download flow passes the raw storage-relative path (e.g.
-     * `laravel-crm/foo.png`) and the templates wrap it in
-     * `asset('storage/'.$logo)` — which DomPDF cannot fetch when
-     * `dompdf.enable_remote` is false (the default). Any unencoded space
-     * in the filename compounds the failure.
-     *
-     * For previews we side-step both issues by inlining the file bytes as
-     * a `data:` URI. Templates detect the leading `data:` prefix and use
-     * the value as-is instead of prefixing with `storage/`.
-     *
-     * Falls back to the raw path when the file is missing so the template
-     * still runs (it will simply omit the img in the same way an
-     * unresolved http URL would).
-     */
-    protected function resolveLogoSrc(?string $logo): ?string
-    {
-        if (! $logo) {
-            return null;
-        }
-
-        $path = storage_path('app/public/'.$logo);
-        if (! is_file($path) || ! is_readable($path)) {
-            return $logo;
-        }
-
-        $mime = function_exists('mime_content_type') ? (mime_content_type($path) ?: 'image/png') : 'image/png';
-
-        return 'data:'.$mime.';base64,'.base64_encode((string) file_get_contents($path));
     }
 }

@@ -9,6 +9,7 @@ use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Facades\URL;
 use Livewire\Component;
 use VentureDrake\LaravelCrm\Services\SettingService;
+use VentureDrake\LaravelCrm\Support\PdfLogo;
 use VentureDrake\LaravelCrm\Traits\NotifyToast;
 
 class SendPurchaseOrder extends Component
@@ -85,7 +86,7 @@ class SendPurchaseOrder extends Component
                 'address' => $address ?? null,
                 'organization_address' => $organization_address ?? null,
                 'fromName' => app('laravel-crm.settings')->get('organization_name', null),
-                'logo' => app('laravel-crm.settings')->get('logo_file', null),
+                'logo' => PdfLogo::fromSettings(),
             ])->save(storage_path($this->pdf));
 
         Mail::send(new \VentureDrake\LaravelCrm\Mail\SendPurchaseOrder([

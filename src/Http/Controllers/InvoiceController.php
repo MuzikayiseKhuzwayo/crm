@@ -16,6 +16,7 @@ use VentureDrake\LaravelCrm\Services\InvoiceService;
 use VentureDrake\LaravelCrm\Services\OrganizationService;
 use VentureDrake\LaravelCrm\Services\PersonService;
 use VentureDrake\LaravelCrm\Services\SettingService;
+use VentureDrake\LaravelCrm\Support\PdfLogo;
 use VentureDrake\LaravelCrm\Support\PdfTemplateRegistry;
 
 class InvoiceController extends Controller
@@ -267,7 +268,7 @@ class InvoiceController extends Controller
                 'address' => $address ?? null,
                 'organization_address' => $organization_address ?? null,
                 'fromName' => app('laravel-crm.settings')->get('organization_name', null),
-                'logo' => app('laravel-crm.settings')->get('logo_file', null),
+                'logo' => PdfLogo::fromSettings(),
             ]);
 
         $filename = 'invoice-'.strtolower($invoice->xeroInvoice->number ?? $invoice->invoice_id).'.pdf';

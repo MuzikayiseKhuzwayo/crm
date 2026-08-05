@@ -235,6 +235,30 @@ it('labels the blank option with the template settings currently resolves to', f
     expect(PdfTemplateRegistry::defaultOptionLabel($docType))->toBe('Default (Bold)');
 })->with('pdf_template_documents');
 
+it('reports its own doc type to the form blade', function (
+    string $docType,
+    string $settingKey,
+    string $createComponent,
+    string $editComponent,
+    string $property,
+    callable $make
+) {
+    // The blade asks the component rather than repeating the doc-type
+    // literal, so a component wired to the wrong one would label its blank
+    // option with — and preview — another document's default template.
+    app('laravel-crm.settings')->set($settingKey, 'compact');
+    app('laravel-crm.settings')->forgetCache();
+
+    foreach ([$createComponent, $editComponent] as $component) {
+        $instance = new $component;
+
+        expect($instance->pdfTemplateDocType())->toBe($docType)
+            ->and($instance->pdfTemplateDefaultLabel())->toBe('Default (Compact)')
+            ->and(array_column($instance->pdfTemplateOptions(), 'id'))
+            ->toBe(PdfTemplateRegistry::SLUGS);
+    }
+})->with('pdf_template_documents');
+
 it('starts the edit form on the template already saved against the record', function (
     string $docType,
     string $settingKey,

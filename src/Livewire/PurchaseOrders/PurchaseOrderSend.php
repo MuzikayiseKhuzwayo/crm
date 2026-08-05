@@ -11,6 +11,7 @@ use Livewire\Component;
 use Mary\Traits\Toast;
 use VentureDrake\LaravelCrm\Mail\SendPurchaseOrder;
 use VentureDrake\LaravelCrm\Models\PurchaseOrder;
+use VentureDrake\LaravelCrm\Support\PdfLogo;
 use VentureDrake\LaravelCrm\Support\PdfTemplateRegistry;
 
 class PurchaseOrderSend extends Component
@@ -91,7 +92,7 @@ class PurchaseOrderSend extends Component
                 'address' => $address ?? null,
                 'organization_address' => $organization_address ?? null,
                 'fromName' => app('laravel-crm.settings')->get('organization_name', null),
-                'logo' => app('laravel-crm.settings')->get('logo_file', null),
+                'logo' => PdfLogo::fromSettings(),
             ])->save(storage_path($this->pdf));
 
         Mail::send(new SendPurchaseOrder([

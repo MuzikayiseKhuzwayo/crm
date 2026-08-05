@@ -72,7 +72,7 @@ trait HasInvoiceCommon
         return Invoice::class;
     }
 
-    protected function pdfTemplateDocType(): string
+    public function pdfTemplateDocType(): string
     {
         return 'invoice';
     }

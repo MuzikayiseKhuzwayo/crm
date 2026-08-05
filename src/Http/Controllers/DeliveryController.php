@@ -17,6 +17,7 @@ use VentureDrake\LaravelCrm\Services\DeliveryService;
 use VentureDrake\LaravelCrm\Services\OrganizationService;
 use VentureDrake\LaravelCrm\Services\PersonService;
 use VentureDrake\LaravelCrm\Services\SettingService;
+use VentureDrake\LaravelCrm\Support\PdfLogo;
 use VentureDrake\LaravelCrm\Support\PdfTemplateRegistry;
 
 class DeliveryController extends Controller
@@ -280,7 +281,7 @@ class DeliveryController extends Controller
                 'address' => $delivery->getShippingAddress() ?? null,
                 'organization_address' => $delivery->order->getShippingAddress() ?? $organization_address ?? null,
                 'fromName' => app('laravel-crm.settings')->get('organization_name', null),
-                'logo' => app('laravel-crm.settings')->get('logo_file', null),
+                'logo' => PdfLogo::fromSettings(),
             ])->download('delivery-'.strtolower($delivery->delivery_id).'.pdf');
     }
 }

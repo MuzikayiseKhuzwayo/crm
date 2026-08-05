@@ -125,7 +125,13 @@ class SettingController extends Controller
                 $filePath = 'laravel-crm';
             }
 
-            $file->move(storage_path('app/public/'.$filePath), $file->getClientOriginalName());
+            // Write through the `public` disk rather than a hardcoded
+            // storage_path(), matching SettingEdit::save() and the read side
+            // in PdfLogo. The two agree on a stock install, but a host that
+            // has retargeted the disk root would land the upload somewhere
+            // PdfLogo never looks — and the logo would quietly vanish from
+            // every PDF.
+            $file->storePubliclyAs(path: $filePath, name: $file->getClientOriginalName(), options: 'public');
             $this->settingService->set('logo_file', $filePath.'/'.$file->getClientOriginalName());
             $this->settingService->set('logo_file_name', $file->getClientOriginalName());
         }
