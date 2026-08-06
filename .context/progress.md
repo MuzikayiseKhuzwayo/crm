@@ -34870,3 +34870,98 @@ application-wide and belongs in its own story.
   reads as "the file could not be staged" — reaching for `-f` at that point is the wrong
   reflex. Check `git diff --cached --stat` before believing the error, and confirm tracking
   with `git ls-files --error-unmatch <path>` rather than inferring from `.gitignore`.
+
+## US-005: Add banner lang keys and a configurable docs_url
+- **Nine lang keys** added to `resources/lang/en/lang.php` immediately after the existing
+  update block (line 318 `upgrade_guide`), each a **whole sentence carrying its links as
+  placeholders** rather than fragments concatenated in Blade — so translators keep control of
+  word order for fa and future RTL locales. Wording taken from the commented-out `flash()`
+  calls in the dead `Http/Middleware/SystemCheck`, which is the authoritative record of what
+  the banner used to say:
+  | Key | Value | Placeholders |
+  |---|---|---|
+  | `important` | `Important` | — |
+  | `dismiss` | `dismiss` | — |
+  | `system_check_upgrade_required` | `Your Laravel CRM version requires some updates to function correctly. Please see the :guide in the documentation.` | `:guide` |
+  | `system_check_upgrade_guide` | `upgrade guide` | — |
+  | `system_check_update_available` | `A new version of Laravel CRM is available. :details or :update.` | `:details`, `:update` |
+  | `system_check_view_version_details` | `View version :version details` | `:version` |
+  | `system_check_update_now` | `update now` | — |
+  | `system_check_db_update_required` | `Your Laravel CRM version requires some database updates to function correctly. Please :update.` | `:update` |
+  | `system_check_update_database` | `update database` | — |
+  Placeholder inventory across the nine is exactly the four the AC names. `system_check_upgrade_guide`
+  deliberately duplicates the *value* of the pre-existing `upgrade_guide` key — it is a separate
+  key so the banner's set stays translatable as a unit and can diverge later.
+- **`en_au` / `en_gb` / `fa` left untouched**, verified rather than assumed: en_au and en_gb are
+  38 and 37 lines against en's 1014 — pure spelling-override files (organisation etc.) that fall
+  back to en — and fa is left for a translator per the AC.
+- **`config/laravel-crm.php`** gained `'docs_url' => env('LARAVEL_CRM_DOCS_URL',
+  'https://github.com/venturedrake/laravel-crm')` beside `update_notifications` (line 293), with
+  the file's standard comment banner. The default matches the URL the dead middleware hard-coded
+  into every one of its links, which is what US-006/US-008 will consume.
+- **`tests/Feature/ConfigTest.php`** +2 tests following the existing bare-`test()` pattern: the
+  default value, and the env override.
+- **`tests/Feature/SystemCheckBannerLangTest.php`** (new, 5 tests) locks: all nine keys resolve
+  as non-empty strings; **no key is declared twice**; each sentence carries its named
+  placeholders; the placeholders actually substitute through `__()`; and the five label-only keys
+  carry no placeholders.
+- **Mutation-tested 6 ways** (content-backup harness, never git-based, reports a non-zero
+  denominator): removing `docs_url`, hard-coding it past `env()`, deleting a lang key,
+  **duplicating a lang key**, and dropping each of `:guide` and `:version`. **All 6 load-bearing**;
+  all restored byte-identically (`git diff --stat` showed only the 4 intended files afterwards).
+
+### Quality gates
+- `composer format-test` → **`{"tool":"pint","result":"passed"}`** (repo-wide, first try).
+- `composer test` → **1117 passed / 3 failed / 3928 assertions** (US-004 baseline 1110/3/3869):
+  **+7 passing = exactly the 7 new tests, +59 assertions, zero net new failures.**
+- The 3 failures are `RouteAuthorizationTest > it allows the product sub-resource group…` ×3,
+  **proven pre-existing by two independent signals** rather than cited from this log: (a) that
+  file has **0** keyword hits for this story's scope
+  (`docs_url|LARAVEL_CRM_DOCS_URL|system_check|important|dismiss|lang\.php`); (b) reverting both
+  changed *source* files to HEAD and re-running that file alone reproduces **the identical 3
+  failures**, with the restore verified byte-identical via `cmp`.
+- The AC's "any existing lang parity or coverage test still passes" is satisfied vacuously —
+  a grep of `tests/` found **no** lang parity/coverage test exists. The new file is the first.
+
+### Files changed
+- **Modified** `config/laravel-crm.php`, `resources/lang/en/lang.php`, `tests/Feature/ConfigTest.php`.
+- **Added** `tests/Feature/SystemCheckBannerLangTest.php`.
+
+### Learnings for future iterations
+- **Correction to the US-004 learning: `config/laravel-crm.php` is only *partially* shadowed at
+  test runtime, per-key.** US-004 recorded the blanket claim that editing the package config is
+  invisible to tests. The real mechanism is `LaravelCrmServiceProvider:1289`
+  `mergeConfigFrom(__DIR__.'/../config/laravel-crm.php', 'laravel-crm')`, which is
+  `array_merge($packageConfig, $existingAppConfig)` — **the already-loaded app config wins
+  per key**. Testbench serves a stale published copy at
+  `vendor/orchestra/testbench-core/laravel/config/laravel-crm.php`, so a key that copy *has*
+  (`modules`, `update_notifications`) is shadowed and package edits to it are invisible, while a
+  **brand-new** key it lacks passes straight through and IS visible. Taking US-004's blanket
+  version at face value would have led me to conclude `docs_url` was untestable. The check is one
+  line — `grep -c '<key>' vendor/orchestra/testbench-core/laravel/config/laravel-crm.php` — and it
+  settles it in seconds. Run it before deciding a config key can't be asserted on.
+- **A "no duplicate keys" assertion is vacuous unless it counts in the raw source text.** PHP
+  resolves duplicate array keys last-write-wins with no notice, so `require`ing the lang file and
+  asserting on the returned array can **never** reveal a duplicate — the duplicate has already
+  collapsed by the time you hold the array. Counting `substr_count($source, "'{$key}' => ")` on
+  `file_get_contents()` is the only form that works, and the mutation that duplicates a key is what
+  proves it: it failed 1 test with the source-counting version and would have failed 0 with the
+  array version. Same trap applies to any config/array file where "declared once" is the contract.
+- **A config `env()` override can only be observed by re-evaluating the config file.** `env()`
+  resolves when the file is loaded during bootstrap, so `config(['laravel-crm.docs_url' => …])` or
+  setting the var after boot proves nothing about the `env()` call. The working shape is: set
+  `putenv()` **and** `$_ENV` **and** `$_SERVER` (Laravel's `Env` repository stacks
+  `EnvConstAdapter`/`ServerConstAdapter`, and `PutenvAdapter` is conditional), `require` the config
+  file fresh, assert, and restore all three in a `finally` so a failing assertion can't leak the
+  var into sibling tests.
+- **A dead middleware's commented-out strings are the authoritative spec for replacement copy.**
+  `SystemCheck`'s three `// flash()->…` lines gave the exact sentences, the exact link labels, and —
+  most usefully — the natural seam between sentence and link, which is precisely where the
+  placeholder belongs. Reading it turned "invent nine reasonable strings" into "encode three known
+  sentences plus their labels", and the `:guide`/`:details`/`:update`/`:version` split fell out of
+  the original markup rather than being guessed.
+- **`composer test` runs pest with `--colors=always`**, so `grep -E "^\s+Tests:"` never matches the
+  summary — the line starts with an ANSI escape. Strip first
+  (`sed 's/\x1b\[[0-9;]*m//g'`) and use `grep -a`. Also capture the real exit code as
+  `cmd > file 2>&1; echo $?` — a pipeline's `$?` is the *last* command's, which silently reported
+  success for an aborted run in an earlier story.
