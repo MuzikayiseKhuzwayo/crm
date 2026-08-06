@@ -9,6 +9,7 @@ use GuzzleHttp\Client;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Schema;
 use VentureDrake\LaravelCrm\Models\Setting;
+use VentureDrake\LaravelCrm\Scopes\BelongsToTeamsScope;
 use VentureDrake\LaravelCrm\Services\SystemCheckService;
 
 class Settings
@@ -179,18 +180,33 @@ class Settings
                     continue;
                 }
 
-                // Keyed on name alone, deliberately. The old key included
-                // global => 1, so a row written by laravelcrm:install or
-                // laravelcrm:update (neither of which sets global) was invisible
-                // here and got duplicated at value 0 — re-reporting a completed
-                // update as pending. New rows still carry global, unchanged from
-                // before, marking the flag as install-wide rather than per-team.
-                Setting::firstOrCreate([
-                    'name' => $flag,
-                ], [
-                    'global' => 1,
-                    'value' => 0,
-                ]);
+                // The existence check is keyed on name alone and drops the team
+                // scope, for two separate reasons.
+                //
+                // Name alone: the old key included global => 1, so a row written
+                // by laravelcrm:install or laravelcrm:update (neither of which
+                // sets global) was invisible here and got duplicated at value 0
+                // — re-reporting a completed update as pending.
+                //
+                // No team scope: those console writes carry no team_id either,
+                // because there is no authenticated user to stamp one. Under
+                // `laravel-crm.teams` a scoped check cannot see them, so every
+                // team would get its own copy of a flag that describes the
+                // schema, and a fresh install would report updates it has
+                // already applied. SystemCheckService reads these back the same
+                // way. New rows still carry global, unchanged from before.
+                $exists = Setting::query()
+                    ->withoutGlobalScope(BelongsToTeamsScope::class)
+                    ->where('name', $flag)
+                    ->exists();
+
+                if (! $exists) {
+                    Setting::create([
+                        'name' => $flag,
+                        'global' => 1,
+                        'value' => 0,
+                    ]);
+                }
             }
 
             $installIdSetting = Setting::where([

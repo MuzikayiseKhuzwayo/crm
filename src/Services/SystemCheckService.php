@@ -5,6 +5,8 @@ namespace VentureDrake\LaravelCrm\Services;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Str;
+use VentureDrake\LaravelCrm\Models\Setting;
+use VentureDrake\LaravelCrm\Scopes\BelongsToTeamsScope;
 
 /**
  * Collects the "your install needs attention" alerts that the (now dead)
@@ -73,8 +75,6 @@ class SystemCheckService
             return $alerts;
         }
 
-        $settings = $this->settingService->all();
-
         $currentVersion = $this->settingService->get('version');
         $latestVersion = $this->settingService->get('version_latest');
 
@@ -90,13 +90,7 @@ class SystemCheckService
             ];
         }
 
-        $pending = [];
-
-        foreach (array_keys(self::DB_UPDATES) as $name) {
-            if (array_key_exists($name, $settings) && (int) $settings[$name] === 0) {
-                $pending[] = $name;
-            }
-        }
+        $pending = $this->pendingDbUpdates();
 
         if (count($pending) > 0) {
             $alerts[] = [
@@ -160,6 +154,45 @@ class SystemCheckService
     public function forgetCache(): void
     {
         Cache::forget(self::CACHE_KEY);
+    }
+
+    /**
+     * The db_update flags still sitting at 0, in DB_UPDATES order.
+     *
+     * Read straight from the table with the team scope dropped rather than
+     * through the cached settings map. These flags describe the schema, which
+     * is install-wide, but the map is team-scoped under `laravel-crm.teams` —
+     * so a flag marked applied from the console (`laravelcrm:install`,
+     * `laravelcrm:update`, neither of which has a team) is invisible to it, and
+     * a fresh install reports database updates that have already been done.
+     *
+     * A flag counts as pending when *any* of its rows holds 0, so per-team
+     * duplicates written by older versions of this package cannot mask a
+     * genuinely outstanding update.
+     *
+     * @return array<int, string>
+     */
+    protected function pendingDbUpdates(): array
+    {
+        $rows = Setting::query()
+            ->withoutGlobalScope(BelongsToTeamsScope::class)
+            ->whereIn('name', array_keys(self::DB_UPDATES))
+            ->get(['name', 'value']);
+
+        $names = [];
+
+        foreach ($rows as $row) {
+            if ((int) $row->value === 0) {
+                $names[$row->name] = true;
+            }
+        }
+
+        // Rebuilt from DB_UPDATES rather than from row order so the list — and
+        // therefore signature() — is stable across queries.
+        return array_values(array_filter(
+            array_keys(self::DB_UPDATES),
+            fn (string $name) => isset($names[$name])
+        ));
     }
 
     /**

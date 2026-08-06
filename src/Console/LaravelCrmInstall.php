@@ -226,12 +226,18 @@ class LaravelCrmInstall extends Command
         // against an existing install. The supported path for an existing
         // install is laravelcrm:update, which is what actually runs the
         // migrations these flags track.
+        //
+        // setInstallWide, not set: a console command has no authenticated user
+        // and so stamps no team_id, while web requests read Settings through
+        // BelongsToTeamsScope. A plain set() here writes a row a teams-enabled
+        // host can never see, and the system check then reports these updates
+        // as outstanding on a brand-new install.
         $this->info('Marking database updates as applied...');
 
         $settingService = app('laravel-crm.settings');
 
         foreach (array_keys(SystemCheckService::DB_UPDATES) as $flag) {
-            $settingService->set($flag, 1);
+            $settingService->setInstallWide($flag, 1);
         }
 
         if ($userClass::where('crm_access', 1)->count() < 1) {

@@ -3,6 +3,7 @@
 use Illuminate\Http\Request;
 use VentureDrake\LaravelCrm\Http\Middleware\Settings as SettingsMiddleware;
 use VentureDrake\LaravelCrm\Models\Setting;
+use VentureDrake\LaravelCrm\Scopes\BelongsToTeamsScope;
 use VentureDrake\LaravelCrm\Services\SystemCheckService;
 
 /**
@@ -32,6 +33,23 @@ function dbUpdateRows(): array
 function dbUpdateRow(string $flag): ?Setting
 {
     return Setting::query()->where('name', $flag)->first();
+}
+
+/**
+ * Every row for a flag, team scope and all — the view the console has, which is
+ * the one that matters for an install-wide setting.
+ *
+ * @return array<int, int>
+ */
+function dbUpdateValuesAcrossTeams(string $flag): array
+{
+    return Setting::query()
+        ->withoutGlobalScope(BelongsToTeamsScope::class)
+        ->where('name', $flag)
+        ->orderBy('id')
+        ->pluck('value')
+        ->map(fn ($value) => (int) $value)
+        ->all();
 }
 
 beforeEach(function () {
@@ -174,4 +192,89 @@ test('a host missing db_update_1201 gets it seeded pending while applied flags s
 
     expect($dbAlert)->not->toBeNull()
         ->and($dbAlert['updates'])->toBe(['db_update_1201']);
+});
+
+// -----------------------------------------------------------------------
+// Teams: these flags describe the schema, so they must not fragment per team
+//
+// The console writes them with no authenticated user and therefore no team_id,
+// while web requests read Settings through BelongsToTeamsScope. Before the fix
+// the scoped read could not see the console's row, so every team grew its own
+// copy at 0 and a brand-new install permanently reported pending updates.
+// -----------------------------------------------------------------------
+
+test('adopts a console-written flag on a teams host instead of seeding a per-team copy', function () {
+    config(['laravel-crm.teams' => true]);
+
+    // What laravelcrm:install writes: no auth user, so no team_id.
+    app('laravel-crm.settings')->setInstallWide('db_update_1201', 1);
+
+    $this->actingAsUserWithPermissions([], ['current_team_id' => 1]);
+
+    // Guard against a vacuous pass: the whole defect depends on the team scope
+    // being live and hiding the console's team_id-less row from a scoped read.
+    expect(Setting::query()->where('name', 'db_update_1201')->first())->toBeNull();
+
+    runSettingsMiddleware();
+
+    expect(dbUpdateValuesAcrossTeams('db_update_1201'))->toBe([1]);
+});
+
+test('a fresh install on a teams host reports no pending db updates', function () {
+    config(['laravel-crm.teams' => true]);
+
+    $settingService = app('laravel-crm.settings');
+
+    foreach (array_keys(SystemCheckService::DB_UPDATES) as $flag) {
+        $settingService->setInstallWide($flag, 1);
+    }
+
+    $this->actingAsUserWithPermissions([], ['current_team_id' => 1]);
+
+    runSettingsMiddleware();
+
+    $types = array_column(app(SystemCheckService::class)->check(), 'type');
+
+    expect($types)->not->toContain(SystemCheckService::DB_UPDATE_REQUIRED);
+});
+
+test('still reports genuinely pending updates on a teams host', function () {
+    config(['laravel-crm.teams' => true]);
+
+    $this->actingAsUserWithPermissions([], ['current_team_id' => 1]);
+
+    runSettingsMiddleware();
+
+    $types = array_column(app(SystemCheckService::class)->check(), 'type');
+
+    expect($types)->toContain(SystemCheckService::DB_UPDATE_REQUIRED);
+});
+
+test('reports a flag pending when any duplicate row is still 0', function () {
+    // The shape an older version of this package left behind: one row per team.
+    Setting::withoutEvents(function () {
+        Setting::create(['name' => 'db_update_1200', 'value' => 1, 'global' => 1, 'team_id' => 1]);
+        Setting::create(['name' => 'db_update_1200', 'value' => 0, 'global' => 1, 'team_id' => 2]);
+    });
+
+    $alerts = app(SystemCheckService::class)->check();
+    $dbAlert = collect($alerts)->firstWhere('type', SystemCheckService::DB_UPDATE_REQUIRED);
+
+    expect($dbAlert)->not->toBeNull()
+        ->and($dbAlert['updates'])->toBe(['db_update_1200']);
+});
+
+test('setInstallWide collapses per-team duplicates rather than updating only the first', function () {
+    Setting::withoutEvents(function () {
+        Setting::create(['name' => 'db_update_1200', 'value' => 0, 'global' => 1, 'team_id' => 1]);
+        Setting::create(['name' => 'db_update_1200', 'value' => 0, 'global' => 1, 'team_id' => 2]);
+    });
+
+    app('laravel-crm.settings')->setInstallWide('db_update_1200', 1);
+
+    expect(dbUpdateValuesAcrossTeams('db_update_1200'))->toBe([1, 1]);
+
+    $types = array_column(app(SystemCheckService::class)->check(), 'type');
+
+    expect($types)->not->toContain(SystemCheckService::DB_UPDATE_REQUIRED);
 });

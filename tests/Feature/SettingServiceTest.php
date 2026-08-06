@@ -179,6 +179,32 @@ test('all still works on a host that never ran the add_user migration', function
     }
 });
 
+test('per-user reads and writes degrade instead of throwing without the add_user migration', function () {
+    // The banner reads a per-user dismissal on the way to reporting a
+    // behind-schema install — which is exactly the install most likely to be
+    // missing this column. It has to degrade, not fatal.
+    $service = app('laravel-crm.settings');
+    $table = (new Setting)->getTable();
+
+    Schema::table($table, fn (Blueprint $t) => $t->dropColumn('user_id'));
+
+    try {
+        expect($service->getForUser(1, 'system_check_dismissed', 'fallback'))->toBe('fallback')
+            ->and($service->setForUser(1, 'system_check_dismissed', 'abc'))->toBeNull()
+            ->and(Setting::where('name', 'system_check_dismissed')->count())->toBe(0);
+    } finally {
+        Schema::table($table, fn (Blueprint $t) => $t->unsignedBigInteger('user_id')->nullable());
+    }
+});
+
+test('set install wide creates a global row when none exists', function () {
+    $setting = app('laravel-crm.settings')->setInstallWide('db_update_1201', 1);
+
+    expect((int) $setting->global)->toBe(1)
+        ->and((int) $setting->value)->toBe(1)
+        ->and(Setting::where('name', 'db_update_1201')->count())->toBe(1);
+});
+
 test('get for user is a direct query rather than a cache read', function () {
     $service = app('laravel-crm.settings');
     $service->setForUser(1, 'live', 'before');

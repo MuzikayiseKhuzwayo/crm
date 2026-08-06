@@ -120,6 +120,13 @@ class LaravelCrmUpdate extends Command
             $this->warn('Seeder warning: '.$e->getMessage());
         }
 
+        // The db_update_* markers below are written with setInstallWide rather
+        // than set. A console command has no authenticated user, so a plain
+        // set() stamps no team_id and writes a row that web requests — which
+        // read Settings through BelongsToTeamsScope — cannot see, leaving the
+        // system check reporting an update this command has just completed.
+        // setInstallWide also rewrites every row of the same name, so per-team
+        // duplicates written by older versions of this package clear too.
         if ($this->settingService->get('db_update_0180') == 0) {
             $this->info('Updating Laravel CRM quote numbers...');
 
@@ -147,7 +154,7 @@ class LaravelCrmUpdate extends Command
                 ]);
             }
 
-            $this->settingService->set('db_update_0180', 1);
+            $this->settingService->setInstallWide('db_update_0180', 1);
             $this->info('Updating Laravel CRM orders numbers complete');
         }
 
@@ -166,7 +173,7 @@ class LaravelCrmUpdate extends Command
                 }
             }
 
-            $this->settingService->set('db_update_0181', 1);
+            $this->settingService->setInstallWide('db_update_0181', 1);
             $this->info('Updating Laravel CRM organization linked to person complete.');
         }
 
@@ -207,7 +214,7 @@ class LaravelCrmUpdate extends Command
                 }
             }
 
-            $this->settingService->set('db_update_0191', 1);
+            $this->settingService->setInstallWide('db_update_0191', 1);
             $this->info('Updating Laravel CRM split orders, invoices & deliveries complete.');
         }
 
@@ -230,7 +237,7 @@ class LaravelCrmUpdate extends Command
                 }
             }
 
-            $this->settingService->set('db_update_0193', 1);
+            $this->settingService->setInstallWide('db_update_0193', 1);
             $this->info('Updating Laravel CRM split deliveries complete.');
         }
 
@@ -247,7 +254,7 @@ class LaravelCrmUpdate extends Command
                 ]);
             }
 
-            $this->settingService->set('db_update_0194', 1);
+            $this->settingService->setInstallWide('db_update_0194', 1);
             $this->info('Updating Laravel CRM delivery numbers complete');
         }
 
@@ -305,7 +312,7 @@ class LaravelCrmUpdate extends Command
                 ]);
             }
 
-            $this->settingService->set('db_update_0199', 1);
+            $this->settingService->setInstallWide('db_update_0199', 1);
             $this->info('Updating Laravel CRM tax amounts complete');
         }
 
@@ -337,7 +344,7 @@ class LaravelCrmUpdate extends Command
                 ]);
             }
 
-            $this->settingService->set('db_update_1200', 1);
+            $this->settingService->setInstallWide('db_update_1200', 1);
             $this->info('Updating Laravel CRM pipeline tables complete.');
         }
 
@@ -368,7 +375,7 @@ class LaravelCrmUpdate extends Command
                 $this->info('Back-filling per-team CRM data complete.');
             }
 
-            $this->settingService->set('db_update_1201', 1);
+            $this->settingService->setInstallWide('db_update_1201', 1);
         }
 
         $this->info('Laravel CRM is now updated.');

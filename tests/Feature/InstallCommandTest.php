@@ -202,7 +202,7 @@ function markInstalledDbUpdates(): void
     $settingService = app('laravel-crm.settings');
 
     foreach (array_keys(SystemCheckService::DB_UPDATES) as $flag) {
-        $settingService->set($flag, 1);
+        $settingService->setInstallWide($flag, 1);
     }
 
     $settingService->forgetCache();
@@ -212,7 +212,16 @@ test('install command marks every db update flag as applied', function () {
     $source = installCommandSource();
 
     expect($source)->toContain('SystemCheckService::DB_UPDATES')
-        ->and($source)->toContain('$settingService->set($flag, 1);');
+        ->and($source)->toContain('$settingService->setInstallWide($flag, 1);');
+});
+
+test('install command marks flags install-wide, not through the team-scoped setter', function () {
+    // A console command stamps no team_id, so a plain set() writes a row that a
+    // teams-enabled host reads back through BelongsToTeamsScope and cannot see —
+    // and the system check then reports updates the install just applied.
+    $source = installCommandSource();
+
+    expect($source)->not->toContain('$settingService->set($flag, 1);');
 });
 
 test('install command marks flags after the seeder and the per-team backfill', function () {
