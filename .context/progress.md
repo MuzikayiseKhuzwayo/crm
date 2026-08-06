@@ -2,6 +2,29 @@
 
 ## Codebase Patterns
 
+- **`ActionAuthorizationCoverageTest` detects writes by SUBSTRING, so merely *naming*
+  a `*Service` class in a public Livewire method flags it as mutating.**
+  `PERSISTENCE_SIGNALS` contains `'Service::'`, which is meant to catch
+  `app(FooService::class)->create(...)`. It equally matches a pure *constant read* such
+  as `SystemCheckService::UPDATE_AVAILABLE`, so a read-only formatter gets reported as
+  "persists data but has no `$this->authorize()` call". Do **not** reach for
+  `SAFE_METHODS` — that pins a false positive forever and dilutes the list. The fix is
+  to make the method `protected` (the scan is `ReflectionMethod::IS_PUBLIC`) and reach
+  it from `render()`'s view data rather than `$this->foo()` in Blade. That removes the
+  false positive *and* shrinks the client-invokable surface, which a formatter should
+  never have had. Corollary in the other direction: `SettingService::setForUser()`
+  matches **no** signal, so a Livewire method whose only write is
+  `app('laravel-crm.settings')->setForUser(...)` is invisible to the guard — see the
+  US-006 entry for the still-open hole.
+
+- **Livewire public properties are client-writable, so never persist one verbatim.**
+  Anything a component renders into `wire:snapshot` can be replayed altered by the
+  client before an action fires. If an action writes a value the component also
+  *displays*, recompute it server-side inside the action rather than reading
+  `$this->thatProperty`. Pair it with a permission re-check at the top of the action:
+  every public method is an endpoint, reachable regardless of what `mount()` decided
+  not to render.
+
 - **A command's NAME is not a specification — read its source before documenting it as
   a fix.** `php artisan laravelcrm:permissions` sounds like the command that creates
   permissions. It does not. It reads
@@ -34965,3 +34988,120 @@ application-wide and belongs in its own story.
   (`sed 's/\x1b\[[0-9;]*m//g'`) and use `grep -a`. Also capture the real exit code as
   `cmd > file 2>&1; echo $?` — a pipeline's `$?` is the *last* command's, which silently reported
   success for an aborted run in an earlier story.
+
+## US-006: Render the alerts as a dismissible Livewire banner in the layout
+- New `src/Livewire/SystemCheckBanner.php` turns the `SystemCheckService` alerts
+  (US-001) into a persistent bar above the page content — the notices the dead
+  `SystemCheck` middleware used to flash. Livewire rather than a partial for the two
+  reasons the AC names: php-flasher is not usable here (`UserController.php:526,587`
+  try/catch it), and Mary's toast is Alpine-only so it cannot read the per-user
+  dismissal that lives in `crm_settings`.
+  - `DISMISS_SETTING = 'system_check_dismissed'`; public `array $alerts` and
+    `?string $signature`; `mount()` delegates to `resolve()`.
+  - `resolve()` bails unless `auth()->user()?->can('view crm updates')` — **`can()`,
+    not the middleware's raw `hasPermissionTo()`**, because the latter throws
+    `PermissionDoesNotExist` on an install whose permissions were never seeded, which
+    is precisely the broken state the banner exists to report on. Verified at
+    `vendor/spatie/laravel-permission/src/Traits/HasPermissions.php:260`:
+    `checkPermissionTo()` catches that exception and returns false, and Spatie's
+    `Gate::before` routes `can()` through it. Then bails on empty alerts, then on a
+    stored dismissal matching the current signature.
+  - `dismiss()` writes the signature via `setForUser()` (US-002) and clears state.
+- New `resources/views/livewire/system-check-banner.blade.php`: one `x-mary-alert` per
+  alert inside a `mb-6 grid gap-3` wrapper, `alert-warning` + `o-exclamation-triangle`
+  for `level=warning` and `alert-info` + `o-information-circle` otherwise. **No `title`
+  prop** (Mary's `Alert.php:48-55` renders the default slot only when `title` is null),
+  **no `dismissible`** (it is `x-show`-only, so it would hide the bar without recording
+  anything), an `o-x-mark` button with `wire:click="dismiss"` in the `actions` slot, and
+  `id` rather than `wire:key` — Alert builds its own `wire:key` from a uuid that folds
+  `id` in, so two same-level alerts would otherwise collide on an identical
+  `md5(serialize($this))`.
+- Registered as `crm-system-check` at the head of the "Version 2 Livewire Components"
+  block, and inserted into the layout's page-content slot behind
+  `@if(config('laravel-crm.update_notifications'))`. `app.blade.php` is the only
+  authenticated CRM layout — `auth`/`document`/`portal` correctly do not get it.
+- Message composition lives in PHP, not Blade, so the `e()` calls sit beside the values
+  they protect: the sentences are developer-authored lang (US-005) but the version
+  number comes from the database. `docs_url` (US-005) backs the upgrade-guide and
+  version-details links; "update now"/"update database" point at
+  `laravel-crm.updates.index`, which is gated on the same permission as the banner.
+
+### Two hardenings beyond the AC, both found by the test suite rather than by reading
+- **`message()` is `protected`, reached via `render()`'s view data.** As a public method
+  it tripped `ActionAuthorizationCoverageTest` — see the new Codebase Patterns entry.
+  Making it protected fixed the false positive *and* removed a client-invokable method
+  that never should have been one.
+- **`dismiss()` re-checks the permission and recomputes the signature.** Livewire
+  properties are client-writable, so persisting `$this->signature` would have stored an
+  attacker-supplied string; it now calls `signature()` fresh. And because every public
+  method is an endpoint, it `abort_unless(...can('view crm updates'), 403)` rather than
+  relying on `resolve()` having declined to render.
+
+### Tests — `tests/Feature/Livewire/SystemCheckBannerTest.php` (18 tests / 61 assertions)
+One per AC bullet plus the inverses: layout wiring (the tag sits *between* the config
+`@if` and its `@endif`, not merely in the same slot); guest and
+lacking-`view crm updates` both render nothing with a pending update; the permitted user
+sees `View version 2.10.0 details`; `dismiss()` writes a `crm_settings` row for that
+user and a **fresh mount** still renders nothing; bumping `version_latest` +
+`forgetCache()` brings it back; a second user still sees it; the upgrade-required branch
+against the real `Schema` facade (drop/restore in a `finally`); link targets; an
+interpolated `<script>` in `version_latest` comes out escaped; the 403 and
+no-client-signature hardenings; and structural pins for the icon/class mapping and the
+no-title/no-dismissible/`id` choices that Mary's rendering makes unassertable at runtime.
+
+**All 9 guards mutation-tested** with a content-backup harness (never git-based — an
+uncommitted tree makes `git diff --quiet` always report "changed") that reports a
+non-zero denominator: the `can()` gate, the `abort_unless`, the signature recomputation,
+the stored-dismissal comparison, the per-user scoping, the `e()` escaping, the
+warning/info class mapping, the layout config gate, and the layout tag. **9/9
+load-bearing**; all restored byte-identically.
+
+### Quality gates
+- `composer format-test` → **passes** repo-wide.
+- `composer test` → **1135 passed / 3 failed / 3989 assertions** (US-005 baseline
+  1117/3/3928): **+18 passing = exactly the 18 new tests**, +61 assertions, **zero net
+  new failures**. The 3 are `RouteAuthorizationTest > it allows the product
+  sub-resource group…`, **proven pre-existing by two independent signals**: 0 keyword
+  hits for this story's scope in that file, and removing all five of my files (revert
+  the 2 modified to HEAD, delete the 3 new) reproduces the identical 3 failures — with
+  the restore verified byte-identical by `cmp`.
+
+### Pre-existing bug found, deliberately NOT fixed (out of scope)
+`resources/views/layouts/app.blade.php:45` — the nav popover badge still does
+`$currentVersion < $latestVersion` on raw strings, the exact bug US-001 fixed inside
+`SystemCheckService`. `php -r 'var_dump("2.2.0" < "2.10.0");'` → `false`, so the badge
+will read "Latest Version" on 2.2.0 against 2.10.0. One line, in a file I already touch,
+but the AC is scoped to the banner and a fix needs its own test — flagging rather than
+widening a commit labelled `[US-006]`.
+
+### Learnings for future iterations
+- **Mary resolves icon *names* into inline SVG, so `assertSee('o-information-circle')`
+  can never pass.** Only the `alert-info`/`alert-warning` class survives into the
+  rendered output. Assert the level-driven class at runtime and pin the icon mapping
+  structurally against the Blade source; a runtime assertion on the SVG path data would
+  be brittle.
+- **`app.blade.php` has two `<x-slot:content>` blocks** — the nav popover at line 39 owns
+  the first, the page content is the last. A test that extracts "the content slot" must
+  use `strrpos`, not `strpos`; mine silently examined the popover and failed on an
+  assertion that looked like a real defect.
+- **`printf '%s' "$(cat f)"` drops the trailing newline** (command substitution strips
+  it, and `%s` adds none), so a bash mutation harness that restores this way leaves the
+  file byte-different from the original — surfacing later as a pint
+  `single_blank_line_at_eof` failure rather than as an obvious restore error. Restore
+  with PHP `file_put_contents()` and a `cmp`/identity check, which is what the main
+  harness does.
+- **A `perl -0pi -e 's/\Q…\E/…/'` one-liner containing `$` silently failed to apply**
+  while reporting nothing; the same edit via PHP `str_replace` worked first time. The
+  only reason it was caught is that the harness asserted the mutation *applied* before
+  running the suite — a mutation harness that skips that check will happily report
+  "VACUOUS" for a guard it never actually removed.
+- **The `$`-in-double-quoted-`grep` trap bit again**: `grep -n "message(\$alert)"` found
+  nothing in a file that plainly contains `$this->message($alert)`. `grep -F` settles it
+  in one shot. Already recorded in this log; still the fastest way to waste five minutes.
+- **Open hole flagged, not fixed:** `SettingService::setForUser()` matches no entry in
+  `ActionAuthorizationCoverageTest`'s `PERSISTENCE_SIGNALS`, so `dismiss()` — a genuine
+  write — is invisible to that guard. Closing it properly means adding `->setForUser(`
+  to the signal list *and* reshaping `SAFE_METHOD_DELEGATES`, whose docblock currently
+  says it holds only methods that "delegate to a guarded method"; `dismiss()` writes
+  directly and needs no guard because the actor is the subject. That is a change to
+  another series' test file and its stated semantics, so it belongs in its own story.

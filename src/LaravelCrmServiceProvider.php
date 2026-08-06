@@ -257,6 +257,7 @@ use VentureDrake\LaravelCrm\Livewire\SmsTemplates\SmsTemplateCreate;
 use VentureDrake\LaravelCrm\Livewire\SmsTemplates\SmsTemplateEdit;
 use VentureDrake\LaravelCrm\Livewire\SmsTemplates\SmsTemplateIndex;
 use VentureDrake\LaravelCrm\Livewire\SmsTemplates\SmsTemplateShow;
+use VentureDrake\LaravelCrm\Livewire\SystemCheckBanner;
 use VentureDrake\LaravelCrm\Livewire\Tasks\TaskCreate;
 use VentureDrake\LaravelCrm\Livewire\Tasks\TaskEdit;
 use VentureDrake\LaravelCrm\Livewire\Tasks\TaskIndex;
@@ -927,6 +928,7 @@ class LaravelCrmServiceProvider extends ServiceProvider
         Livewire::component('delivery-details', LiveDeliveryDetails::class);
 
         /* Version 2 Livewire Components */
+        Livewire::component('crm-system-check', SystemCheckBanner::class);
         Livewire::component('crm-dashboard', Dashboard::class);
         Livewire::component('crm-auth-login', Login::class);
         Livewire::component('crm-auth-forgot-password', ForgotPassword::class);

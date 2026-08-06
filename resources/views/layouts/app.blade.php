@@ -323,6 +323,9 @@
             </x-mary-menu>
         </x-slot:sidebar>
         <x-slot:content>
+            @if(config('laravel-crm.update_notifications'))
+                <livewire:crm-system-check />
+            @endif
             <!-- Page Heading -->
             @if (isset($header))
                 {{ $header }}
