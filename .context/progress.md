@@ -34410,3 +34410,116 @@ already had two production bugs (an Eloquent scope used as a sort column; a `onl
   evidence — here `git log -S` on both the assertion and the production line, plus an explicit
   rationale comment in the controller and a parameter that exists specifically to allow the
   override. Flip rather than delete, and cite the evidence in the test.
+
+## US-001: Add SystemCheckService with cached, version-safe checks (restore-system-check series kickoff)
+- New `src/Services/SystemCheckService.php` lifts the logic out of the dead
+  `Http/Middleware/SystemCheck` (every flasher call in it is commented out, so it
+  has produced nothing for several releases) into a testable, cached service, and
+  fixes the three defects it carried while doing so.
+- **Constants** exactly as specified: `CACHE_KEY = 'app.crm-system-check'`,
+  `CACHE_TTL = 300`, `UPGRADE_REQUIRED`, `UPDATE_AVAILABLE`, `DB_UPDATE_REQUIRED`,
+  and `DB_UPDATES` mapping all eight flags to the minimum normalised version that
+  introduces them — `0180 => 180`, `0181 => 181`, `0191 => 191`, `0193 => 193`,
+  `0194 => 194`, `0199 => 199`, `1200 => 1200`, plus the new `1201 => 1201`.
+  Values verified one-by-one against the `if ($currentVersion >= N)` seeding guards
+  in `Http/Middleware/Settings.php`; `db_update_1201` is already written by
+  `LaravelCrmUpdate.php:344,371` but had no entry anywhere in the check.
+- **Constructor** takes `SettingService`, so it resolves out of the container with
+  no wiring (`app(SystemCheckService::class)` works today).
+- **`check()`**:
+  1. A missing `{prefix}settings` table, or any of `users.crm_access`,
+     `users.last_online_at`, `users.current_crm_team_id` absent, pushes
+     `UPGRADE_REQUIRED` at `warning` and **returns early** — every later check
+     reads from one of those, so continuing would report on unreliable state.
+  2. `version` vs `version_latest` via `SettingService`, compared with
+     **`version_compare()`**. This is defect 3: the middleware used `<` on raw
+     strings, so `'2.2.0' < '2.10.0'` is `false` lexicographically and the update
+     banner silently stopped firing once the minor version reached double digits.
+  3. A **single `all()` read** feeds a loop over `DB_UPDATES`, collecting flags that
+     are both present in settings AND `=== 0`, pushed as one `DB_UPDATE_REQUIRED`
+     at `info` with the pending names. The old middleware issued eight separate
+     `Setting::where(...)->first()` queries.
+- **`alerts()`** returns `[]` when `laravel-crm.update_notifications` is off (before
+  touching the cache), otherwise `Cache::remember(CACHE_KEY, CACHE_TTL, …)`.
+  `forgetCache()` is the companion, matching `SettingService`'s shape.
+- **`signature()`** is `substr(sha1(json_encode($alerts)), 0, 32)`, or `null` when
+  there is nothing to report — a stable fingerprint a UI can compare against a
+  dismissal.
+- **`normalisedVersion(?string $version = null)`** lifts `Settings.php:171-175`
+  verbatim (`Str::startsWith('0.')` → raw digits, else digits × 10) with the config
+  version as the default, so the seeding rule and the check cannot drift.
+
+### Tests — `tests/Feature/Services/SystemCheckServiceTest.php` (20 tests / 56 assertions)
+Covers every AC bullet plus the inverses: the three constant groups; `DB_UPDATES`
+asserted as a whole literal array (so adding a flag without updating the test fails);
+the 2.2.0-vs-2.10.0 defect pin, plus equal-version and ahead-version cases;
+`db_update_1201` alone triggering `DB_UPDATE_REQUIRED`, an absent row not triggering
+it, a completed (`1`) row not triggering it, and multiple pending flags listed in
+`DB_UPDATES` order; the short-circuit asserted as `toHaveCount(1)` so no
+`update_available` or `db_update_required` can sneak in alongside; `alerts()` empty
+(and cache untouched) with notifications off, serving a stale cached value after the
+underlying setting changes, and refreshing after `forgetCache()`; `signature()` length,
+formula, null case, and that it changes when the alerts do; `normalisedVersion()`
+against four versions spanning both branches; and a guard that no `DB_UPDATES`
+minimum exceeds the shipped version.
+
+The upgrade-required branch is exercised against the **real** `Schema` facade — a
+helper drops `users.current_crm_team_id`, runs the assertion inside a `try`, and
+restores the column in `finally` — rather than mocking, so the branch is proven to
+fire on genuinely missing schema.
+
+**Mutation-tested five ways**, each restored byte-identically: swapping
+`version_compare()` for the old string `<` (2 fail), deleting the short-circuit
+`return` (1 fail), treating absent flags as pending (8 fail), removing
+`db_update_1201` from `DB_UPDATES` (4 fail), and dropping the
+`update_notifications` gate (1 fail). None of the guards is decorative.
+
+### Quality gates
+- `composer format-test` → **passes**. It failed once on this story's own file
+  (`single_line_empty_body` on the promoted-property constructor); `./vendor/bin/pint`
+  on the two new files fixed it, and the resulting diff was that one line.
+- `composer test` → **1075 passed, 3 failed, 3726 assertions**. The 3 are
+  `RouteAuthorizationTest > it allows the product sub-…` ×3, **proven pre-existing**:
+  moving both new files out of the tree entirely and re-running that file alone
+  reproduces exactly the same 3 failures. Neither new file is loaded by it. Zero net
+  new failures; the +20 passing are exactly this story's tests.
+
+### Files changed
+- **Added** `src/Services/SystemCheckService.php`.
+- **Added** `tests/Feature/Services/SystemCheckServiceTest.php`.
+
+### Learnings for future iterations
+- **A "dead" middleware is worth reading for its data model, not its behaviour.**
+  Every flasher call in `SystemCheck` is commented out, so the class runs eight
+  queries per request and produces nothing. The value in it was the *list* of things
+  worth checking; the implementation had a real bug (the string version compare) that
+  had gone unnoticed precisely because nothing rendered the result. When lifting dead
+  code, port the intent and re-derive the implementation — don't transcribe.
+- **`'2.2.0' < '2.10.0'` is `false` in PHP.** String comparison goes character by
+  character, and `'2' < '1'` is false at the third character. This package is on
+  `2.3.0` and its own release naming will hit `2.10.x`, so the latent bug was one
+  minor bump from becoming visible. Any version comparison against a dotted string
+  needs `version_compare()`; `<`/`>` on versions is a bug that tests pass through
+  happily while the minor stays single-digit.
+- **`DB_UPDATES` values must be re-derived from the seeding guards, not guessed from
+  the flag names.** The names look like versions but normalise unusually — `1200` is
+  `1.2.0` (`120 × 10`), while `1201` is only reached at `1.2.1` (`121 × 10 = 1210`).
+  Read the `if ($currentVersion >= N)` guard in `Settings.php` for each flag rather
+  than inferring N from the name.
+- **Presence-plus-zero is the right pending test, not `?? 0`.** `Settings.php` only
+  seeds a flag once the install reaches its version, so an *absent* flag means "not
+  applicable to this install", while `0` means "seeded and not yet run". Coalescing
+  absent to zero would report every future migration as pending on an older install
+  — the mutation test for it failed 8 tests, which is the shape you want.
+- **Drop-and-restore in a `finally` is a clean way to test a `Schema::hasColumn`
+  branch** without mocking the facade. SQLite under Laravel 11+ handles
+  `dropColumn`/re-add fine, and the `finally` means a failing assertion still leaves
+  the schema intact for the rest of the file.
+- **Pint's reported fixer list over-reports.** It named `unary_operator_spaces` and
+  `not_operator_with_successor_space` alongside `single_line_empty_body`, but the
+  actual diff was one line (the constructor body). Trust `diff` against a pre-pint
+  backup over the fixer names when you want to know what changed.
+- **Prove "pre-existing" by removing the new files, not by stashing.** These were
+  untracked, so `mv` out → run the failing test → `mv` back is safe and unambiguous.
+  This log records a prior session where `git stash pop` tried to apply a *foreign*
+  stash entry over the tree; with untracked files there is no reason to go near it.
