@@ -1317,8 +1317,18 @@ Route::group(['prefix' => 'profile', 'middleware' => 'auth.laravel-crm'], functi
 
 /* Updates */
 Route::group(['prefix' => 'updates', 'middleware' => 'auth.laravel-crm'], function () {
+    // The sidebar link and the system-check banner are both gated on 'view crm updates'
+    // but the route itself was auth-only, so anyone could read the install's version and
+    // update state by typing the URL. (It does not stop the api.laravelcrm.com call —
+    // the Settings middleware in the 'crm' group already makes that on every request.)
+    //
+    // A bare permission string, not a can:ability,model pair — there is no Update model.
+    // Safe: Spatie's Gate::before routes it through checkPermissionTo(), which returns
+    // false rather than throwing when the permission has never been seeded, so an
+    // un-seeded install 403s here instead of 500ing.
     Route::get('', 'VentureDrake\LaravelCrm\Http\Controllers\UpdateController@index')
-        ->name('laravel-crm.updates.index');
+        ->name('laravel-crm.updates.index')
+        ->middleware(['can:view crm updates']);
 });
 
 /* Roles */

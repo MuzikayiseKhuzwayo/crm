@@ -35193,3 +35193,121 @@ one sentence the deletion forced me to touch, not a wider doc pass.
   Matching on the literal statement text made the edit exact and would have failed loudly had the
   call not existed — whereas a line-addressed edit would have silently removed
   `pushMiddlewareToGroup('crm-api', HasCrmAccess::class)` instead.
+
+## US-008: Fix the updates page compare and gate its route
+- **`resources/views/updates/index.blade.php`** — three changes the AC names:
+  - Both version comparisons switched to `version_compare()`. The old `>=` / `<` on raw
+    strings meant `'2.2.0' >= '2.10.0'` was **true** (PHP compares character by character
+    and `'2' > '1'` at the third char), so the page claimed you were up to date and the
+    update banner silently stopped rendering the moment the minor version reached double
+    digits. Same defect US-001 fixed inside `SystemCheckService`; this is its last home.
+    Refactored to compute `$comparable` once and derive `$isLatest` / `$updateAvailable`
+    from it, so the two branches cannot drift out of being exact inverses.
+  - The two inline `Setting::where(...)->first()?->value` lookups replaced with
+    `app('laravel-crm.settings')->get(...)`, so the page and the service read one cached
+    source. Safe because `UpdateController@index`'s `updateOrCreate` writes fire
+    `SettingObserver`, which busts that cache (US-003) — a freshly-fetched
+    `version_latest` is visible on the same request.
+  - The hard-coded `https://github.com/venturedrake/laravel-crm` upgrade-guide href
+    replaced with `config('laravel-crm.docs_url')` (added in US-005), plus `rel="noopener"`
+    alongside the existing `target="_blank"`.
+- **`src/Http/routes.php`** — `laravel-crm.updates.index` gained
+  `->middleware(['can:view crm updates'])`. This is the **first bare permission-string
+  `can:` gate in the file** (every other one is the `can:ability,model` form). Verified the
+  AC's safety claim in vendor source rather than taking it on trust:
+  `Authorize::handle()` with no `...$models` passes `[]` to `Gate::authorize`; Spatie's
+  `Gate::before` (`PermissionRegistrar.php:125`) calls `checkPermissionTo()`, which
+  (`HasPermissions.php:260`) catches `PermissionDoesNotExist` and returns **false**; `false ?: null`
+  falls through to `resolveAuthCallback`, which with no arguments and no registered ability
+  returns `function () {}` → null → deny. So an un-seeded install 403s rather than 500s.
+- **Lockout pre-flight, done before writing the gate**: scripted the seeder's role blocks —
+  Manager and Employee hold **neither** `view crm updates` nor `view crm settings`, and the
+  sidebar link (`nav.blade.php:128`) is already `@can('view crm updates')`. So the gate makes
+  the route match the sidebar exactly; no seeded role loses access it previously used.
+  Owner/Admin get `Permission::all()`.
+
+### The AC's stated justification for the gate is half wrong — corrected in the code comment
+The AC says to gate the route because "`UpdateController::index` fires an outbound POST to
+api.laravelcrm.com". The controller does — but `Http/Middleware/Settings.php:200-245` runs the
+**identical** phone-home and `touch()` behind the identical 3-day/`!install_id` guard, and it
+sits in the `crm` middleware group, which executes **before** route middleware. So the gate does
+not prevent that POST; any CRM page load already made it. I found this only because my first deny
+test asserted "no `version` Setting row was written" and failed — the `Settings` middleware had
+created it. Rather than keep a comment asserting a property the code does not have, the route
+comment now states the real justification (the page discloses version/update state, which the
+sidebar already gates) and explicitly notes the POST is not prevented.
+
+### Tests — 12 new (3 in `RouteAuthorizationTest`, 9 in a new `UpdatesPageTest`)
+Split by concern: `RouteAuthorizationTest`'s docblock scopes it to "route-level authorization",
+so the gate tests go there (403 without the permission + no version state disclosed; **200** with
+it, as the AC asks; and a structural pin that the route carries `can:view crm updates`).
+The view's rendering contract gets its own file: the 2.2.0-vs-2.10.0 regression pin, the equal-
+version and current-ahead-of-latest cases, an ordinary single-digit bump (so a fix that
+over-corrects the other way is caught too), `substr_count(version_compare()) === 2` plus
+negative-presence guards on both old string operators, source guards for the SettingService and
+`docs_url` swaps, a `docs_url` override rendering end-to-end, and a behavioural proof the page
+really reads through the cache (warm it, mutate the row inside `Setting::withoutEvents`, assert
+the page still shows the cached value — a direct `Setting::where` would see the new one).
+
+**All 5 guards mutation-tested** with a content-backup harness (never git-based — an uncommitted
+tree makes `git diff --quiet` always report "changed") that asserts the mutation applied, asserts
+the restore is byte-identical, and reports a non-zero denominator: route gate removed, each
+`version_compare` reverted to its string operator, `docs_url` hard-coded again, and the
+SettingService reads reverted to `Setting::where`. **5/5 load-bearing** (5–7 failures vs the
+3-failure baseline); all restored byte-identically.
+
+### Quality gates
+- `composer format-test` → **passes** repo-wide. It failed once on my own new test file
+  (`fully_qualified_strict_types`, `ordered_imports` — an inline `Illuminate\Testing\TestResponse`
+  return type); `./vendor/bin/pint` on that file fixed it. Note the 21-file pre-existing pint
+  baseline carried from US-002..US-009 of the livewire-authz-checks series is **gone** — US-010
+  of that series ran `composer format` — so any pint failure now is genuinely yours.
+- `composer test` → **1147 passed / 3 failed / 4020 assertions**, against a baseline of
+  **1135 / 3 / 3989** that I measured myself at the start of this session before touching
+  anything (and which matches the US-007 record byte-for-byte). **+12 passing = exactly the 12
+  new tests, +31 assertions, zero net new failures.**
+- The 3 are `RouteAuthorizationTest > it allows the product sub-resource group…` ×3, proven
+  pre-existing by two independent signals: the pre-change baseline run of that file alone gave
+  the identical 14-passed/3-failed with the same three names, and the failing dataset block has
+  **0** keyword hits for this story's scope (`updates|version_compare|docs_url|settings`).
+
+### Files changed
+- **Modified** `resources/views/updates/index.blade.php`, `src/Http/routes.php`,
+  `tests/Feature/RouteAuthorizationTest.php`.
+- **Added** `tests/Feature/UpdatesPageTest.php`.
+
+### Learnings for future iterations
+- **`'2.2.0' >= '2.10.0'` is `true` in PHP, and this repo shipped that bug in two places.**
+  US-001 fixed the service; the Blade view kept it for seven more stories because nothing tested
+  the rendered page. The package is on 2.3.0, so it was one minor bump from becoming visible.
+  When a version-comparison bug is found, grep the whole tree for the *other* comparisons of the
+  same pair — `grep -rn 'currentVersion.*latestVersion'` here — rather than fixing the one the
+  ticket names. **`app.blade.php:45` still has it** in the nav popover badge
+  (`$currentVersion < $latestVersion`): out of scope for a commit labelled `[US-008]`, already
+  flagged in US-006, and still unfixed — worth its own story.
+- **Middleware ordering makes "the gate prevents side-effect X" claims easy to get wrong.**
+  Route middleware runs *after* the route group's middleware, so anything the group already did
+  is not prevented by a route-level gate. Here the `crm` group's `Settings` middleware duplicates
+  the controller's entire phone-home block. Before asserting a gate stops a side effect, check
+  whether an earlier middleware performs the same one — the fastest way is to try to *test* the
+  claim, which is what exposed it.
+- **The Settings middleware writes `app_name`, `app_env`, `app_url` and `version` on every CRM
+  request.** Any test asserting "the controller did/didn't write setting X" needs a discriminator
+  the middleware does not also touch — for these four there isn't one. Pick a different observable
+  (the rendered output) rather than a Setting row.
+- **`config('laravel-crm.version')` is null in tests and the controller writes it.** Seeding a
+  `version` row is not enough: `UpdateController@index` (and the Settings middleware) run
+  `updateOrCreate` from the config, overwriting it with null. Set
+  `config(['laravel-crm.version' => …])` *and* seed the row with the same value — matching values
+  keep the write non-dirty, so no `updated` event fires and the settings cache is not busted
+  underneath a test that depends on it. Seed `install_id` too or every case makes a real network
+  call inside a swallowing `try {}`.
+- **A bare `can:<permission>` gate is a distinct middleware shape from `can:<ability>,<model>`,
+  and the failure modes are opposite.** The model form silently 403s for *everyone* when the
+  route parameter name and the guard argument disagree (the US-006 product-attributes bug). The
+  bare form has no parameter to mismatch and degrades to a plain deny for an unseeded permission.
+  Prefer it whenever the ability is a permission string with no subject.
+- **A negative assertion paired with a positive one catches over-correction.** Testing only
+  "2.2.0 vs 2.10.0 shows the update banner" would pass if someone inverted the comparison
+  entirely. The equal-version, current-ahead, and ordinary-bump cases are what pin the fix to the
+  right direction — and the current-ahead case is the one a naive `!=` would break.

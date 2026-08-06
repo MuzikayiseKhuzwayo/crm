@@ -6,6 +6,7 @@ use VentureDrake\LaravelCrm\Models\Deal;
 use VentureDrake\LaravelCrm\Models\Order;
 use VentureDrake\LaravelCrm\Models\ProductAttribute;
 use VentureDrake\LaravelCrm\Models\Quote;
+use VentureDrake\LaravelCrm\Models\Setting;
 
 /**
  * Route-level authorization for the groups closed in US-006.
@@ -189,4 +190,56 @@ it('binds the product-attributes URI parameter so the policy is consulted', func
     expect($route->uri())->toContain('{productAttribute}')
         ->and($route->uri())->not->toContain('{productCategory}')
         ->and($route->middleware())->toContain('can:view,productAttribute');
+});
+
+/* -------------------------------------------------------------------------
+ | Updates — the page the sidebar already gated but the route did not
+ | ------------------------------------------------------------------------- */
+
+/**
+ * Seed the rows UpdateController@index reads so hitting the route stays offline.
+ *
+ * Two things matter here. Without an install_id row the controller POSTs to
+ * api.laravelcrm.com inside a try {} that swallows the failure — slow and flaky with
+ * no visible cause. And config('laravel-crm.version') is null in tests (only a host's
+ * published config defines it), so the controller's updateOrCreate would otherwise
+ * write a null version over anything we seed.
+ */
+function seedUpdatesRouteSettings(string $current = '2.3.0', string $latest = '2.3.0'): void
+{
+    config(['laravel-crm.version' => $current]);
+
+    Setting::create(['name' => 'install_id', 'value' => 'route-auth-updates']);
+    Setting::create(['name' => 'version', 'value' => $current]);
+    Setting::create(['name' => 'version_latest', 'value' => $latest]);
+
+    app('laravel-crm.settings')->forgetCache();
+}
+
+it('forbids the updates page without the view crm updates permission', function () {
+    // A pending update is seeded so the page would have something to disclose if the
+    // gate let this user through — assertDontSee then means "no version state leaked",
+    // not just "the response happened to be short".
+    seedUpdatesRouteSettings('2.2.0', '2.10.0');
+    $this->actingAsUserWithPermissions([]);
+
+    $this->get(route('laravel-crm.updates.index'))
+        ->assertForbidden()
+        ->assertDontSee('Updated version of Laravel CRM is available');
+});
+
+it('allows the updates page for a user holding view crm updates', function () {
+    seedUpdatesRouteSettings();
+    $this->actingAsUserWithPermissions(['view crm updates']);
+
+    $this->get(route('laravel-crm.updates.index'))->assertOk();
+});
+
+it('gates the updates route on the view crm updates permission', function () {
+    // A bare permission string, not a can:ability,model pair — there is no Update model.
+    // Spatie's Gate::before routes it through checkPermissionTo(), which returns false
+    // rather than throwing when the permission has never been seeded.
+    $route = app('router')->getRoutes()->getByName('laravel-crm.updates.index');
+
+    expect($route->middleware())->toContain('can:view crm updates');
 });
