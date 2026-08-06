@@ -93,7 +93,6 @@ use VentureDrake\LaravelCrm\Http\Middleware\LogUsage;
 use VentureDrake\LaravelCrm\Http\Middleware\RouteSubdomain;
 use VentureDrake\LaravelCrm\Http\Middleware\SetApiTeamContext;
 use VentureDrake\LaravelCrm\Http\Middleware\Settings;
-use VentureDrake\LaravelCrm\Http\Middleware\SystemCheck;
 use VentureDrake\LaravelCrm\Http\Middleware\TeamsPermission;
 use VentureDrake\LaravelCrm\Http\Middleware\XeroTenant;
 use VentureDrake\LaravelCrm\Livewire\Activities\ActivityFeed;
@@ -560,7 +559,6 @@ class LaravelCrmServiceProvider extends ServiceProvider
         $router->pushMiddlewareToGroup('crm', HasCrmAccess::class);
         $router->pushMiddlewareToGroup('crm-api', HasCrmAccess::class);
         $router->pushMiddlewareToGroup('crm', LastOnlineAt::class);
-        $router->pushMiddlewareToGroup('crm', SystemCheck::class);
         $router->pushMiddlewareToGroup('crm', LogUsage::class);
         $router->pushMiddlewareToGroup('crm-api', LogUsage::class);
         $router->pushMiddlewareToGroup('crm', FormComponentsConfig::class);

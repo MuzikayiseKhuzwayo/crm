@@ -35105,3 +35105,91 @@ widening a commit labelled `[US-006]`.
   says it holds only methods that "delegate to a guarded method"; `dismiss()` writes
   directly and needs no guard because the actor is the subject. That is a change to
   another series' test file and its stated semantics, so it belongs in its own story.
+
+## US-007: Delete the SystemCheck middleware and its provider registration
+- Deleted `src/Http/Middleware/SystemCheck.php` (102 lines) and both provider references:
+  the import at `LaravelCrmServiceProvider.php:96` and
+  `$router->pushMiddlewareToGroup('crm', SystemCheck::class);` at line 563 (the AC said 561;
+  the line had drifted by two, so I anchored on the statement rather than the number).
+  Net diff **1 insertion / 105 deletions across 3 files**.
+- **Confirmed the class was genuinely dead before removing it.** All three `flash()` calls are
+  commented out behind `// TODO: Refactor to use new flasher`, and the only other statement is
+  `return $next($request)` — so per request it ran 3 × `Schema::hasColumn`, 2 × `Schema::hasTable`
+  and **9** `Setting::where(...)->first()` queries (version, version_latest, and seven
+  `db_update_*`) and produced no output. The AC's "roughly nine Setting queries" matches exactly.
+- **Behaviour is not lost.** `SystemCheckService` (US-001) + `SystemCheckBanner` (US-006) cover it
+  and run strictly less often — only when an authenticated CRM page actually renders, never on
+  redirects, POSTs, PDF downloads or Livewire XHR sub-requests — and the service is cached for
+  300s and bust by `SettingObserver` (US-003), so the nine per-request queries become at most one
+  refresh per five minutes.
+
+### The AC's "no test or doc mentioning it" premise was wrong — `AGENTS.md:122` did
+A word-boundary sweep (`\bSystemCheck\b`, excluding `SystemCheckBanner`/`SystemCheckService`,
+across every file type outside `vendor/`, `node_modules/`, `.git/`) found **four** references, not
+the two the AC listed: the two provider lines, the class itself, and a line in the repo's own
+architecture guide. Deleting the class without touching `AGENTS.md` would have left the guide
+describing a class that no longer exists. **No test referenced it** — that half of the AC held.
+`ServiceProviderTest` asserts the `auth.laravel-crm` alias (untouched) and the `SystemCheckService`
+singleton (a different class); `grep -rln "pushMiddlewareToGroup\|middlewareGroup\|getMiddlewareGroups" tests/`
+returns nothing, so no test pins the `crm` group's composition.
+
+### The doc line was independently wrong, so the replacement had to be rewritten, not just trimmed
+It read *"`auth.laravel-crm` wraps `Authenticate` + `HasCrmAccess` + `SystemCheck` + `Settings` +
+`LogUsage`"*. Reading `LaravelCrmServiceProvider.php:535-567` shows `aliasMiddleware('auth.laravel-crm', …)`
+binds **`Authenticate` alone**; the other four are `pushMiddlewareToGroup('crm', …)` calls — a
+route group, not the alias. Since the sentence had to be edited anyway, leaving a known-false
+description of the remaining four would have been worse than fixing it, so the replacement states
+the real split (`crm` group vs `crm-api` group vs `web`, with the two config conditionals) and
+keeps every parenthetical description from the original. Scope note: this is one line inside the
+one sentence the deletion forced me to touch, not a wider doc pass.
+
+### Quality gates
+- `php -l src/LaravelCrmServiceProvider.php` → No syntax errors detected.
+- `composer format-test` → **`{"tool":"pint","result":"passed"}`** repo-wide.
+- AC-named files: `ServiceProviderTest` + `AuthorizationMiddlewareTest` → **31 tests / 69
+  assertions, 0 failures**.
+- System-check-adjacent suite (those two plus `SystemCheckServiceTest`, `SystemCheckBannerTest`,
+  `SettingObserverCacheTest`, `SettingsDbUpdateSeedingTest`) → **89 tests / 266 assertions, 0
+  failures** — the banner and service that now solely own this behaviour are unaffected.
+- Full suite → **1135 passed / 3 failed / 3989 assertions**, *byte-identical* to the US-006
+  baseline on all three numbers. Exactly right for a pure deletion that adds no tests.
+- The 3 are `RouteAuthorizationTest > it allows the product sub-resource group…` ×3, **proven
+  pre-existing by two independent signals** rather than cited from this log: (a) that file has
+  **0** keyword hits for this story's scope and is not in the change set; (b) reverting both source
+  files to HEAD — verified by `grep -c "SystemCheck::class"` returning 1, i.e. the middleware
+  genuinely back — and re-running that file alone reproduces the **identical 3 failures**. Restored
+  afterwards and confirmed byte-identical with `cmp`.
+
+### Files changed
+- **Deleted** `src/Http/Middleware/SystemCheck.php`.
+- **Modified** `src/LaravelCrmServiceProvider.php` (−2: import + `pushMiddlewareToGroup`).
+- **Modified** `AGENTS.md` (middleware-stack line rewritten accurately, `SystemCheck` removed).
+
+### Learnings for future iterations
+- **An AC's "grep confirms X is the only reference" is a claim to re-run, not a fact to inherit.**
+  This one missed `AGENTS.md` — probably because the author grepped `src/` or `*.php` rather than
+  the whole tree. The sweep that catches this is one line: word-boundary pattern, all file types,
+  excluding only `vendor/`/`node_modules/`/`.git/`. Cost seconds; would have shipped a docs
+  reference to a deleted class otherwise. Same family as the recorded lesson that a command's
+  *name* is not a specification — an AC's *inventory* isn't either.
+- **Exclude sibling names explicitly when grepping for a class whose prefix is shared.** A plain
+  `grep -rn SystemCheck` returns ~140 hits here, almost all `SystemCheckBanner`/`SystemCheckService`,
+  which buries the 4 that matter. `grep -rnE '\bSystemCheck\b' … | grep -vE 'SystemCheckBanner|SystemCheckService'`
+  makes the real reference set legible. Worth doing whenever a deletion target shares a prefix with
+  live classes — which, after an extract-to-service refactor, it usually does.
+- **When a doc line you must edit is also independently wrong, fix it in the same edit and say so.**
+  Trimming just the deleted name out of `AGENTS.md:122` would have left "`auth.laravel-crm` wraps
+  `Authenticate` + `HasCrmAccess` + `Settings` + `LogUsage`" — still false, and now *freshly
+  attested* by my commit. The honest options are fix-and-flag or leave-untouched; silently
+  half-fixing a sentence is the one to avoid. Verify against source first (`aliasMiddleware` vs
+  `pushMiddlewareToGroup` here) so the replacement isn't a second guess.
+- **A pure-deletion story should move the suite by exactly zero on all three numbers.**
+  1135/3/3989 identical to US-006 is the assertion worth making: passing count unchanged (nothing
+  was covering the dead code), failure count unchanged, assertion count unchanged. If a deletion
+  *raises* the passing count something was skipping; if it lowers it, something was covering the
+  removed code and the AC's "no test mentions it" was wrong.
+- **Line numbers in an AC drift; anchor on the statement.** The AC named line 561 for the
+  `pushMiddlewareToGroup` call, which now sits at 563 (US-001..US-006 added imports above it).
+  Matching on the literal statement text made the edit exact and would have failed loudly had the
+  call not existed — whereas a line-addressed edit would have silently removed
+  `pushMiddlewareToGroup('crm-api', HasCrmAccess::class)` instead.
