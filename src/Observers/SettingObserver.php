@@ -25,6 +25,7 @@ class SettingObserver
     public function created(Setting $setting)
     {
         app('laravel-crm.settings')->forgetCache();
+        app('laravel-crm.system-check')->forgetCache();
     }
 
     /**
@@ -46,6 +47,7 @@ class SettingObserver
     public function updated(Setting $setting)
     {
         app('laravel-crm.settings')->forgetCache();
+        app('laravel-crm.system-check')->forgetCache();
     }
 
     /**
@@ -56,6 +58,7 @@ class SettingObserver
     public function deleted(Setting $setting)
     {
         app('laravel-crm.settings')->forgetCache();
+        app('laravel-crm.system-check')->forgetCache();
     }
 
     /**
@@ -66,6 +69,7 @@ class SettingObserver
     public function restored(Setting $setting)
     {
         app('laravel-crm.settings')->forgetCache();
+        app('laravel-crm.system-check')->forgetCache();
     }
 
     /**
@@ -76,6 +80,7 @@ class SettingObserver
     public function forceDeleted(Setting $setting)
     {
         app('laravel-crm.settings')->forgetCache();
+        app('laravel-crm.system-check')->forgetCache();
     }
 
     protected function setGlobal(Setting $setting)

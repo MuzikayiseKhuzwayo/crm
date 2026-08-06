@@ -3,6 +3,7 @@
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Schema;
+use VentureDrake\LaravelCrm\Models\Setting;
 use VentureDrake\LaravelCrm\Services\SystemCheckService;
 
 function systemCheckService(): SystemCheckService
@@ -13,6 +14,21 @@ function systemCheckService(): SystemCheckService
 function seedSystemCheckSetting(string $name, $value): void
 {
     app('laravel-crm.settings')->set($name, $value);
+    app('laravel-crm.settings')->forgetCache();
+}
+
+/**
+ * Change a setting without firing model events, so SettingObserver does not
+ * bust the system-check cache. Needed to exercise the caching itself: since
+ * US-003 every ordinary setting write invalidates that cache by design, so a
+ * normal write can no longer leave a stale value in place to observe.
+ */
+function seedSystemCheckSettingQuietly(string $name, $value): void
+{
+    Setting::withoutEvents(function () use ($name, $value) {
+        app('laravel-crm.settings')->set($name, $value);
+    });
+
     app('laravel-crm.settings')->forgetCache();
 }
 
@@ -178,9 +194,11 @@ test('alerts caches the result and refreshes after forgetCache', function () {
         ->toContain(SystemCheckService::DB_UPDATE_REQUIRED)
         ->and(Cache::has(SystemCheckService::CACHE_KEY))->toBeTrue();
 
-    // Clear the pending flag but leave the alert cache alone — the stale
-    // cached value must still be served.
-    seedSystemCheckSetting('db_update_1201', 1);
+    // Clear the pending flag with a quiet write so the alert cache survives —
+    // the stale cached value must still be served. An ordinary write would go
+    // through SettingObserver and invalidate it (covered in
+    // tests/Feature/Observers/SettingObserverCacheTest.php).
+    seedSystemCheckSettingQuietly('db_update_1201', 1);
 
     expect(systemCheckAlertTypes(systemCheckService()->alerts()))
         ->toContain(SystemCheckService::DB_UPDATE_REQUIRED);

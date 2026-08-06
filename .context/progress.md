@@ -34599,3 +34599,96 @@ always report "changed") and prints a non-zero denominator, so it cannot pass va
   a `cmp -s` check that the restore was byte-identical. This repo family has a recorded incident
   where `git stash pop` tried to apply a *foreign* stash entry over the tree. Pair it with a cheap
   keyword grep of the failing test file (0 hits here) so the claim rests on two independent signals.
+
+## US-003: Bind SystemCheckService and bust its cache from SettingObserver
+- **`LaravelCrmServiceProvider::register()`** — added three container lines after the existing
+  `laravel-crm.settings` singleton: an alias `laravel-crm.settings` → `SettingService::class`, a
+  `laravel-crm.system-check` singleton building `SystemCheckService` from
+  `$app->make('laravel-crm.settings')`, and an alias `laravel-crm.system-check` →
+  `SystemCheckService::class`. The aliases leave the ~30 existing `app('laravel-crm.settings')`
+  call sites untouched while making the class-string form resolve the *same* instance. Before
+  this, `app(SettingService::class)` auto-wired a fresh object per injection — harmless today
+  (the service is stateless and its cache lives in the Cache facade) but the wrong contract, and
+  it meant the pre-existing `SystemCheckServiceTest`'s `app(SystemCheckService::class)` was
+  building a throwaway `SettingService` on every call.
+- **`SettingObserver`** — added `app('laravel-crm.system-check')->forgetCache();` beside the
+  existing settings bust in all five lifecycle methods (`created`, `updated`, `deleted`,
+  `restored`, `forceDeleted`).
+- **Verified the AC's "not chatty" claim against source rather than assuming it.**
+  `Http/Middleware/Settings.php:25-46` runs four `updateOrCreate` calls per request (`app_name`,
+  `app_env`, `app_url`, `version`). On every request after the first these find zero dirty
+  attributes, so Eloquent issues no UPDATE and fires no `updated` event — the cache survives.
+  A locked-in test asserts both halves of this. The one exception is the `$versionSetting->touch()`
+  at `Settings.php:289`, which *does* dirty `updated_at` — but it sits behind a 3-day guard, so it
+  busts the cache roughly twice a week, which is the intended freshness anyway.
+
+### Tests — `tests/Feature/Observers/SettingObserverCacheTest.php` (10 tests) + `ServiceProviderTest` (+1)
+Both aliases resolve to the same singleton across repeated calls; the system-check singleton is
+built from the *shared* settings singleton (reflected on the constructor property, so a mutation
+that swaps in `new SettingService` is caught); `created`/`updated`/`deleted` bust both caches
+end-to-end through real model calls; `restored`/`forceDeleted` bust both via direct handler
+invocation (`Setting` has no `SoftDeletes`, so Eloquent can never dispatch them); a clean
+`updateOrCreate` leaves the cache warm while a changed one busts it; and a changed `version_latest`
+write flips `alerts()` from empty to `UPDATE_AVAILABLE`, mirroring `UpdateController::index`.
+A `warmSettingCaches()` helper asserts both caches really are warm before each scenario, so a
+"cache was busted" assertion cannot pass just because the cache was never populated.
+
+**Mutation-tested 9 ways** (content-backup harness, non-zero denominator): removing the
+system-check bust from each of the five handlers, dropping either alias, downgrading the singleton
+to `bind`, and building it from a fresh `SettingService`. **All 9 load-bearing**; all restored
+byte-identically (`git diff --stat src/` shows only the two intended files afterwards).
+
+### One pre-existing test updated — a stale expectation, not a weakened assertion
+`SystemCheckServiceTest > alerts caches the result and refreshes after forgetCache` failed after
+the observer change. Its comment read *"leave the alert cache alone — the stale cached value must
+still be served"*, which was only true in US-001 because **nothing** invalidated that cache;
+making an ordinary setting write invalidate it is precisely what this story does. The test's real
+intent (caching works; `forgetCache()` refreshes) is still valid, so it was kept and routed through
+a new `seedSystemCheckSettingQuietly()` helper that writes inside `Setting::withoutEvents(...)`.
+Both assertions survive unchanged, and the new behaviour it used to cover is now covered explicitly
+in the observer test file, cross-referenced in the comment.
+
+### Quality gates
+- `composer format-test` → **passes** (repo-wide, not just `--dirty`).
+- `composer test` → **1096 passed / 3 failed / 3777 assertions** (US-002 baseline 1085/3/3745):
+  **+11 passing = exactly the 11 new tests, +32 assertions, zero net new failures.** The 3 are
+  `RouteAuthorizationTest > it allows the product sub-resource group…` ×3, **proven pre-existing
+  independently** rather than cited from this log: that file has 0 keyword hits for
+  `system.?check|SettingObserver|forgetCache|laravel-crm\.settings`, and restoring both changed
+  source files to HEAD reproduces the identical 3 failures (restore verified byte-identical
+  with `cmp`).
+
+### Files changed
+- **Modified** `src/LaravelCrmServiceProvider.php`, `src/Observers/SettingObserver.php`,
+  `tests/Feature/ServiceProviderTest.php`, `tests/Feature/Services/SystemCheckServiceTest.php`.
+- **Added** `tests/Feature/Observers/SettingObserverCacheTest.php`.
+
+### Learnings for future iterations
+- **Aliasing a string-keyed singleton to its class name is the cheap fix for "constructor
+  injection silently gets a different instance".** `$this->app->alias('key', Foo::class)` makes
+  `app(Foo::class)` and every type-hinted `Foo` parameter resolve the existing singleton instead
+  of auto-wiring a fresh one. Worth doing at the moment a service gains its first constructor
+  dependency — before that the divergence is invisible, and afterwards it silently produces
+  duplicate collaborators. The mutation that swapped `$app->make('laravel-crm.settings')` for
+  `new SettingService` is why the test reflects on the constructor property rather than only
+  asserting the outer singleton identity: without that assertion the mutation passes.
+- **When a story's whole purpose is to change a behaviour, expect an existing test to assert the
+  old behaviour — and check *which side is stale* before touching either.** The tell here was the
+  test's own comment describing a property ("the stale cached value must still be served") that
+  only held because the invalidation this story adds did not yet exist. Prefer re-routing the test
+  so its genuine intent survives (here: a `withoutEvents` write) over deleting it or weakening the
+  assertion, and leave a comment pointing at wherever the *new* behaviour is now covered.
+- **`Model::withoutEvents(callable)` is the clean way to change data without waking observers in a
+  test.** Better than `saveQuietly()` when the write goes through a service method
+  (`SettingService::set()` → `updateOrCreate`) that you don't want to bypass or duplicate — wrap
+  the service call itself. Pair it with an explicit settings-cache `forgetCache()` so the *read*
+  path still sees the new value while the *observer* path stays silent.
+- **A "cache was invalidated" assertion is vacuous unless the test proves the cache was warm
+  first.** `expect(Cache::has($key))->toBeFalse()` passes trivially when nothing ever populated
+  the key. The `warmSettingCaches()` helper asserts warmth as a precondition, which is what makes
+  the five per-handler mutations fail rather than silently pass.
+- **`Setting` has no `SoftDeletes`, so `restored`/`forceDeleted` are unreachable from a model
+  call.** Both handlers still need the bust (a host or a future migration could add the trait),
+  so they are tested by invoking the observer directly. Testing an unreachable-today branch through
+  its handler is honest as long as the comment says so — silently omitting it would leave two of
+  the AC's five methods unguarded.

@@ -15,6 +15,7 @@ use VentureDrake\LaravelCrm\Models\Person;
 use VentureDrake\LaravelCrm\Models\ProductAttribute;
 use VentureDrake\LaravelCrm\Models\Quote;
 use VentureDrake\LaravelCrm\Services\SettingService;
+use VentureDrake\LaravelCrm\Services\SystemCheckService;
 
 test('facade resolves to singleton', function () {
     expect(app('laravel-crm'))->toBeInstanceOf(LaravelCrm::class);
@@ -24,6 +25,13 @@ test('facade resolves to singleton', function () {
 test('settings singleton is registered', function () {
     expect(app('laravel-crm.settings'))->toBeInstanceOf(SettingService::class);
     expect(app('laravel-crm.settings'))->toBe(app('laravel-crm.settings'));
+    expect(app(SettingService::class))->toBe(app('laravel-crm.settings'));
+});
+
+test('system check singleton is registered', function () {
+    expect(app('laravel-crm.system-check'))->toBeInstanceOf(SystemCheckService::class);
+    expect(app('laravel-crm.system-check'))->toBe(app('laravel-crm.system-check'));
+    expect(app(SystemCheckService::class))->toBe(app('laravel-crm.system-check'));
 });
 
 test('config is merged', function () {

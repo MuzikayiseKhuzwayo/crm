@@ -440,6 +440,7 @@ use VentureDrake\LaravelCrm\Policies\TaxRatePolicy;
 use VentureDrake\LaravelCrm\Policies\TeamPolicy;
 use VentureDrake\LaravelCrm\Policies\UserPolicy;
 use VentureDrake\LaravelCrm\Services\SettingService;
+use VentureDrake\LaravelCrm\Services\SystemCheckService;
 use VentureDrake\LaravelCrm\View\Components\Addresses;
 use VentureDrake\LaravelCrm\View\Components\CustomFields;
 use VentureDrake\LaravelCrm\View\Components\CustomFieldValues;
@@ -1295,6 +1296,17 @@ class LaravelCrmServiceProvider extends ServiceProvider
         $this->app->singleton('laravel-crm.settings', function () {
             return new SettingService;
         });
+
+        // Alias so type-hinting SettingService resolves the same singleton the
+        // ~30 existing app('laravel-crm.settings') call sites already share,
+        // instead of auto-wiring a fresh instance per injection.
+        $this->app->alias('laravel-crm.settings', SettingService::class);
+
+        $this->app->singleton('laravel-crm.system-check', function ($app) {
+            return new SystemCheckService($app->make('laravel-crm.settings'));
+        });
+
+        $this->app->alias('laravel-crm.system-check', SystemCheckService::class);
 
         $this->app->register(LaravelCrmEventServiceProvider::class);
     }
