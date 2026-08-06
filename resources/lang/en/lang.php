@@ -316,6 +316,18 @@ return [
     'updated_version_of_laravel_crm_is_available' => 'Updated version of Laravel CRM is available',
     'you_can_update_from_laravel_crm' => 'You can update from Laravel CRM',
     'upgrade_guide' => 'upgrade guide',
+    // System check banner. Each sentence is a whole string carrying its links as
+    // placeholders, rather than fragments concatenated in Blade, so translators
+    // control word order — which RTL locales such as fa depend on.
+    'important' => 'Important',
+    'dismiss' => 'dismiss',
+    'system_check_upgrade_required' => 'Your Laravel CRM version requires some updates to function correctly. Please see the :guide in the documentation.',
+    'system_check_upgrade_guide' => 'upgrade guide',
+    'system_check_update_available' => 'A new version of Laravel CRM is available. :details or :update.',
+    'system_check_view_version_details' => 'View version :version details',
+    'system_check_update_now' => 'update now',
+    'system_check_db_update_required' => 'Your Laravel CRM version requires some database updates to function correctly. Please :update.',
+    'system_check_update_database' => 'update database',
     'settings_updated' => 'settings updated',
     'organization_name' => 'organization name',
     'language' => 'language',

@@ -294,6 +294,18 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | Documentation URL
+    |--------------------------------------------------------------------------
+    |
+    | Where the system check banner points users for upgrade and update
+    | instructions. Override this if you host your own documentation.
+    |
+    */
+
+    'docs_url' => env('LARAVEL_CRM_DOCS_URL', 'https://github.com/venturedrake/laravel-crm'),
+
+    /*
+    |--------------------------------------------------------------------------
     | Models with Global
     |--------------------------------------------------------------------------
     |
