@@ -34806,3 +34806,67 @@ application-wide and belongs in its own story.
   exists or the `version` row was touched within 3 days. Seed `install_id` before invoking it in a
   test or every case makes a real network call inside a `try {}` that swallows the failure — slow
   and flaky, with no visible cause.
+
+## US-004 (re-run): Fix flag seeding for fresh installs and db_update_1201 — already complete, independently re-verified
+- Story prompt was re-issued; the work was already committed in `07a3c22f` (6 files,
+  +415/-62) with a clean working tree. Per this log's own rule — *verify a re-issued story
+  by reading the code, not the commit message* — every AC bullet was re-checked against
+  source, and the "pre-existing failures" claim was re-proven from scratch rather than
+  cited.
+
+### AC verification (all five bullets)
+| AC bullet | Result |
+|---|---|
+| Middleware seeds all 8 flags via the `DB_UPDATES` loop; hard-coded blocks removed | **VERIFIED** — `grep -n "db_update" src/Http/Middleware/Settings.php` returns exactly **one** hit, a comment. The seven `firstOrCreate` blocks are gone; the loop is gated on `app('laravel-crm.system-check')->normalisedVersion()` and creates `global => 1, value => 0` rows |
+| `laravelcrm:install` leaves every flag at 1; fresh install shows no `db_update_required` | **VERIFIED** — `foreach (array_keys(SystemCheckService::DB_UPDATES) as $flag) { $settingService->set($flag, 1); }` sits after the per-team backfill. Covered by *"marking installed db updates leaves every flag at 1"*, *"a fresh install reports no pending db updates"*, *"a fresh install followed by a request reports no pending db updates"* |
+| Host missing `db_update_1201` gets it seeded at 0; a host holding it at 1 is untouched | **VERIFIED** — covered by *"a host missing db_update_1201 gets it seeded pending while applied flags stay applied"* and *"leaves a completed flag at 1"* |
+| `V1ToV2UpgradeTest` seeds `db_update_1201`; upgrade suite passes | **VERIFIED** — `$updateFlags` lists all 8 including `db_update_1201`; suite green |
+| `tests/Feature/InstallCommandTest.php` passes | **VERIFIED** — green |
+- `SystemCheckService::DB_UPDATES` re-read directly: all 8 entries present with
+  `'db_update_1201' => 1201`, matching the `Settings.php` seeding thresholds.
+- The three AC-named test files together: **23 tests / 214 assertions, zero failures.**
+
+### Quality gates
+- `composer format-test` → **`{"tool":"pint","result":"passed"}`** (repo-wide).
+- `composer test` → **1110 passed / 3 failed / 3869 assertions** — byte-identical to the
+  original US-004 run.
+- The 3 failures are `RouteAuthorizationTest > it allows the product sub-resource group…`
+  ×3, **proven pre-existing by two independent signals** rather than by citing this log:
+  (a) that file has **0** keyword hits for this story's scope
+  (`db_update|DB_UPDATES|SystemCheck|normalisedVersion|LaravelCrmInstall`) and was **not
+  touched** by `07a3c22f`; (b) reverting both changed source files to the parent commit
+  (`git checkout e371b556 -- src/Console/LaravelCrmInstall.php src/Http/Middleware/Settings.php`)
+  and re-running that file alone reproduces **the identical 3 failures**. Restored with
+  `git checkout 07a3c22f -- <same paths>`; `git status --short` and `git diff HEAD --stat`
+  both empty afterwards.
+
+### Files changed
+- **None.** Verification-only re-run; the only edit is this progress entry.
+
+### Learnings for future iterations
+- **`cmd 2>&1 > file` redirects the wrong stream.** Redirections are applied left to right,
+  so `2>&1` first points stderr at the *current* stdout (the terminal), and only then does
+  `> file` move stdout. Result: stdout → file, stderr → terminal — the opposite of the
+  usual intent. Use `> file 2>&1`. It happened to be harmless here (pest writes results to
+  stdout) but silently loses stderr from any command whose failure detail goes there.
+- **`composer test` runs pest with `--colors=always`, so the summary line carries ANSI
+  escapes and `grep -E "^ *Tests:"` never matches.** The anchor sees `\e[2m` before
+  `Tests:`. It looks exactly like "the suite produced no summary". Strip first
+  (`sed 's/\x1b\[[0-9;]*m//g'`) or grep without the `^` anchor, and use `grep -a` since the
+  log is binary-ish once colored. A bare `./vendor/bin/pest` (no `--colors=always`) does not
+  have this problem, which is why the same grep worked on the targeted run minutes earlier.
+- **On a clean tree, the safest pre-existence proof is a parent-commit checkout of just the
+  changed source files** — `git checkout <parent> -- <paths>`, run the failing file,
+  `git checkout HEAD -- <paths>`, then assert `git diff HEAD --stat` is empty. It is
+  scoped, reversible, needs no stash (this repo family has a recorded incident where
+  `git stash pop` applied a *foreign* stash entry over the tree), and answers the question
+  directly instead of inferring from a keyword grep. Pair it with the grep so the claim
+  rests on two independent signals.
+- **`.context` is listed in `.gitignore` yet `.context/progress.md` is tracked** in this
+  repo — git ignores only *untracked* paths, so a file added before the rule (or force-added)
+  keeps being versioned. The trap: `git add .context/progress.md` **stages the tracked file
+  and still exits 1**, complaining that the *directory* `.context` is ignored. In an
+  `add && commit` chain the add succeeds silently, the non-zero exit kills the chain, and it
+  reads as "the file could not be staged" — reaching for `-f` at that point is the wrong
+  reflex. Check `git diff --cached --stat` before believing the error, and confirm tracking
+  with `git ls-files --error-unmatch <path>` rather than inferring from `.gitignore`.
