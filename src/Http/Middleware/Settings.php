@@ -8,8 +8,8 @@ use Closure;
 use GuzzleHttp\Client;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Schema;
-use Illuminate\Support\Str;
 use VentureDrake\LaravelCrm\Models\Setting;
+use VentureDrake\LaravelCrm\Services\SystemCheckService;
 
 class Settings
 {
@@ -168,71 +168,27 @@ class Settings
                 'value' => '0',
             ]);
 
-            if (Str::startsWith(config('laravel-crm.version'), '0.')) {
-                $currentVersion = (int) Str::replace('.', '', config('laravel-crm.version'));
-            } else {
-                $currentVersion = (int) Str::replace('.', '', config('laravel-crm.version')) * 10;
-            }
+            // Seed a pending flag for every db_update the installed version has
+            // reached. SystemCheckService::DB_UPDATES is the single source of
+            // truth for the flag list and its version thresholds, so adding a
+            // new migration only means adding it there.
+            $currentVersion = app('laravel-crm.system-check')->normalisedVersion();
 
-            if ($currentVersion >= 180) {
-                Setting::firstOrCreate([
-                    'global' => 1,
-                    'name' => 'db_update_0180',
-                ], [
-                    'value' => 0,
-                ]);
-            }
+            foreach (SystemCheckService::DB_UPDATES as $flag => $minimumVersion) {
+                if ($currentVersion < $minimumVersion) {
+                    continue;
+                }
 
-            if ($currentVersion >= 181) {
+                // Keyed on name alone, deliberately. The old key included
+                // global => 1, so a row written by laravelcrm:install or
+                // laravelcrm:update (neither of which sets global) was invisible
+                // here and got duplicated at value 0 — re-reporting a completed
+                // update as pending. New rows still carry global, unchanged from
+                // before, marking the flag as install-wide rather than per-team.
                 Setting::firstOrCreate([
-                    'global' => 1,
-                    'name' => 'db_update_0181',
+                    'name' => $flag,
                 ], [
-                    'value' => 0,
-                ]);
-            }
-
-            if ($currentVersion >= 191) {
-                Setting::firstOrCreate([
                     'global' => 1,
-                    'name' => 'db_update_0191',
-                ], [
-                    'value' => 0,
-                ]);
-            }
-
-            if ($currentVersion >= 193) {
-                Setting::firstOrCreate([
-                    'global' => 1,
-                    'name' => 'db_update_0193',
-                ], [
-                    'value' => 0,
-                ]);
-            }
-
-            if ($currentVersion >= 194) {
-                Setting::firstOrCreate([
-                    'global' => 1,
-                    'name' => 'db_update_0194',
-                ], [
-                    'value' => 0,
-                ]);
-            }
-
-            if ($currentVersion >= 199) {
-                Setting::firstOrCreate([
-                    'global' => 1,
-                    'name' => 'db_update_0199',
-                ], [
-                    'value' => 0,
-                ]);
-            }
-
-            if ($currentVersion >= 1200) {
-                Setting::firstOrCreate([
-                    'global' => 1,
-                    'name' => 'db_update_1200',
-                ], [
                     'value' => 0,
                 ]);
             }

@@ -34692,3 +34692,117 @@ in the observer test file, cross-referenced in the comment.
   so they are tested by invoking the observer directly. Testing an unreachable-today branch through
   its handler is honest as long as the comment says so — silently omitting it would leave two of
   the AC's five methods unguarded.
+
+## US-004: Fix flag seeding for fresh installs and db_update_1201
+- **`Http/Middleware/Settings.php`** — the seven hard-coded `firstOrCreate` blocks (and the
+  duplicated version-normalising branch above them) collapse into one loop over
+  `SystemCheckService::DB_UPDATES`, gated on
+  `app('laravel-crm.system-check')->normalisedVersion()`. `DB_UPDATES` is now the single source
+  of truth for both the flag list and its version thresholds, so `db_update_1201` — which
+  `LaravelCrmUpdate.php:344,371` has been *writing* with nothing ever *creating* it — is seeded
+  for the first time. Dropped the now-unused `Str` import.
+- **The lookup key changed from `['global' => 1, 'name' => $flag]` to `['name' => $flag]`.**
+  This is load-bearing, not cosmetic: `SettingService::set()` has no notion of `global`, so a row
+  written by `laravelcrm:install` or `laravelcrm:update` did not match the old two-part key and
+  got **duplicated at value 0** — `pluck('value', 'name')` then resolved last-write-wins, so a
+  completed update could re-report as pending. Name-only matches every other `firstOrCreate` in
+  the file. New rows still carry `global`, unchanged from before.
+- **`Console/LaravelCrmInstall.php`** — after the seeder and the per-team backfill, a loop over
+  `array_keys(SystemCheckService::DB_UPDATES)` calls `$settingService->set($flag, 1)`. A fresh
+  install is on the current schema by definition, and the backfill immediately above is the same
+  work `laravelcrm:update` gates behind `db_update_1201`. Commented that re-running
+  `laravelcrm:install` against an existing install also flips the flags — `laravelcrm:update` is
+  the supported path there — so the trade-off is visible rather than implicit.
+- **`tests/Upgrade/V1ToV2UpgradeTest.php`** — fixture seeds `db_update_1201` alongside the other
+  seven, so it models a complete v1 host. Also added a post-upgrade assertion that every flag is
+  applied, which is the real contract the story is about on the upgrade path.
+
+### One AC-adjacent change made, then reverted after a diagnostic disproved its premise
+I first added a `db_update_*` branch to `SettingObserver::setGlobal()`, reasoning that
+install-written rows (console → no auth user → `team_id` null, `global` 0) would be invisible to
+the middleware's team-scoped `SELECT` and get duplicated. A diagnostic test disproved it:
+`BelongsToTeamsScope` only adds the `OR global = 1` escape when
+`in_array($model->getTable(), config('laravel-crm.model_with_global'))`, and that config lists
+`'settings'` while `getTable()` returns `'crm_settings'` (default prefix `crm_`). The emitted SQL
+is a bare `where team_id = ?`. **The `global` column's scope escape is dead on any
+default-prefixed host** — see below. Rather than ship inert code plus a test asserting an inert
+property, I reverted; `SettingObserver.php` is byte-identical to HEAD.
+
+### Pre-existing bug found, deliberately NOT fixed (out of scope, wide blast radius)
+`config('laravel-crm.model_with_global') = ['settings']` never matches
+`(new Setting)->getTable() = 'crm_settings'`, so `BelongsToTeamsScope`'s global branch never
+applies unless a host sets `LARAVEL_CRM_DB_TABLE_PREFIX=''`. Consequence for this story: on a
+**teams-enabled** host the middleware still creates per-team flag rows at 0 on the first request
+after install, so such a host can still show `db_update_required`. That is unchanged from before
+(the old code behaved identically) and the AC's acceptance criterion targets the default
+non-teams case, which is fixed. Fixing the prefix mismatch would change settings scoping
+application-wide and belongs in its own story.
+
+### Tests
+- **`tests/Feature/Middleware/SettingsDbUpdateSeedingTest.php`** (10 tests / 52 assertions) — all
+  eight flags seeded pending; `db_update_1201` specifically; rows marked global; version gating
+  at `0.19.9` (six seeded, both 12xx not) and nothing at all when the version is unset;
+  a completed flag left at 1; no duplication across three requests; **a row written without
+  `global` adopted rather than duplicated** (the exact install→middleware regression); and the
+  two end-to-end contracts — a fresh install reports no `db_update_required`, and a host missing
+  only 1201 gets exactly that one reported.
+- **`tests/Feature/InstallCommandTest.php`** (+4 tests) — the command publishes assets, migrates
+  and prompts, so the loop is covered structurally (source contains the `DB_UPDATES` loop, and it
+  sits *after* both the seeder and the backfill) plus behaviourally by running the same statements
+  and asserting every flag lands at 1 with no `db_update_required`.
+- **Mutation-tested 6 ways** (content-backup harness, non-git, reports a non-zero denominator):
+  reverting the middleware key, removing the version gate, dropping `global` from new rows,
+  flipping the install value to 0, emptying the install loop — **all five load-bearing**, all
+  restored byte-identically. The sixth (dropping `db_update_1201` from the upgrade fixture) is
+  **vacuous and reported as such**: with teams disabled in tests, the update command's 1201 block
+  is a no-op either way, so no honest assertion discriminates it. It is a fixture-consistency
+  change the AC asked for, not a behaviour guard.
+
+### Quality gates
+- `composer format-test` → **passes** (repo-wide).
+- `composer test` → **1110 passed / 3 failed / 3869 assertions** (US-003 baseline 1096/3/3777):
+  **+14 passing = exactly the 14 new tests, +92 assertions, zero net new failures.** The 3 are
+  `RouteAuthorizationTest > it allows the product sub-resource group…` ×3, **proven pre-existing
+  independently** rather than cited from this log: that file has 0 keyword hits for this story's
+  scope, and restoring both changed source files to HEAD reproduces the identical 3 failures
+  (restore verified byte-identical).
+
+### Files changed
+- **Modified** `src/Http/Middleware/Settings.php`, `src/Console/LaravelCrmInstall.php`,
+  `tests/Upgrade/V1ToV2UpgradeTest.php`, `tests/Feature/InstallCommandTest.php`.
+- **Added** `tests/Feature/Middleware/SettingsDbUpdateSeedingTest.php`.
+
+### Learnings for future iterations
+- **A compound `firstOrCreate` key silently becomes a duplication bug the moment a second writer
+  appears that doesn't set every key column.** `['global' => 1, 'name' => $flag]` was fine while
+  the middleware was the only writer; once `laravelcrm:install` and `laravelcrm:update` started
+  writing the same names through `SettingService::set()` (which knows only `name`), the lookup
+  missed and a second row appeared. Combined with `pluck('value', 'name')` — last-write-wins, no
+  error — the symptom is a completed update re-reporting as pending, with nothing in the logs.
+  **Key `firstOrCreate` on the same columns every writer of that row uses**, and put the rest in
+  the create-attributes.
+- **`config('laravel-crm.model_with_global')` holds *unprefixed* table names while
+  `$model->getTable()` returns *prefixed* ones**, so `BelongsToTeamsScope`'s global escape is dead
+  for every host on the default `crm_` prefix. Anything reasoning about `global` as a
+  cross-team escape hatch is reasoning about a no-op. Confirm with a one-off test that dumps
+  `Model::query()->toSql()` under teams — the emitted SQL settles it in seconds and cost me a
+  whole misdirected change here.
+- **When a diagnostic disproves the premise of a change you have already written, revert it —
+  don't keep it "because it's harmless".** Inert code plus a test asserting an inert property is
+  worse than no change: it reads as a working safeguard to the next person. The tell was that the
+  mutation was only "load-bearing" via a structural assertion I had written myself, with no
+  user-visible behaviour behind it.
+- **Report a vacuous mutation rather than inventing an assertion to turn it red.** The upgrade
+  fixture change genuinely has no observable behaviour to discriminate when teams are off.
+  Contriving a test to make the harness go green everywhere would be gaming the harness. I added
+  the one assertion that *is* honestly valuable there (a completed upgrade owes no db updates)
+  and left the mutation reported as vacuous.
+- **`config('laravel-crm.version')` is not defined by the package config or the service provider** —
+  only by a host's published config. In tests it is null, so `normalisedVersion()` returns 0 and
+  **no flag is ever seeded** unless the test sets it explicitly. Any test touching version-gated
+  behaviour must `config(['laravel-crm.version' => '…'])` first. Useful normalisations: `'0.19.9'`
+  → 199 (past every `01xx` flag, short of both `12xx`), `'2.3.0'` → 2300 (past everything).
+- **The Settings middleware phones home to `api.laravelcrm.com`** unless an `install_id` row
+  exists or the `version` row was touched within 3 days. Seed `install_id` before invoking it in a
+  test or every case makes a real network call inside a `try {}` that swallows the failure — slow
+  and flaky, with no visible cause.

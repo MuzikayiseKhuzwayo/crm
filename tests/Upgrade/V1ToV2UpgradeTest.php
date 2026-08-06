@@ -4,6 +4,7 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 use Spatie\Permission\PermissionRegistrar;
 use VentureDrake\LaravelCrm\Models\Permission;
+use VentureDrake\LaravelCrm\Services\SystemCheckService;
 
 /**
  * End-to-end test of the v1 → v2 upgrade pipeline driven by `laravelcrm:v2`.
@@ -102,7 +103,8 @@ function seedV1Data(): void
     ]);
 
     $updateFlags = ['db_update_0180', 'db_update_0181', 'db_update_0191',
-        'db_update_0193', 'db_update_0194', 'db_update_0199', 'db_update_1200'];
+        'db_update_0193', 'db_update_0194', 'db_update_0199', 'db_update_1200',
+        'db_update_1201'];
     foreach ($updateFlags as $flag) {
         DB::table($prefix.'settings')->insert([
             'name' => $flag, 'value' => '1', 'created_at' => $now, 'updated_at' => $now,
@@ -224,6 +226,16 @@ test('v2 upgrade renames tables columns permissions and polymorphic types', func
         expect(Permission::where('name', "{$verb} organisations")->exists())->toBeFalse();
     }
     expect(Permission::where('name', 'view people')->exists())->toBeTrue();
+
+    // A completed upgrade owes no further db updates: every flag the v1 host
+    // carried is still applied, and db_update_1201 -- which the upgrade itself
+    // runs -- has been marked too.
+    foreach (array_keys(SystemCheckService::DB_UPDATES) as $flag) {
+        $value = DB::table($prefix.'settings')->where('name', $flag)->value('value');
+
+        expect($value)->not->toBeNull("Expected {$flag} to exist after the upgrade.")
+            ->and((int) $value)->toBe(1, "Expected {$flag} to be applied after the upgrade.");
+    }
 
     $countsAfter = snapshotV2RowCounts();
     foreach ($countsBefore as $key => $count) {

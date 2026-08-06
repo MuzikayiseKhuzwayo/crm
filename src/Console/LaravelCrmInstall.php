@@ -9,6 +9,7 @@ use Illuminate\Support\Facades\File;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Schema;
 use VentureDrake\LaravelCrm\Observers\TeamObserver;
+use VentureDrake\LaravelCrm\Services\SystemCheckService;
 
 use function Laravel\Prompts\multiselect;
 
@@ -213,6 +214,24 @@ class LaravelCrmInstall extends Command
             } else {
                 $this->warn('Teams enabled but no Team model found at App\Models\Team or App\Team. Skipping per-team backfill.');
             }
+        }
+
+        // Mark every db_update as already applied. A fresh install is on the
+        // current schema by definition: `migrate` ran the whole migration set
+        // and the seeder above populated it, so the data migrations these flags
+        // gate have nothing left to do. The per-team backfill just above is the
+        // same work laravelcrm:update gates behind db_update_1201.
+        //
+        // Note this also flips the flags when laravelcrm:install is re-run
+        // against an existing install. The supported path for an existing
+        // install is laravelcrm:update, which is what actually runs the
+        // migrations these flags track.
+        $this->info('Marking database updates as applied...');
+
+        $settingService = app('laravel-crm.settings');
+
+        foreach (array_keys(SystemCheckService::DB_UPDATES) as $flag) {
+            $settingService->set($flag, 1);
         }
 
         if ($userClass::where('crm_access', 1)->count() < 1) {

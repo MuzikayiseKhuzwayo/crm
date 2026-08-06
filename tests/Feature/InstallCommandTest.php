@@ -4,6 +4,9 @@ use Illuminate\Contracts\Console\Kernel;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
+use VentureDrake\LaravelCrm\Console\LaravelCrmInstall;
+use VentureDrake\LaravelCrm\Models\Setting;
+use VentureDrake\LaravelCrm\Services\SystemCheckService;
 use VentureDrake\LaravelCrm\Tests\Stubs\User;
 
 beforeEach(function () {
@@ -173,4 +176,76 @@ test('owner role lookup uses crm role flag', function () {
 
     expect($role)->not->toBeNull();
     expect((int) $role->crm_role)->toBe(1);
+});
+
+// -----------------------------------------------------------------------
+// db_update flag marking
+//
+// A fresh install is on the current schema by definition, so every db_update
+// the update command would run has already been applied. The command marks
+// them so a brand-new install isn't reported as needing updates.
+//
+// The command itself publishes assets, migrates and prompts, so the loop is
+// covered by asserting the source shape plus running the same statements.
+// -----------------------------------------------------------------------
+
+function installCommandSource(): string
+{
+    return file_get_contents(
+        (new ReflectionClass(LaravelCrmInstall::class))->getFileName()
+    );
+}
+
+/** The loop laravelcrm:install runs once the schema and seeders are in place. */
+function markInstalledDbUpdates(): void
+{
+    $settingService = app('laravel-crm.settings');
+
+    foreach (array_keys(SystemCheckService::DB_UPDATES) as $flag) {
+        $settingService->set($flag, 1);
+    }
+
+    $settingService->forgetCache();
+}
+
+test('install command marks every db update flag as applied', function () {
+    $source = installCommandSource();
+
+    expect($source)->toContain('SystemCheckService::DB_UPDATES')
+        ->and($source)->toContain('$settingService->set($flag, 1);');
+});
+
+test('install command marks flags after the seeder and the per-team backfill', function () {
+    $source = installCommandSource();
+
+    $seeder = strpos($source, 'LaravelCrmTablesSeeder');
+    $backfill = strpos($source, 'repointCrmRecordsToTeamPipelines');
+    $marking = strpos($source, 'SystemCheckService::DB_UPDATES');
+
+    expect($seeder)->not->toBeFalse()
+        ->and($backfill)->not->toBeFalse()
+        ->and($marking)->not->toBeFalse()
+        ->and($marking)->toBeGreaterThan($seeder)
+        ->and($marking)->toBeGreaterThan($backfill);
+});
+
+test('marking installed db updates leaves every flag at 1', function () {
+    markInstalledDbUpdates();
+
+    foreach (array_keys(SystemCheckService::DB_UPDATES) as $flag) {
+        $value = Setting::where('name', $flag)->value('value');
+
+        expect($value)->not->toBeNull("Expected {$flag} to exist.")
+            ->and((int) $value)->toBe(1, "Expected {$flag} to be marked applied.");
+    }
+});
+
+test('a fresh install reports no pending db updates', function () {
+    config(['laravel-crm.version' => '2.3.0']);
+
+    markInstalledDbUpdates();
+
+    $types = array_column(app(SystemCheckService::class)->check(), 'type');
+
+    expect($types)->not->toContain(SystemCheckService::DB_UPDATE_REQUIRED);
 });
