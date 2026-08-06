@@ -34523,3 +34523,79 @@ fire on genuinely missing schema.
   untracked, so `mv` out → run the failing test → `mv` back is safe and unambiguous.
   This log records a prior session where `git stash pop` tried to apply a *foreign*
   stash entry over the tree; with untracked files there is no reason to go near it.
+
+## US-002: Scope SettingService::all to global rows, add per-user accessors
+- **`all()`** now scopes to `whereNull('user_id')`, wrapped in a `->when(Schema::hasColumn(...))`
+  so hosts that never ran `add_user_to_laravel_crm_settings_table` still boot. The guard sits
+  **inside** the `Cache::remember` closure, so `information_schema` is hit at most once per TTL
+  rather than on every request — `all()` runs on every request via `SettingsComposer`.
+  Without the scoping, `pluck('value', 'name')` keys by name, so an arbitrary user's row would
+  silently overwrite the global value of the same name for every reader of the cached map.
+- **`getForUser($userId, $name, $default = null)`** — a direct query, deliberately *not* a cache
+  read: the cached map holds global rows only, and a per-user row is written and read back inside
+  the same request (a dismissal), so a cached value would be stale exactly when it matters.
+  Uses `first()` + a null-model check rather than `value('value') ?? $default`, because `value`
+  is nullable and `??` would collapse "no row" into "row holding null".
+- **`setForUser($userId, $name, $value)`** — `updateOrCreate` keyed on `user_id` **plus** `name`.
+- Verified the AC's three premises against source rather than assuming: `user_id` exists at
+  `add_user_to_laravel_crm_settings_table.php.stub:17` (a **separate patch stub**, not the base
+  create-table — which is precisely why the `hasColumn` guard is load-bearing);
+  `Setting::$guarded = ['id']` so `user_id` mass-assigns with no fillable change; `BelongsToTeams`
+  is on the model, so both new methods are team-scoped for free and `team_id` is stamped on create.
+  `tests/TestSchema.php` already ships `user_id`, so no schema patch was needed.
+- Left `getForUser`/`setForUser` **unguarded** by `hasColumn` on purpose. The guard on `all()`
+  exists because `all()` runs on every request and must not break boot; the new methods are only
+  reached by new code, where a loud SQL error is the correct signal rather than a silent no-op write.
+
+### Tests — `tests/Feature/SettingServiceTest.php` (7 pre-existing + 10 new = 17 tests / 34 assertions)
+Covers each AC bullet and its inverse: a user row not shadowing the global in **both** `all()` and
+`get()`; `all()` excluding user rows entirely; `setForUser` upserting (count stays 1) and keeping
+different users independent; `getForUser` returning the default for a missing row and **not**
+falling back to the global row; global and per-user setters not colliding; and `getForUser` reading
+through a warmed cache to prove it is a direct query. The `hasColumn` branch is exercised against
+the **real** `Schema` facade — drop `user_id`, assert `all()` still returns the global value inside
+a `try`, restore in `finally` — rather than mocked, so the guard is proven to fire on genuinely
+missing schema. All 7 pre-existing assertions still pass unchanged.
+
+**Mutation-tested four ways**, each restored byte-identically: dropping the `whereNull` scoping
+(2 fail), making the `whereNull` unconditional so the guard is gone (1 fail), keying the
+`setForUser` upsert on `name` only (3 fail), and serving `getForUser` from the cached global map
+(5 fail). Harness is content-backup based (never git — an uncommitted tree makes `git diff --quiet`
+always report "changed") and prints a non-zero denominator, so it cannot pass vacuously.
+
+### Quality gates
+- `php -l` clean on both files. `./vendor/bin/pint --dirty --test` → **passed**.
+- `composer test` → **1085 passed / 3 failed / 3745 assertions** (US-001 baseline 1075/3/3726):
+  **+10 passing = exactly the 10 new tests, +19 assertions, zero net new failures.** The 3 are
+  `RouteAuthorizationTest > it allows the product sub-resource group…` ×3, **proven pre-existing
+  independently** rather than cited from the log: that file has **zero** settings references, and
+  restoring both changed files to HEAD and re-running it alone reproduces the identical 3 failures.
+
+### Files changed
+- **Modified** `src/Services/SettingService.php`, `tests/Feature/SettingServiceTest.php`.
+
+### Learnings for future iterations
+- **`?? $default` and "row is missing" are not the same question when the column is nullable.**
+  `value('value') ?? $default` silently turns a stored `null` into the caller's default. When a
+  getter's contract is "return the default *if there is no row*", resolve the row first and branch
+  on the model, not on the value. Cheap to get right; invisible once wrong.
+- **Put a `Schema::hasColumn` guard inside the cache closure, not around it.** Outside, it runs on
+  every request and queries `information_schema` each time — a real per-request cost on a hot path
+  like `SettingsComposer`. Inside, it runs only on a cache miss, which is exactly the frequency the
+  schema can meaningfully change at. The mutation that removed the guard failed only the
+  drop-the-column test, which is why that test has to exist for the guard to mean anything.
+- **A column living in a *patch* stub rather than the base create-table is the tell that a
+  `hasColumn` guard is load-bearing.** `user_id` is added by `add_user_to_laravel_crm_settings_table`,
+  a stub a host can be one release behind on — unlike a column in `create_..._table`, which every
+  install has by definition. Before deciding a guard is defensive paranoia, check which stub the
+  column ships in.
+- **`pluck($value, $key)` silently resolves duplicate keys by last-write-wins.** It is a natural
+  fit for a settings map but has no notion of "two rows legitimately share this name", so any
+  scoping dimension added to the table later (user, team, environment) becomes a shadowing bug the
+  moment a second row appears — with no error and no failing test. Any `pluck`-into-a-keyed-map
+  needs its scope pinned explicitly, and a test that writes two rows with the same key.
+- **Prove "pre-existing" by restoring the changed files to HEAD and re-running the failing file —
+  never `git stash`.** A content backup, `git checkout HEAD -- <paths>`, run, then copy back, with
+  a `cmp -s` check that the restore was byte-identical. This repo family has a recorded incident
+  where `git stash pop` tried to apply a *foreign* stash entry over the tree. Pair it with a cheap
+  keyword grep of the failing test file (0 hits here) so the claim rests on two independent signals.
