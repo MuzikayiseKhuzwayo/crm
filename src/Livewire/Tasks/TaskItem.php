@@ -21,6 +21,8 @@ class TaskItem extends Component
 
     public ?string $description = null;
 
+    public ?string $start_at = null;
+
     public ?string $due_at = null;
 
     public ?string $completed_at = null;
@@ -37,7 +39,9 @@ class TaskItem extends Component
         $this->related = $related;
         $this->name = $task->name ?? '';
         $this->description = $task->description;
-        $this->due_at = $task->due_at?->toDateTimeString();
+        // Both are bound to datetime-local inputs, which only accept Y-m-d\TH:i.
+        $this->start_at = $task->start_at?->format('Y-m-d\TH:i');
+        $this->due_at = $task->due_at?->format('Y-m-d\TH:i');
         $this->completed_at = $task->completed_at?->toDateTimeString();
         $this->user_owner_id = $task->user_owner_id;
         $this->user_assigned_id = $task->user_assigned_id;
@@ -48,6 +52,7 @@ class TaskItem extends Component
         $this->revert = [
             'name' => $this->name,
             'description' => $this->description,
+            'start_at' => $this->start_at,
             'due_at' => $this->due_at,
             'user_owner_id' => $this->user_owner_id,
             'user_assigned_id' => $this->user_assigned_id,
@@ -70,12 +75,20 @@ class TaskItem extends Component
 
         $this->validate([
             'name' => 'required|max:255',
+            'start_at' => 'nullable',
+            // Only compare against a start date the user actually entered: Laravel resolves a
+            // null start_at to now(), which would forbid an otherwise valid past due date.
+            'due_at' => array_filter([
+                'nullable',
+                filled($this->start_at) ? 'after_or_equal:start_at' : null,
+            ]),
         ]);
 
         $this->task->update([
             'name' => $this->name,
             'description' => $this->description,
-            'due_at' => $this->due_at,
+            'start_at' => $this->normalizeDatetime($this->start_at),
+            'due_at' => $this->normalizeDatetime($this->due_at),
             'user_owner_id' => $this->user_owner_id,
             'user_assigned_id' => $this->user_assigned_id,
         ]);
@@ -86,6 +99,11 @@ class TaskItem extends Component
         $this->success(ucfirst(trans('laravel-crm::lang.task_updated')));
 
         $this->editing = false;
+    }
+
+    private function normalizeDatetime(?string $value): ?string
+    {
+        return $value ? str_replace('T', ' ', $value) : null;
     }
 
     public function complete(): void

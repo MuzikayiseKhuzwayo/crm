@@ -508,6 +508,7 @@ class TestSchema
             $table->string('external_id')->nullable();
             $table->string('name');
             $table->text('description')->nullable();
+            $table->datetime('start_at')->nullable();
             $table->datetime('due_at')->nullable();
             $table->datetime('completed_at')->nullable();
             $table->nullableMorphs('taskable');

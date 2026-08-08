@@ -20,6 +20,8 @@ class TaskRelated extends Component
 
     public $description;
 
+    public $start_at;
+
     public $due_at;
 
     public $user_owner_id;
@@ -43,7 +45,13 @@ class TaskRelated extends Component
         $this->validate([
             'name' => 'required|max:255',
             'description' => 'nullable',
-            'due_at' => 'nullable',
+            'start_at' => 'nullable',
+            // Only compare against a start date the user actually entered: Laravel resolves a
+            // null start_at to now(), which would forbid an otherwise valid past due date.
+            'due_at' => array_filter([
+                'nullable',
+                filled($this->start_at) ? 'after_or_equal:start_at' : null,
+            ]),
             'user_owner_id' => 'nullable',
             'user_assigned_id' => 'nullable',
         ]);
@@ -51,7 +59,8 @@ class TaskRelated extends Component
         $task = $this->model->tasks()->create([
             'name' => $this->name,
             'description' => $this->description,
-            'due_at' => $this->due_at,
+            'start_at' => $this->normalizeDatetime($this->start_at),
+            'due_at' => $this->normalizeDatetime($this->due_at),
             'user_owner_id' => $this->user_owner_id,
             'user_assigned_id' => $this->user_assigned_id,
         ]);
@@ -124,9 +133,14 @@ class TaskRelated extends Component
         }
     }
 
+    private function normalizeDatetime(?string $value): ?string
+    {
+        return $value ? str_replace('T', ' ', $value) : null;
+    }
+
     private function resetFields(): void
     {
-        $this->reset('name', 'description', 'due_at');
+        $this->reset('name', 'description', 'start_at', 'due_at');
         $this->user_owner_id = auth()->user()->id;
         $this->user_assigned_id = auth()->user()->id;
     }

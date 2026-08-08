@@ -25,6 +25,7 @@ class TaskService
         return Task::create([
             'name' => $request->name,
             'description' => $request->description,
+            'start_at' => $request->start_at,
             'due_at' => $request->due_at,
             'user_owner_id' => $request->user_owner_id,
             'user_assigned_id' => $request->user_assigned_id,
@@ -36,6 +37,7 @@ class TaskService
         $task->update([
             'name' => $request->name,
             'description' => $request->description,
+            'start_at' => $request->start_at,
             'due_at' => $request->due_at,
             'user_owner_id' => $request->user_owner_id,
             'user_assigned_id' => $request->user_assigned_id,
