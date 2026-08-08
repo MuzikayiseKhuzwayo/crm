@@ -197,8 +197,11 @@ it('drives the alert through the slot and its own dismiss action', function () {
         ->and($view)->toContain('wire:click="dismiss"');
 });
 
-it('renders the upgrade-required alert against the configured docs url', function () {
-    config(['laravel-crm.docs_url' => 'https://docs.example.test/crm']);
+it('renders the upgrade-required alert against the configured upgrade guide url', function () {
+    // The upgrade guide, not docs_url: this alert says "here is how to fix your
+    // install", so it has to land on the instructions rather than the release
+    // notes.
+    config(['laravel-crm.upgrade_guide_url' => 'https://docs.example.test/crm']);
 
     $this->actingAsUserWithPermissions(['view crm updates']);
 

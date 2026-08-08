@@ -120,19 +120,31 @@ it('serves the versions from the shared settings cache', function () {
  | Docs link
  | ------------------------------------------------------------------------- */
 
-it('points the upgrade guide button at the configured docs_url', function () {
-    config(['laravel-crm.docs_url' => 'https://docs.example.test/upgrading']);
+it('points every upgrade guide link at the configured upgrade_guide_url', function () {
+    // Both of them: the button in the update-available block and the one under
+    // the commands. A page with two "Upgrade guide" links going to two
+    // different places is worse than having none.
+    config(['laravel-crm.upgrade_guide_url' => 'https://docs.example.test/upgrading']);
 
-    renderUpdatesPage('2.2.0', '2.10.0')
-        ->assertOk()
-        ->assertSee('https://docs.example.test/upgrading')
-        ->assertDontSee('https://github.com/venturedrake/laravel-crm');
+    $response = renderUpdatesPage('2.2.0', '2.10.0')->assertOk();
+
+    // Exactly two, so a link left on the old config key would fail here rather
+    // than pass on the other one. docs_url is deliberately not asserted absent
+    // from the page — the system check banner still uses it for release details.
+    expect(substr_count($response->getContent(), 'https://docs.example.test/upgrading'))->toBe(2);
 });
 
-it('does not hard-code the docs URL in the view', function () {
+it('defaults the upgrade guide links to the published guide', function () {
+    renderUpdatesPage('2.2.0', '2.10.0')
+        ->assertOk()
+        ->assertSee('https://laravelcrm.com/docs/2.x/upgrading');
+});
+
+it('does not hard-code the upgrade guide URL in the view', function () {
     $source = file_get_contents(updatesPagePath());
 
-    expect($source)->toContain("config('laravel-crm.docs_url')")
+    expect($source)->toContain("config('laravel-crm.upgrade_guide_url')")
+        ->and($source)->not->toContain('https://laravelcrm.com')
         ->and($source)->not->toContain('https://github.com/venturedrake/laravel-crm');
 });
 

@@ -38,7 +38,7 @@
                     <p>{{ ucfirst(__('laravel-crm::lang.updated_version_of_laravel_crm_is_available')) }}</p>
                     <p>{{ ucfirst(__('laravel-crm::lang.you_can_update_from_laravel_crm')) }} {{ $currentVersion }} to {{ $latestVersion }}</p>
                     <p>
-                        <a type="button" class="btn btn-primary text-white" href="{{ config('laravel-crm.docs_url') }}" target="_blank" rel="noopener">{{ ucfirst(__('laravel-crm::lang.upgrade_guide')) }}</a>
+                        <a type="button" class="btn btn-primary text-white" href="{{ config('laravel-crm.upgrade_guide_url') }}" target="_blank" rel="noopener">{{ ucfirst(__('laravel-crm::lang.upgrade_guide')) }}</a>
                     </p>
                 @endif
             </div>
@@ -75,7 +75,7 @@
             </div>
 
             <p class="mt-4">
-                <a class="link" href="{{ config('laravel-crm.docs_url') }}" target="_blank" rel="noopener">{{ ucfirst(__('laravel-crm::lang.upgrade_guide')) }}</a>
+                <a class="link" href="{{ config('laravel-crm.upgrade_guide_url') }}" target="_blank" rel="noopener">{{ ucfirst(__('laravel-crm::lang.upgrade_guide')) }}</a>
             </p>
         </x-mary-card>
     </div>

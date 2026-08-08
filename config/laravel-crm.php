@@ -297,12 +297,25 @@ return [
     | Documentation URL
     |--------------------------------------------------------------------------
     |
-    | Where the system check banner points users for upgrade and update
-    | instructions. Override this if you host your own documentation.
+    | Where the system check banner points users for release details. Override
+    | this if you host your own documentation.
     |
     */
 
     'docs_url' => env('LARAVEL_CRM_DOCS_URL', 'https://github.com/venturedrake/laravel-crm'),
+
+    /*
+    |--------------------------------------------------------------------------
+    | Upgrade guide URL
+    |--------------------------------------------------------------------------
+    |
+    | Where every "upgrade guide" link points — the updates page and the system
+    | check banner. Separate from docs_url because that one answers "what is in
+    | this release?" and this one answers "how do I install it?".
+    |
+    */
+
+    'upgrade_guide_url' => env('LARAVEL_CRM_UPGRADE_GUIDE_URL', 'https://laravelcrm.com/docs/2.x/upgrading'),
 
     /*
     |--------------------------------------------------------------------------

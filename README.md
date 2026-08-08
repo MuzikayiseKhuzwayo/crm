@@ -123,7 +123,8 @@ php artisan laravelcrm:update --force             # migrations + backfills, non-
 php artisan config:cache && php artisan route:cache && php artisan view:cache
 ```
 
-See [docs/upgrading.md](docs/upgrading.md) for zero-downtime deploys, caveats, and
+See the [upgrade guide](https://laravelcrm.com/docs/2.x/upgrading) — or
+[docs/upgrading.md](docs/upgrading.md) in this repo — for zero-downtime deploys, caveats, and
 version-specific notes.
 
 ## Testing

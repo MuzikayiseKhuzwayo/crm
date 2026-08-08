@@ -1,5 +1,8 @@
 # Upgrade guide
 
+Published at <https://laravelcrm.com/docs/2.x/upgrading>, which is where the CRM's own
+"Upgrade guide" links point.
+
 Notes for operators upgrading an existing `venturedrake/laravel-crm` install.
 
 Two things to read: **How to update** below, which is the same every release, and the
@@ -112,6 +115,11 @@ from a release. Re-publish with `--force` and re-apply your edits, or diff the p
 do not need to re-publish the config. A stale `php artisan config:cache` from the previous release
 will hide them — the composer hook runs `config:clear` for exactly this reason. Keys you have
 overridden in your published `config/laravel-crm.php` stay as you set them.
+
+2.4.0 adds one: `upgrade_guide_url` (`LARAVEL_CRM_UPGRADE_GUIDE_URL`), which every "Upgrade guide"
+link in the CRM now points at, defaulting to <https://laravelcrm.com/docs/2.x/upgrading>. It is
+separate from `docs_url`, which keeps carrying the "View version X details" link. Override it if
+you host your own documentation.
 
 **The database can be behind the code without anything looking wrong.** The CRM stamps a
 `db_version` setting when `laravelcrm:update` completes and reports a banner when the installed

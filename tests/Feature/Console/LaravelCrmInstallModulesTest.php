@@ -19,13 +19,32 @@ beforeEach(function () {
     File::copy($sourceConfig, $this->tempConfigDir.'/laravel-crm.php');
 
     App::useConfigPath($this->tempConfigDir);
+
+    // The base path too, not just the config path. These cases run the real
+    // installer, and it writes to base_path() — composer.json for the
+    // post-autoload-dump hook, and .env for the encryption flag. Left pointing
+    // at testbench's skeleton app, the suite permanently edits a directory
+    // under vendor/ that every later run then inherits.
+    $this->originalBasePath = $this->app->basePath();
+
+    $this->tempBaseDir = sys_get_temp_dir().'/laravel-crm-install-base-'.uniqid('', true);
+    File::ensureDirectoryExists($this->tempBaseDir);
+
+    $this->app->setBasePath($this->tempBaseDir);
+    App::useConfigPath($this->tempConfigDir);
 });
 
 afterEach(function () {
+    if (isset($this->originalBasePath)) {
+        $this->app->setBasePath($this->originalBasePath);
+    }
+
     App::useConfigPath($this->originalConfigPath);
 
-    if (isset($this->tempConfigDir) && File::isDirectory($this->tempConfigDir)) {
-        File::deleteDirectory($this->tempConfigDir);
+    foreach ([$this->tempConfigDir ?? null, $this->tempBaseDir ?? null] as $dir) {
+        if ($dir !== null && File::isDirectory($dir)) {
+            File::deleteDirectory($dir);
+        }
     }
 });
 

@@ -86,12 +86,15 @@ class SystemCheckBanner extends Component
      */
     protected function message(array $alert): string
     {
+        // Two URLs, deliberately: docs_url answers "what is in this release?"
+        // and the upgrade guide answers "how do I install it?".
         $docsUrl = (string) config('laravel-crm.docs_url');
+        $upgradeGuideUrl = (string) config('laravel-crm.upgrade_guide_url');
 
         switch ($alert['type'] ?? null) {
             case SystemCheckService::UPGRADE_REQUIRED:
                 return __('laravel-crm::lang.system_check_upgrade_required', [
-                    'guide' => $this->link($docsUrl, __('laravel-crm::lang.system_check_upgrade_guide')),
+                    'guide' => $this->link($upgradeGuideUrl, __('laravel-crm::lang.system_check_upgrade_guide')),
                 ]);
 
             case SystemCheckService::UPDATE_AVAILABLE:
