@@ -5,6 +5,7 @@ namespace VentureDrake\LaravelCrm\Livewire;
 use Livewire\Component;
 use VentureDrake\LaravelCrm\Models\Product;
 use VentureDrake\LaravelCrm\Models\TaxRate;
+use VentureDrake\LaravelCrm\Support\Money;
 
 class ModelProducts extends Component
 {
@@ -161,11 +162,9 @@ class ModelProducts extends Component
                     break;
             }
 
-            $this->sub_total = $this->model->subtotal / 100;
-            $this->tax = $this->model->tax / 100;
-            $this->total = $this->model->total / 100;
+            $this->recalculateTotals();
 
-            $this->dispatch('model-products-updated', products: $this->products, sub_total: $this->sub_total, tax: $this->tax, total: $this->total);
+            $this->dispatchProductsUpdated();
         }
 
         $this->dynamicProducts = (app('laravel-crm.settings')->get('dynamic_products')) ? true : false;
@@ -175,74 +174,82 @@ class ModelProducts extends Component
     {
         $updating = explode('.', $key);
 
-        $this->sub_total = 0;
-        $this->discount = 0;
-        $this->tax = 0;
-        $this->adjustment = 0;
-        $this->total = 0;
+        // Anything shorter than "{index}.{attribute}" replaces rows wholesale rather
+        // than editing one, so there is no single line to recalculate - the totals are
+        // still summed from whatever the rows now hold.
+        if (count($updating) > 1) {
+            $index = $updating[0];
 
-        $taxTotal = 0;
+            if ($updating[1] == 'id') {
+                if ($product = Product::find($value)) {
+                    $this->products[$index]['unit_price'] = (($product->getDefaultPrice()->unit_price ?? 0) / 100);
 
-        if (count($updating) < 2) {
-            return;
-        }
-
-        if ($updating[1] == 'id') {
-            $product = Product::find($value);
-
-            if ($product) {
-                $price = $product->getDefaultPrice()->unit_price ?? 0;
-                $quantity = (int) $this->products[$updating[0]]['quantity'] ?? 1;
-                $this->products[$updating[0]]['unit_price'] = ($price / 100);
-
-                if ($product && $product->taxRate) {
-                    $taxRate = $product->taxRate->rate;
-                } elseif ($product && $product->tax_rate) {
-                    $taxRate = $product->tax_rate;
-                } elseif ($taxRate = TaxRate::where('default', 1)->first()) {
-                    $taxRate = $taxRate->rate;
-                } else {
-                    $taxRate = app('laravel-crm.settings')->get('tax_rate', 0);
+                    $this->recalculateProduct($index, $product);
                 }
-
-                $this->products[$updating[0]]['tax_rate'] = $taxRate;
-
-                $tax = (($price / 100) * $quantity) * ((float) $taxRate / 100);
-                $this->products[$updating[0]]['tax_amount'] = round($tax, 2);
-                $this->products[$updating[0]]['amount'] = ($price / 100) * $quantity;
-            }
-        } else {
-            if ($product = Product::find($this->products[$updating[0]]['id'])) {
-                $quantity = (int) $this->products[$updating[0]]['quantity'] ?? 1;
-
-                if ($product && $product->taxRate) {
-                    $taxRate = $product->taxRate->rate;
-                } elseif ($product && $product->tax_rate) {
-                    $taxRate = $product->tax_rate;
-                } elseif ($taxRate = TaxRate::where('default', 1)->first()) {
-                    $taxRate = $taxRate->rate;
-                } else {
-                    $taxRate = app('laravel-crm.settings')->get('tax_rate', 0);
-                }
-
-                $this->products[$updating[0]]['tax_rate'] = $taxRate;
-
-                $unitPrice = \VentureDrake\LaravelCrm\Http\Helpers\ConvertCase\floatfromNumberFormat($this->products[$updating[0]]['unit_price'] ?? 0);
-                $tax = ($unitPrice * $quantity) * ((float) $taxRate / 100);
-                $this->products[$updating[0]]['tax_amount'] = round($tax, 2);
-                $this->products[$updating[0]]['amount'] = $unitPrice * $quantity;
+            } elseif ($product = Product::find($this->products[$index]['id'] ?? null)) {
+                $this->recalculateProduct($index, $product);
             }
         }
 
-        foreach ($this->products as $key => $value) {
-            $this->sub_total += (float) ($value['amount'] ?? 0);
-            $this->tax += (float) ($value['tax_amount'] ?? 0);
+        $this->recalculateTotals();
+
+        $this->dispatchProductsUpdated();
+    }
+
+    /**
+     * Recalculate a single line from its unit price, quantity and tax rate.
+     */
+    protected function recalculateProduct($index, Product $product): void
+    {
+        $taxRate = $this->resolveTaxRate($product);
+        $quantity = (int) ($this->products[$index]['quantity'] ?? 1);
+        $unitPrice = Money::toFloat($this->products[$index]['unit_price'] ?? 0);
+
+        $this->products[$index]['tax_rate'] = $taxRate;
+        $this->products[$index]['tax_amount'] = round(($unitPrice * $quantity) * ($taxRate / 100), 2);
+        $this->products[$index]['amount'] = round($unitPrice * $quantity, 2);
+    }
+
+    protected function resolveTaxRate(Product $product): float
+    {
+        if ($product->taxRate) {
+            return (float) $product->taxRate->rate;
         }
 
-        $this->total = round($this->sub_total + $this->tax, 2);
-        $this->sub_total = round($this->sub_total, 2);
-        $this->tax = round($this->tax, 2);
+        if ($product->tax_rate) {
+            return (float) $product->tax_rate;
+        }
 
+        if ($defaultTaxRate = TaxRate::where('default', 1)->first()) {
+            return (float) $defaultTaxRate->rate;
+        }
+
+        return (float) app('laravel-crm.settings')->get('tax_rate', 0);
+    }
+
+    /**
+     * Sum the totals from the lines themselves.
+     *
+     * The line values come back from the masked inputs as formatted strings
+     * ("14,000.00"), so they are normalised rather than cast.
+     */
+    protected function recalculateTotals(): void
+    {
+        $subTotal = 0;
+        $tax = 0;
+
+        foreach ($this->products as $product) {
+            $subTotal += Money::toFloat($product['amount'] ?? 0);
+            $tax += Money::toFloat($product['tax_amount'] ?? 0);
+        }
+
+        $this->sub_total = round($subTotal, 2);
+        $this->tax = round($tax, 2);
+        $this->total = round($subTotal + $tax, 2);
+    }
+
+    protected function dispatchProductsUpdated(): void
+    {
         $this->dispatch('model-products-updated', products: $this->products, sub_total: $this->sub_total, tax: $this->tax, total: $this->total);
     }
 
@@ -259,7 +266,7 @@ class ModelProducts extends Component
             'comments' => null,
         ];
 
-        $this->dispatch('model-products-updated', products: $this->products);
+        $this->dispatchProductsUpdated();
     }
 
     public function remove($index)
@@ -267,19 +274,9 @@ class ModelProducts extends Component
         unset($this->products[$index]);
         $this->products = array_values($this->products);
 
-        $this->sub_total = 0;
-        $this->tax = 0;
+        $this->recalculateTotals();
 
-        foreach ($this->products as $product) {
-            $this->sub_total += (float) ($product['amount'] ?? 0);
-            $this->tax += (float) ($product['tax_amount'] ?? 0);
-        }
-
-        $this->total = round($this->sub_total + $this->tax, 2);
-        $this->sub_total = round($this->sub_total, 2);
-        $this->tax = round($this->tax, 2);
-
-        $this->dispatch('model-products-updated', products: $this->products, sub_total: $this->sub_total, tax: $this->tax, total: $this->total);
+        $this->dispatchProductsUpdated();
     }
 
     public function render()
