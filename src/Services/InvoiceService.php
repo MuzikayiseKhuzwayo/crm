@@ -11,6 +11,7 @@ use VentureDrake\LaravelCrm\Models\Setting;
 use VentureDrake\LaravelCrm\Models\TaxRate;
 use VentureDrake\LaravelCrm\Models\XeroInvoice;
 use VentureDrake\LaravelCrm\Repositories\InvoiceRepository;
+use VentureDrake\LaravelCrm\Support\Money;
 use VentureDrake\LaravelCrm\Support\PdfTemplateRegistry;
 
 class InvoiceService
@@ -79,7 +80,7 @@ class InvoiceService
                         'price' => $invoiceLine['unit_price'],
                         'amount' => $invoiceLine['amount'],
                         'tax_rate' => $taxRate ?? 0,
-                        'tax_amount' => $invoiceLine['amount'] * ($taxRate / 100),
+                        'tax_amount' => Money::toFloat($invoiceLine['amount']) * ($taxRate / 100),
                         'currency' => $request->currency,
                         'order_product_id' => $invoiceLine['order_product_id'] ?? null,
                         'comments' => $invoiceLine['comments'],
@@ -147,7 +148,7 @@ class InvoiceService
             'subtotal' => $request->sub_total,
             'tax' => $request->tax,
             'total' => $request->total,
-            'amount_due' => $request->total - ($invoice->amount_paid / 100),
+            'amount_due' => Money::toFloat($request->total) - ($invoice->amount_paid / 100),
             'pdf_template' => PdfTemplateRegistry::resolveUpdate($request->pdf_template ?? null, $invoice->pdf_template),
             'user_owner_id' => $request->user_owner_id ?? auth()->user()->id,
         ]);
@@ -188,7 +189,7 @@ class InvoiceService
                                 'price' => $line['unit_price'],
                                 'amount' => $line['amount'],
                                 'tax_rate' => $taxRate ?? 0,
-                                'tax_amount' => $line['amount'] * ($taxRate / 100),
+                                'tax_amount' => Money::toFloat($line['amount']) * ($taxRate / 100),
                                 'currency' => $request->currency,
                                 'comments' => $line['comments'],
                                 'order' => $invoiceLineOrder,
@@ -223,7 +224,7 @@ class InvoiceService
                             'price' => $line['unit_price'],
                             'amount' => $line['amount'],
                             'tax_rate' => $taxRate ?? 0,
-                            'tax_amount' => $line['amount'] * ($taxRate / 100),
+                            'tax_amount' => Money::toFloat($line['amount']) * ($taxRate / 100),
                             'currency' => $request->currency,
                             'comments' => $line['comments'],
                             'order' => $invoiceLineOrder,

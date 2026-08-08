@@ -9,6 +9,7 @@ use VentureDrake\LaravelCrm\Models\QuoteProduct;
 use VentureDrake\LaravelCrm\Models\Setting;
 use VentureDrake\LaravelCrm\Models\TaxRate;
 use VentureDrake\LaravelCrm\Repositories\QuoteRepository;
+use VentureDrake\LaravelCrm\Support\Money;
 use VentureDrake\LaravelCrm\Support\PdfTemplateRegistry;
 
 class QuoteService
@@ -75,7 +76,7 @@ class QuoteService
                         'price' => $product['unit_price'],
                         'amount' => $product['amount'],
                         'tax_rate' => $taxRate,
-                        'tax_amount' => ($product['amount'] * 100) * ($taxRate / 100),
+                        'tax_amount' => (Money::toFloat($product['amount']) * 100) * ($taxRate / 100),
                         'currency' => $request->currency,
                         'comments' => $product['comments'],
                         'order' => $quoteProductOrder,
@@ -138,7 +139,7 @@ class QuoteService
                                 'price' => $product['unit_price'],
                                 'amount' => $product['amount'],
                                 'tax_rate' => $taxRate,
-                                'tax_amount' => ($product['amount'] * 100) * ($taxRate / 100),
+                                'tax_amount' => (Money::toFloat($product['amount']) * 100) * ($taxRate / 100),
                                 'currency' => $request->currency,
                                 'comments' => $product['comments'],
                                 'order' => $quoteProductOrder,
@@ -162,7 +163,7 @@ class QuoteService
                             'price' => $product['unit_price'],
                             'amount' => $product['amount'],
                             'tax_rate' => $taxRate,
-                            'tax_amount' => ($product['amount'] * 100) * ($taxRate / 100),
+                            'tax_amount' => (Money::toFloat($product['amount']) * 100) * ($taxRate / 100),
                             'currency' => $request->currency,
                             'comments' => $product['comments'],
                             'order' => $quoteProductOrder,

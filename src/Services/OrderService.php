@@ -10,6 +10,7 @@ use VentureDrake\LaravelCrm\Models\Product;
 use VentureDrake\LaravelCrm\Models\Setting;
 use VentureDrake\LaravelCrm\Models\TaxRate;
 use VentureDrake\LaravelCrm\Repositories\OrderRepository;
+use VentureDrake\LaravelCrm\Support\Money;
 use VentureDrake\LaravelCrm\Support\PdfTemplateRegistry;
 
 class OrderService
@@ -83,7 +84,7 @@ class OrderService
                         'price' => $product['unit_price'],
                         'amount' => $product['amount'],
                         'tax_rate' => $taxRate ?? 0,
-                        'tax_amount' => ($product['amount'] * 100) * ($taxRate / 100),
+                        'tax_amount' => (Money::toFloat($product['amount']) * 100) * ($taxRate / 100),
                         'currency' => $request->currency,
                         'comments' => $product['comments'],
                         'quote_product_id' => $product['quote_product_id'] ?? null,
@@ -173,7 +174,7 @@ class OrderService
                                 'price' => $product['unit_price'],
                                 'amount' => $product['amount'],
                                 'tax_rate' => $taxRate ?? 0,
-                                'tax_amount' => ($product['amount'] * 100) * ($taxRate / 100),
+                                'tax_amount' => (Money::toFloat($product['amount']) * 100) * ($taxRate / 100),
                                 'currency' => $request->currency,
                                 'comments' => $product['comments'],
                                 'order' => $orderProductOrder,
@@ -208,7 +209,7 @@ class OrderService
                             'price' => $product['unit_price'],
                             'amount' => $product['amount'],
                             'tax_rate' => $taxRate ?? 0,
-                            'tax_amount' => ($product['amount'] * 100) * ($taxRate / 100),
+                            'tax_amount' => (Money::toFloat($product['amount']) * 100) * ($taxRate / 100),
                             'currency' => $request->currency,
                             'comments' => $product['comments'],
                             'order' => $orderProductOrder,

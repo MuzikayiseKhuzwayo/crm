@@ -4,6 +4,7 @@ namespace VentureDrake\LaravelCrm\Models;
 
 use App\User;
 use Illuminate\Database\Eloquent\SoftDeletes;
+use VentureDrake\LaravelCrm\Support\Money;
 use VentureDrake\LaravelCrm\Traits\BelongsToTeams;
 use VentureDrake\LaravelCrm\Traits\HasCrmActivities;
 use VentureDrake\LaravelCrm\Traits\HasCrmFields;
@@ -53,11 +54,7 @@ class Deal extends Model
 
     public function setAmountAttribute($value)
     {
-        if (isset($value)) {
-            $this->attributes['amount'] = $value * 100;
-        } else {
-            $this->attributes['amount'] = null;
-        }
+        $this->attributes['amount'] = Money::toInteger($value);
     }
 
     public function lead()

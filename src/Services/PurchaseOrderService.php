@@ -13,6 +13,7 @@ use VentureDrake\LaravelCrm\Models\Setting;
 use VentureDrake\LaravelCrm\Models\TaxRate;
 use VentureDrake\LaravelCrm\Models\XeroPurchaseOrder;
 use VentureDrake\LaravelCrm\Repositories\PurchaseOrderRepository;
+use VentureDrake\LaravelCrm\Support\Money;
 use VentureDrake\LaravelCrm\Support\PdfTemplateRegistry;
 
 class PurchaseOrderService
@@ -85,9 +86,9 @@ class PurchaseOrderService
                         }
                     }
 
-                    $subTotal += $purchaseOrderLine['amount'];
-                    $tax += $purchaseOrderLine['amount'] * ($taxRate / 100);
-                    $total += ($purchaseOrderLine['amount'] + ($purchaseOrderLine['amount'] * ($taxRate / 100)));
+                    $subTotal += Money::toFloat($purchaseOrderLine['amount']);
+                    $tax += Money::toFloat($purchaseOrderLine['amount']) * ($taxRate / 100);
+                    $total += (Money::toFloat($purchaseOrderLine['amount']) + (Money::toFloat($purchaseOrderLine['amount']) * ($taxRate / 100)));
 
                     $purchaseOrder->purchaseOrderLines()->create([
                         'product_id' => $purchaseOrderLine['id'],
@@ -95,7 +96,7 @@ class PurchaseOrderService
                         'price' => $purchaseOrderLine['unit_price'],
                         'amount' => $purchaseOrderLine['amount'],
                         'tax_rate' => $taxRate ?? 0,
-                        'tax_amount' => $purchaseOrderLine['amount'] * ($taxRate / 100),
+                        'tax_amount' => Money::toFloat($purchaseOrderLine['amount']) * ($taxRate / 100),
                         'currency' => $request->currency,
                         'order_product_id' => $purchaseOrderLine['order_product_id'] ?? null,
                         'comments' => $purchaseOrderLine['comments'],
@@ -172,7 +173,7 @@ class PurchaseOrderService
             'subtotal' => $request->sub_total,
             'tax' => $request->tax,
             'total' => $request->total,
-            'amount_due' => $request->total - ($purchaseOrder->amount_paid / 100),
+            'amount_due' => Money::toFloat($request->total) - ($purchaseOrder->amount_paid / 100),
             'pdf_template' => PdfTemplateRegistry::resolveUpdate($request->pdf_template ?? null, $purchaseOrder->pdf_template),
             'user_owner_id' => $request->user_owner_id ?? auth()->user()->id,
         ]);
@@ -239,7 +240,7 @@ class PurchaseOrderService
                                 'price' => $line['price'],
                                 'amount' => $line['amount'],
                                 'tax_rate' => $taxRate ?? 0,
-                                'tax_amount' => $line['amount'] * ($taxRate / 100),
+                                'tax_amount' => Money::toFloat($line['amount']) * ($taxRate / 100),
                                 'currency' => $request->currency,
                                 'comments' => $line['comments'],
                             ]);
@@ -273,7 +274,7 @@ class PurchaseOrderService
                             'price' => $line['price'],
                             'amount' => $line['amount'],
                             'tax_rate' => $taxRate ?? 0,
-                            'tax_amount' => $line['amount'] * ($taxRate / 100),
+                            'tax_amount' => Money::toFloat($line['amount']) * ($taxRate / 100),
                             'currency' => $request->currency,
                             'comments' => $line['comments'],
                         ]);

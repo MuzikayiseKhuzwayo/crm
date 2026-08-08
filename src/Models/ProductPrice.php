@@ -3,6 +3,7 @@
 namespace VentureDrake\LaravelCrm\Models;
 
 use Illuminate\Database\Eloquent\SoftDeletes;
+use VentureDrake\LaravelCrm\Support\Money;
 use VentureDrake\LaravelCrm\Traits\BelongsToTeams;
 
 class ProductPrice extends Model
@@ -19,29 +20,17 @@ class ProductPrice extends Model
 
     public function setUnitPriceAttribute($value)
     {
-        if (isset($value)) {
-            $this->attributes['unit_price'] = $value * 100;
-        } else {
-            $this->attributes['unit_price'] = null;
-        }
+        $this->attributes['unit_price'] = Money::toInteger($value);
     }
 
     public function setCostPerUnitAttribute($value)
     {
-        if (isset($value)) {
-            $this->attributes['cost_per_unit'] = $value * 100;
-        } else {
-            $this->attributes['cost_per_unit'] = null;
-        }
+        $this->attributes['cost_per_unit'] = Money::toInteger($value);
     }
 
     public function setDirectCostAttribute($value)
     {
-        if (isset($value)) {
-            $this->attributes['direct_cost'] = $value * 100;
-        } else {
-            $this->attributes['direct_cost'] = null;
-        }
+        $this->attributes['direct_cost'] = Money::toInteger($value);
     }
 
     public function product()

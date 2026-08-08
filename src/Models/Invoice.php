@@ -4,6 +4,7 @@ namespace VentureDrake\LaravelCrm\Models;
 
 use App\User;
 use Illuminate\Database\Eloquent\SoftDeletes;
+use VentureDrake\LaravelCrm\Support\Money;
 use VentureDrake\LaravelCrm\Traits\BelongsToTeams;
 use VentureDrake\LaravelCrm\Traits\HasCrmActivities;
 use VentureDrake\LaravelCrm\Traits\HasCrmFields;
@@ -77,38 +78,22 @@ class Invoice extends Model
 
     public function setSubtotalAttribute($value)
     {
-        if (isset($value)) {
-            $this->attributes['subtotal'] = $value * 100;
-        } else {
-            $this->attributes['subtotal'] = null;
-        }
+        $this->attributes['subtotal'] = Money::toInteger($value);
     }
 
     public function setTaxAttribute($value)
     {
-        if (isset($value)) {
-            $this->attributes['tax'] = $value * 100;
-        } else {
-            $this->attributes['tax'] = null;
-        }
+        $this->attributes['tax'] = Money::toInteger($value);
     }
 
     public function setTotalAttribute($value)
     {
-        if (isset($value)) {
-            $this->attributes['total'] = $value * 100;
-        } else {
-            $this->attributes['total'] = null;
-        }
+        $this->attributes['total'] = Money::toInteger($value);
     }
 
     public function setAmountDueAttribute($value)
     {
-        if (isset($value)) {
-            $this->attributes['amount_due'] = $value * 100;
-        } else {
-            $this->attributes['amount_due'] = null;
-        }
+        $this->attributes['amount_due'] = Money::toInteger($value);
     }
 
     public function getAmountDueAttribute($value)
@@ -122,11 +107,7 @@ class Invoice extends Model
 
     public function setAmountPaidAttribute($value)
     {
-        if (isset($value)) {
-            $this->attributes['amount_paid'] = $value * 100;
-        } else {
-            $this->attributes['amount_paid'] = null;
-        }
+        $this->attributes['amount_paid'] = Money::toInteger($value);
     }
 
     public function person()

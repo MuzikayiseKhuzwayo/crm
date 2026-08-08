@@ -3,6 +3,7 @@
 namespace VentureDrake\LaravelCrm\Models;
 
 use Illuminate\Database\Eloquent\SoftDeletes;
+use VentureDrake\LaravelCrm\Support\Money;
 use VentureDrake\LaravelCrm\Traits\BelongsToTeams;
 
 class QuoteProduct extends Model
@@ -19,20 +20,12 @@ class QuoteProduct extends Model
 
     public function setPriceAttribute($value)
     {
-        if (isset($value)) {
-            $this->attributes['price'] = $value * 100;
-        } else {
-            $this->attributes['price'] = null;
-        }
+        $this->attributes['price'] = Money::toInteger($value);
     }
 
     public function setAmountAttribute($value)
     {
-        if (isset($value)) {
-            $this->attributes['amount'] = $value * 100;
-        } else {
-            $this->attributes['amount'] = null;
-        }
+        $this->attributes['amount'] = Money::toInteger($value);
     }
 
     public function quote()

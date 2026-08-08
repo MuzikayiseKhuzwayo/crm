@@ -3,6 +3,7 @@
 namespace VentureDrake\LaravelCrm\Models;
 
 use Illuminate\Database\Eloquent\SoftDeletes;
+use VentureDrake\LaravelCrm\Support\Money;
 use VentureDrake\LaravelCrm\Traits\BelongsToTeams;
 use VentureDrake\LaravelCrm\Traits\HasCrmActivities;
 use VentureDrake\LaravelCrm\Traits\HasCrmFields;
@@ -47,20 +48,12 @@ class Organization extends Model
 
     public function setAnnualRevenueAttribute($value)
     {
-        if (isset($value)) {
-            $this->attributes['annual_revenue'] = $value * 100;
-        } else {
-            $this->attributes['annual_revenue'] = null;
-        }
+        $this->attributes['annual_revenue'] = Money::toInteger($value);
     }
 
     public function setTotalMoneyRaisedAttribute($value)
     {
-        if (isset($value)) {
-            $this->attributes['total_money_raised'] = $value * 100;
-        } else {
-            $this->attributes['total_money_raised'] = null;
-        }
+        $this->attributes['total_money_raised'] = Money::toInteger($value);
     }
 
     public function people()

@@ -4,6 +4,7 @@ namespace VentureDrake\LaravelCrm\Models;
 
 use App\User;
 use Illuminate\Database\Eloquent\SoftDeletes;
+use VentureDrake\LaravelCrm\Support\Money;
 use VentureDrake\LaravelCrm\Traits\BelongsToTeams;
 use VentureDrake\LaravelCrm\Traits\HasCrmActivities;
 use VentureDrake\LaravelCrm\Traits\HasCrmFields;
@@ -75,47 +76,27 @@ class Quote extends Model
 
     public function setSubtotalAttribute($value)
     {
-        if (isset($value)) {
-            $this->attributes['subtotal'] = $value * 100;
-        } else {
-            $this->attributes['subtotal'] = null;
-        }
+        $this->attributes['subtotal'] = Money::toInteger($value);
     }
 
     public function setDiscountAttribute($value)
     {
-        if (isset($value)) {
-            $this->attributes['discount'] = $value * 100;
-        } else {
-            $this->attributes['discount'] = null;
-        }
+        $this->attributes['discount'] = Money::toInteger($value);
     }
 
     public function setTaxAttribute($value)
     {
-        if (isset($value)) {
-            $this->attributes['tax'] = $value * 100;
-        } else {
-            $this->attributes['tax'] = null;
-        }
+        $this->attributes['tax'] = Money::toInteger($value);
     }
 
     public function setAdjustmentsAttribute($value)
     {
-        if (isset($value)) {
-            $this->attributes['adjustments'] = $value * 100;
-        } else {
-            $this->attributes['adjustments'] = null;
-        }
+        $this->attributes['adjustments'] = Money::toInteger($value);
     }
 
     public function setTotalAttribute($value)
     {
-        if (isset($value)) {
-            $this->attributes['total'] = $value * 100;
-        } else {
-            $this->attributes['total'] = null;
-        }
+        $this->attributes['total'] = Money::toInteger($value);
     }
 
     public function person()
