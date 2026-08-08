@@ -3,6 +3,7 @@
 namespace VentureDrake\LaravelCrm\Http\Livewire;
 
 use Barryvdh\DomPDF\Facade\Pdf;
+use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
 use Illuminate\Support\Facades\File;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\Storage;
@@ -14,6 +15,7 @@ use VentureDrake\LaravelCrm\Traits\NotifyToast;
 
 class SendPurchaseOrder extends Component
 {
+    use AuthorizesRequests;
     use NotifyToast;
 
     private $settingService;
@@ -61,6 +63,8 @@ class SendPurchaseOrder extends Component
 
     public function send()
     {
+        $this->authorize('update', $this->purchaseOrder);
+
         $this->validate();
 
         // $this->generateUrl();

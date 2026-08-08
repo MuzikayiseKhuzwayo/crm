@@ -2,13 +2,14 @@
 
 namespace VentureDrake\LaravelCrm\Livewire\Teams;
 
+use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
 use Livewire\Component;
 use VentureDrake\LaravelCrm\Livewire\Teams\Traits\HasTeamCommon;
 use VentureDrake\LaravelCrm\Models\Team;
 
 class TeamEdit extends Component
 {
-    use HasTeamCommon;
+    use AuthorizesRequests, HasTeamCommon;
 
     public Team $team;
 
@@ -25,6 +26,8 @@ class TeamEdit extends Component
 
     public function save()
     {
+        $this->authorize('update', $this->team);
+
         $this->validate();
 
         $this->team->update([

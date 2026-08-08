@@ -2,6 +2,7 @@
 
 namespace VentureDrake\LaravelCrm\Livewire\Teams;
 
+use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
 use Illuminate\Support\Facades\Schema;
 use Livewire\Component;
 use VentureDrake\LaravelCrm\Livewire\Teams\Traits\HasTeamCommon;
@@ -9,7 +10,7 @@ use VentureDrake\LaravelCrm\Models\Team;
 
 class TeamCreate extends Component
 {
-    use HasTeamCommon;
+    use AuthorizesRequests, HasTeamCommon;
 
     public $layout = 'full';
 
@@ -20,6 +21,8 @@ class TeamCreate extends Component
 
     public function save()
     {
+        $this->authorize('create', Team::class);
+
         $this->validate();
 
         $user = auth()->user();

@@ -3,12 +3,14 @@
 namespace VentureDrake\LaravelCrm\Http\Livewire;
 
 use Carbon\Carbon;
+use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
 use Livewire\Component;
 use VentureDrake\LaravelCrm\Traits\HasGlobalSettings;
 use VentureDrake\LaravelCrm\Traits\NotifyToast;
 
 class PayInvoice extends Component
 {
+    use AuthorizesRequests;
     use HasGlobalSettings;
     use NotifyToast;
 
@@ -43,6 +45,8 @@ class PayInvoice extends Component
 
     public function pay()
     {
+        $this->authorize('update', $this->invoice);
+
         $this->validate();
 
         $this->amount_due = ($this->invoice->amount_due / 100) - ($this->amount_paid + ($this->invoice->amount_paid / 100));

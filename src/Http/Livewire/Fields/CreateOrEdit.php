@@ -2,6 +2,7 @@
 
 namespace VentureDrake\LaravelCrm\Http\Livewire\Fields;
 
+use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
 use Livewire\Component;
 use VentureDrake\LaravelCrm\Models\Field;
 use VentureDrake\LaravelCrm\Models\FieldModel;
@@ -10,6 +11,7 @@ use VentureDrake\LaravelCrm\Traits\NotifyToast;
 
 class CreateOrEdit extends Component
 {
+    use AuthorizesRequests;
     use NotifyToast;
 
     public Field $field;
@@ -89,6 +91,14 @@ class CreateOrEdit extends Component
 
     public function submit()
     {
+        // One component serves both pages, so the ability depends on the branch --
+        // guard before validate() so a 403 can never leave a half-written field.
+        if (isset($this->field)) {
+            $this->authorize('update', $this->field);
+        } else {
+            $this->authorize('create', Field::class);
+        }
+
         $this->validate();
 
         if (isset($this->field)) {

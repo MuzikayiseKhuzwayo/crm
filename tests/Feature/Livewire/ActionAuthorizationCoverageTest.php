@@ -4,9 +4,12 @@
  * Regression guard for the Livewire authorization backfill (US-002..US-007).
  *
  * Every Livewire public method is directly invokable from the browser, so any method
- * that writes to the database is an authorization surface. This test reflects over the
- * whole of src/Livewire/ and fails -- naming the offending Class::method -- when a
- * mutating action method has no $this->authorize() call and no documented exemption.
+ * that writes to the database is an authorization surface. This test reflects over both
+ * Livewire trees -- the current src/Livewire/ components and the legacy
+ * src/Http/Livewire/ ones, which are still registered by name in the service provider
+ * and so remain invokable by any host app that published the v1 views -- and fails,
+ * naming the offending Class::method, when a mutating action method has no
+ * $this->authorize() call and no documented exemption.
  *
  * Scope: a method is checked when its body contains a persistence signal (see
  * PERSISTENCE_SIGNALS). Read-only methods -- the computed data providers this codebase
@@ -52,6 +55,20 @@ const PERSISTENCE_SIGNALS = [
     // which are browser messages rather than side effects.
     '::dispatch',
 ];
+
+/**
+ * Service calls that are reads, stripped from a method body before the signal scan.
+ *
+ * The legacy src/Http/Livewire tree injects SettingService as a component property and
+ * reads it as $this->settingService->get('date_format'), which the deliberately broad
+ * 'Service->' signal cannot tell apart from a real $this->personService->create() write.
+ * Stripping only the read accessor keeps 'Service->' catching every genuine service
+ * write in both trees, instead of marking eleven pure read helpers (LiveNotes::getNotes,
+ * LiveQuoteItems::calculateAmounts, ...) as mutating and then having to exempt them.
+ *
+ * A write through the same property -- settingService->set(...) -- still matches.
+ */
+const READ_ONLY_SERVICE_CALLS = ['settingService->get('];
 
 /**
  * Livewire lifecycle hooks. Never user-invoked actions, so never an authorization
@@ -113,6 +130,14 @@ const SAFE_METHODS = [
     'HasDealCommon::addProduct', 'HasDealCommon::deleteProduct',
     'HasCustomFieldCommon::removeOption',
 
+    // Legacy src/Http/Livewire equivalents: repeater rows and line-item drafts that
+    // only ever touch $this->inputs / $this->fieldOptions. The owning form's guarded
+    // save() is what persists them.
+    'LivePhoneEdit::remove', 'LiveEmailEdit::remove', 'LiveAddressEdit::remove',
+    'LiveQuoteItems::remove', 'LiveOrderItems::remove', 'LiveInvoiceLines::remove',
+    'LivePurchaseOrderLines::remove', 'LiveDeliveryItems::add',
+    'CreateOrEdit::addOption', 'CreateOrEdit::removeOption',
+
     // Delegates to an already-guarded method on the same component.
     'ProductCreate::createProduct',
 ];
@@ -123,35 +148,6 @@ const SAFE_METHODS = [
  * assertion.
  */
 const SAFE_METHOD_DELEGATES = ['ProductCreate::createProduct'];
-
-/**
- * Pre-existing gaps this story does NOT close.
- *
- * The US-002..US-007 backfill covered Deals, Leads, Quotes, Orders, Invoices,
- * PurchaseOrders, Deliveries, Products, Tasks, People, Organizations, the shared
- * related/sub-item components, Settings, Chat, imports, templates and the campaign
- * cancel paths. It never reached the Monitors or Teams domains, the EmailCampaign
- * create/edit pages, or the User create/edit/show/invite paths -- a gap US-005 already
- * recorded for UserCreate/UserEdit.
- *
- * This list is a ratchet, not an excuse: the "ratchet stays honest" test below fails if
- * an entry is guarded (remove it) or disappears (remove it). It can only shrink.
- */
-const KNOWN_UNGUARDED = [
-    'EmailCampaignCreate::save',
-    'EmailCampaignEdit::save',
-    'MonitorCreate::save',
-    'MonitorEdit::save',
-    'TeamCreate::save',
-    'TeamEdit::save',
-    'TeamShow::delete',
-    'UserCreate::save',
-    'UserEdit::save',
-    'UserIndex::deleteInvitation',
-    'UserIndex::resendInvitation',
-    'UserInvite::save',
-    'UserShow::delete',
-];
 
 /**
  * Guarded methods whose body contains no PERSISTENCE_SIGNALS entry.
@@ -182,7 +178,7 @@ const GUARDED_WITHOUT_PERSISTENCE_SIGNAL = [
 ];
 
 /**
- * Reflect over src/Livewire and describe every public action method.
+ * Reflect over both Livewire trees and describe every public action method.
  *
  * Methods are keyed by the short name of the class *or trait* that physically declares
  * them. ReflectionMethod::getDeclaringClass() reports the *using* class for a trait
@@ -205,27 +201,34 @@ function actionAuthzMethods(): array
     }
 
     $root = dirname(__DIR__, 3);
-    $livewireDir = $root.'/src/Livewire';
+
+    // Both roots are scanned. src/Http/Livewire is the pre-v2 tree: no package view
+    // renders it any more, but every component is still registered by name in
+    // LaravelCrmServiceProvider, so a host app on published v1 views can invoke the lot.
+    $livewireDirs = [$root.'/src/Livewire', $root.'/src/Http/Livewire'];
 
     $classes = [];
-    $iterator = new RecursiveIteratorIterator(new RecursiveDirectoryIterator($livewireDir));
 
-    foreach ($iterator as $file) {
-        if (! $file->isFile() || $file->getExtension() !== 'php') {
-            continue;
+    foreach ($livewireDirs as $livewireDir) {
+        $iterator = new RecursiveIteratorIterator(new RecursiveDirectoryIterator($livewireDir));
+
+        foreach ($iterator as $file) {
+            if (! $file->isFile() || $file->getExtension() !== 'php') {
+                continue;
+            }
+
+            $source = file_get_contents($file->getPathname());
+
+            if (! preg_match('/^namespace\s+([^;]+);/m', $source, $namespace)) {
+                continue;
+            }
+
+            if (! preg_match('/^(?:abstract\s+|final\s+)?class\s+(\w+)/m', $source, $class)) {
+                continue;
+            }
+
+            $classes[] = trim($namespace[1]).'\\'.$class[1];
         }
-
-        $source = file_get_contents($file->getPathname());
-
-        if (! preg_match('/^namespace\s+([^;]+);/m', $source, $namespace)) {
-            continue;
-        }
-
-        if (! preg_match('/^(?:abstract\s+|final\s+)?class\s+(\w+)/m', $source, $class)) {
-            continue;
-        }
-
-        $classes[] = trim($namespace[1]).'\\'.$class[1];
     }
 
     sort($classes);
@@ -246,6 +249,19 @@ function actionAuthzMethods(): array
         return preg_match('/^get.+Property$/', $name) === 1;
     };
 
+    // Resolve a declaring file to a root-relative path, or null when it lives outside
+    // both roots -- which is how everything inherited from vendor/ (Livewire\Component,
+    // WithPagination, Mary\Traits\Toast) is dropped.
+    $relativeTo = function (?string $file) use ($livewireDirs): ?string {
+        foreach ($livewireDirs as $livewireDir) {
+            if ($file && str_starts_with($file, $livewireDir.'/')) {
+                return str_replace($livewireDir.'/', '', $file);
+            }
+        }
+
+        return null;
+    };
+
     $methods = [];
 
     foreach ($classes as $class) {
@@ -261,17 +277,16 @@ function actionAuthzMethods(): array
             }
 
             $file = $method->getFileName();
+            $relative = $relativeTo($file ?: null);
 
             // Inherited from the framework (Livewire\Component, WithPagination, Toast).
-            if (! $file || ! str_starts_with($file, $livewireDir)) {
+            if ($relative === null) {
                 continue;
             }
 
             if ($isLifecycle($method->getName())) {
                 continue;
             }
-
-            $relative = str_replace($livewireDir.'/', '', $file);
 
             $exemptNamespace = false;
 
@@ -300,21 +315,40 @@ function actionAuthzMethods(): array
             ));
 
             $mutates = false;
+            $scannable = str_replace(READ_ONLY_SERVICE_CALLS, '', $body);
 
             foreach (PERSISTENCE_SIGNALS as $signal) {
-                if (str_contains($body, $signal)) {
+                if (str_contains($scannable, $signal)) {
                     $mutates = true;
 
                     break;
                 }
             }
 
-            $methods[($owner[1] ?? $reflection->getShortName()).'::'.$method->getName()] = [
+            $key = ($owner[1] ?? $reflection->getShortName()).'::'.$method->getName();
+
+            $entry = [
                 'guarded' => str_contains($body, '$this->authorize('),
                 'mutates' => $mutates,
                 'body' => $body,
                 'relative' => $relative,
             ];
+
+            // The two trees can hold classes with the same short name -- they already
+            // do, for the two KanbanBoard bases -- and the key is the short name so
+            // SAFE_METHODS stays readable. Collapse a collision to its strictest
+            // reading rather than letting the later file overwrite the earlier one,
+            // so an unguarded write can never be masked by a same-named sibling.
+            if (isset($methods[$key])) {
+                $entry = [
+                    'guarded' => $methods[$key]['guarded'] && $entry['guarded'],
+                    'mutates' => $methods[$key]['mutates'] || $entry['mutates'],
+                    'body' => $methods[$key]['body']."\n".$entry['body'],
+                    'relative' => $methods[$key]['relative'].', '.$entry['relative'],
+                ];
+            }
+
+            $methods[$key] = $entry;
         }
     }
 
@@ -334,8 +368,10 @@ it('scans a meaningful number of Livewire action methods', function () {
     $methods = actionAuthzMethods();
     $mutating = array_filter($methods, fn (array $m) => $m['mutates']);
 
-    expect(count($methods))->toBeGreaterThan(300)
-        ->and(count($mutating))->toBeGreaterThan(150)
+    // Both trees together currently scan 584 methods, 233 of them mutating. The floors
+    // sit just under that so an accidentally narrowed scan trips here first.
+    expect(count($methods))->toBeGreaterThan(550)
+        ->and(count($mutating))->toBeGreaterThan(220)
         ->and(array_filter($mutating, fn (array $m) => $m['guarded']))->not->toBeEmpty();
 });
 
@@ -347,7 +383,7 @@ it('requires an authorize() call on every mutating Livewire action method', func
             continue;
         }
 
-        if (in_array($key, SAFE_METHODS, true) || in_array($key, KNOWN_UNGUARDED, true)) {
+        if (in_array($key, SAFE_METHODS, true)) {
             continue;
         }
 
@@ -437,29 +473,6 @@ it('keeps guarded methods guarded even when no persistence signal detects them',
     );
 });
 
-it('keeps the KNOWN_UNGUARDED ratchet honest', function () {
-    $methods = actionAuthzMethods();
-    $stale = [];
-
-    foreach (KNOWN_UNGUARDED as $key) {
-        if (! isset($methods[$key])) {
-            $stale[] = $key.'   (method no longer exists)';
-
-            continue;
-        }
-
-        if ($methods[$key]['guarded']) {
-            $stale[] = $key.'   (now guarded)';
-        }
-    }
-
-    expect(actionAuthzReport($stale))->toBe(
-        '',
-        'KNOWN_UNGUARDED lists pre-existing gaps and may only shrink. '
-        .'Remove these entries now that they are guarded or gone.'
-    );
-});
-
 it('does not short-circuit the Gate anywhere in the authorization suites', function () {
     $files = array_merge(
         [__FILE__],
@@ -522,6 +535,7 @@ it('flags any persistence signal missing from the detection list', function () {
 
     $knownReads = [
         'FileItem::download' => 'Storage::disk()->download() -- serves a file, writes nothing',
+        'LiveFile::download' => 'Storage::disk()->download() -- serves a file, writes nothing',
         'HasPersonSuggest::searchPeople' => 'DB::raw() inside a search SELECT',
         'UserIndex::users' => 'DB::table() inside the team-scoping whereExists SELECT',
     ];

@@ -2,6 +2,7 @@
 
 namespace VentureDrake\LaravelCrm\Http\Livewire;
 
+use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
 use Illuminate\Support\Collection;
 use VentureDrake\LaravelCrm\Http\Livewire\KanbanBoard\KanbanBoard;
 use VentureDrake\LaravelCrm\Models\Pipeline;
@@ -9,6 +10,8 @@ use VentureDrake\LaravelCrm\Models\Quote;
 
 class LiveQuoteBoard extends KanbanBoard
 {
+    use AuthorizesRequests;
+
     public $model = 'quote';
 
     public $quotes;
@@ -25,8 +28,16 @@ class LiveQuoteBoard extends KanbanBoard
 
     public function onStageSorted($orderedIds)
     {
+        // The id list arrives straight from the browser, so every record it names is
+        // authorized in its own right before it is touched. Mirrors QuoteBoard.
         foreach ($orderedIds as $orderNumber => $quoteId) {
-            Quote::find($quoteId)->update([
+            if (! $record = Quote::find($quoteId)) {
+                continue;
+            }
+
+            $this->authorize('update', $record);
+
+            $record->update([
                 'pipeline_stage_order' => $orderNumber + 1,
             ]);
         }
@@ -34,20 +45,28 @@ class LiveQuoteBoard extends KanbanBoard
 
     public function onStageChanged($recordId, $stageId, $fromOrderedIds, $toOrderedIds)
     {
-        Quote::find($recordId)->update([
+        if (! $record = Quote::find($recordId)) {
+            return;
+        }
+
+        $this->authorize('update', $record);
+
+        $record->update([
             'pipeline_stage_id' => $stageId,
         ]);
 
-        foreach ($fromOrderedIds as $orderNumber => $quoteId) {
-            Quote::find($quoteId)->update([
-                'pipeline_stage_order' => $orderNumber + 1,
-            ]);
-        }
+        foreach ([$fromOrderedIds, $toOrderedIds] as $orderedIds) {
+            foreach ($orderedIds as $orderNumber => $quoteId) {
+                if (! $reordered = Quote::find($quoteId)) {
+                    continue;
+                }
 
-        foreach ($toOrderedIds as $orderNumber => $quoteId) {
-            Quote::find($quoteId)->update([
-                'pipeline_stage_order' => $orderNumber + 1,
-            ]);
+                $this->authorize('update', $reordered);
+
+                $reordered->update([
+                    'pipeline_stage_order' => $orderNumber + 1,
+                ]);
+            }
         }
     }
 

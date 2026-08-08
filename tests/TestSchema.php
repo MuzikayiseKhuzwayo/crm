@@ -525,7 +525,10 @@ class TestSchema
             $table->bigIncrements('id');
             $table->string('external_id')->nullable();
             $table->string('name');
-            $table->string('key');
+            // add_label_type_to_laravel_crm_fields_table drops `key` outright, so no
+            // production schema still requires it. Kept nullable rather than removed so
+            // any host still on the pre-drop schema keeps resolving.
+            $table->string('key')->nullable();
             $table->string('type')->nullable();
             $table->string('label_type')->nullable();
             $table->string('default')->nullable();

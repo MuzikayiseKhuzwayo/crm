@@ -11,8 +11,8 @@
                 @if(auth()->user()->id == $user->id)
                     <x-mary-button icon="o-trash" class="btn-sm btn-square btn-error" disabled />
                 @else
-                    <x-mary-button onclick="modalDeleteTask{{ $user->id }}.showModal()" icon="o-trash" class="btn-sm btn-square btn-error text-white" spinner />
-                    <x-crm-delete-confirm model="task" id="{{ $user->id }}" />
+                    <x-mary-button onclick="modalDeleteUser{{ $user->id }}.showModal()" icon="o-trash" class="btn-sm btn-square btn-error text-white" spinner />
+                    <x-crm-delete-confirm model="user" id="{{ $user->id }}" />
                 @endif    
             @endcan
         </x-slot:actions>

@@ -2,13 +2,14 @@
 
 namespace VentureDrake\LaravelCrm\Livewire\Monitors;
 
+use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
 use Livewire\Component;
 use VentureDrake\LaravelCrm\Livewire\Monitors\Traits\HasMonitorCommon;
 use VentureDrake\LaravelCrm\Models\Monitor;
 
 class MonitorEdit extends Component
 {
-    use HasMonitorCommon;
+    use AuthorizesRequests, HasMonitorCommon;
 
     public Monitor $monitor;
 
@@ -30,6 +31,8 @@ class MonitorEdit extends Component
 
     public function save()
     {
+        $this->authorize('update', $this->monitor);
+
         $validated = $this->validate();
 
         try {

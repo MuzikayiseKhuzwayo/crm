@@ -2,6 +2,7 @@
 
 namespace VentureDrake\LaravelCrm\Http\Livewire;
 
+use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
 use Livewire\Component;
 use Ramsey\Uuid\Uuid;
 use VentureDrake\LaravelCrm\Models\Note;
@@ -10,6 +11,7 @@ use VentureDrake\LaravelCrm\Traits\NotifyToast;
 
 class LiveNotes extends Component
 {
+    use AuthorizesRequests;
     use NotifyToast;
 
     private $settingService;
@@ -50,6 +52,8 @@ class LiveNotes extends Component
 
     public function create()
     {
+        $this->authorize('create', Note::class);
+
         $data = $this->validate([
             'content' => 'required',
         ]);

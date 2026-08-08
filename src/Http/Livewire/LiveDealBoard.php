@@ -2,6 +2,7 @@
 
 namespace VentureDrake\LaravelCrm\Http\Livewire;
 
+use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
 use Illuminate\Support\Collection;
 use VentureDrake\LaravelCrm\Http\Livewire\KanbanBoard\KanbanBoard;
 use VentureDrake\LaravelCrm\Models\Deal;
@@ -9,6 +10,8 @@ use VentureDrake\LaravelCrm\Models\Pipeline;
 
 class LiveDealBoard extends KanbanBoard
 {
+    use AuthorizesRequests;
+
     public $model = 'deal';
 
     public $deals;
@@ -25,8 +28,16 @@ class LiveDealBoard extends KanbanBoard
 
     public function onStageSorted($orderedIds)
     {
+        // The id list arrives straight from the browser, so every record it names is
+        // authorized in its own right before it is touched. Mirrors DealBoard.
         foreach ($orderedIds as $orderNumber => $dealId) {
-            Deal::find($dealId)->update([
+            if (! $record = Deal::find($dealId)) {
+                continue;
+            }
+
+            $this->authorize('update', $record);
+
+            $record->update([
                 'pipeline_stage_order' => $orderNumber + 1,
             ]);
         }
@@ -34,20 +45,28 @@ class LiveDealBoard extends KanbanBoard
 
     public function onStageChanged($recordId, $stageId, $fromOrderedIds, $toOrderedIds)
     {
-        Deal::find($recordId)->update([
+        if (! $record = Deal::find($recordId)) {
+            return;
+        }
+
+        $this->authorize('update', $record);
+
+        $record->update([
             'pipeline_stage_id' => $stageId,
         ]);
 
-        foreach ($fromOrderedIds as $orderNumber => $dealId) {
-            Deal::find($dealId)->update([
-                'pipeline_stage_order' => $orderNumber + 1,
-            ]);
-        }
+        foreach ([$fromOrderedIds, $toOrderedIds] as $orderedIds) {
+            foreach ($orderedIds as $orderNumber => $dealId) {
+                if (! $reordered = Deal::find($dealId)) {
+                    continue;
+                }
 
-        foreach ($toOrderedIds as $orderNumber => $dealId) {
-            Deal::find($dealId)->update([
-                'pipeline_stage_order' => $orderNumber + 1,
-            ]);
+                $this->authorize('update', $reordered);
+
+                $reordered->update([
+                    'pipeline_stage_order' => $orderNumber + 1,
+                ]);
+            }
         }
     }
 

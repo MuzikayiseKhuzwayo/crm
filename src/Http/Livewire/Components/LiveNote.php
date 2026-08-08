@@ -2,6 +2,7 @@
 
 namespace VentureDrake\LaravelCrm\Http\Livewire\Components;
 
+use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
 use Livewire\Component;
 use VentureDrake\LaravelCrm\Models\Note;
 use VentureDrake\LaravelCrm\Services\SettingService;
@@ -10,6 +11,7 @@ use VentureDrake\LaravelCrm\Traits\NotifyToast;
 
 class LiveNote extends Component
 {
+    use AuthorizesRequests;
     use HasGlobalSettings;
     use NotifyToast;
 
@@ -66,6 +68,8 @@ class LiveNote extends Component
 
     public function update()
     {
+        $this->authorize('update', $this->note);
+
         $this->validate();
         $this->note->update([
             'content' => $this->content,
@@ -80,6 +84,8 @@ class LiveNote extends Component
 
     public function delete()
     {
+        $this->authorize('delete', $this->note);
+
         $this->note->delete();
 
         $this->emit('noteDeleted');
@@ -90,6 +96,8 @@ class LiveNote extends Component
 
     public function pin()
     {
+        $this->authorize('update', $this->note);
+
         $this->note->update([
             'pinned' => 1,
         ]);
@@ -102,6 +110,8 @@ class LiveNote extends Component
 
     public function unpin()
     {
+        $this->authorize('update', $this->note);
+
         $this->note->update([
             'pinned' => 0,
         ]);

@@ -6,6 +6,7 @@ use Illuminate\Support\Facades\Notification;
 use Illuminate\Support\Facades\Route;
 use Illuminate\Support\Facades\Schema;
 use Livewire\Attributes\Url;
+use Livewire\Livewire;
 use VentureDrake\LaravelCrm\Livewire\Users\UserIndex;
 use VentureDrake\LaravelCrm\Models\UserInvitation;
 use VentureDrake\LaravelCrm\Notifications\UserInvitationNotification;
@@ -17,6 +18,20 @@ use VentureDrake\LaravelCrm\Tests\Stubs\User;
 // test runs sharing a single PHP process.
 if (! class_exists('App\\Models\\User')) {
     class_alias(User::class, 'App\\Models\\User');
+}
+
+/**
+ * Render-stub subclass, used only by the denial tests below -- they need Livewire to
+ * turn the guard's AuthorizationException into a 403 response, and the real index
+ * blade reaches for tables the minimal TestSchema does not ship. Only render() is
+ * replaced, so resendInvitation()/deleteInvitation() run their real guards.
+ */
+class InvitationsUserIndex extends UserIndex
+{
+    public function render()
+    {
+        return '<div></div>';
+    }
 }
 
 function ensureUserIndexRolesTable(): void
@@ -114,10 +129,11 @@ test('resendInvitation re-sends the notification and updates last_sent_at', func
     );
 });
 
-test('resendInvitation is a no-op when Gate denies create User', function () {
+test('resendInvitation 403s when the caller may not create users', function () {
     Notification::fake();
 
-    // Simulate a session where Gate::allows('create', User::class) returns false.
+    // Simulate a session where the create-User policy denies. The row action used to
+    // fail silently here; it now 403s like every other action in the codebase.
     auth()->logout();
 
     $invitation = UserInvitation::create([
@@ -128,7 +144,9 @@ test('resendInvitation is a no-op when Gate denies create User', function () {
 
     $originalStamp = $invitation->last_sent_at->toDateTimeString();
 
-    (new UserIndex)->resendInvitation($invitation->id);
+    Livewire::test(InvitationsUserIndex::class)
+        ->call('resendInvitation', $invitation->id)
+        ->assertForbidden();
 
     $invitation->refresh();
     expect($invitation->last_sent_at->toDateTimeString())->toBe($originalStamp);
@@ -150,8 +168,8 @@ test('deleteInvitation soft-deletes the row without hard-deleting', function () 
         ->and(UserInvitation::withTrashed()->find($invitation->id)->deleted_at)->not->toBeNull();
 });
 
-test('deleteInvitation is a no-op when Gate denies create User', function () {
-    // Simulate a session where Gate::allows('create', User::class) returns false.
+test('deleteInvitation 403s when the caller may not create users', function () {
+    // Simulate a session where the create-User policy denies. See the resend test.
     auth()->logout();
 
     $invitation = UserInvitation::create([
@@ -160,7 +178,9 @@ test('deleteInvitation is a no-op when Gate denies create User', function () {
         'last_sent_at' => now(),
     ]);
 
-    (new UserIndex)->deleteInvitation($invitation->id);
+    Livewire::test(InvitationsUserIndex::class)
+        ->call('deleteInvitation', $invitation->id)
+        ->assertForbidden();
 
     expect(UserInvitation::query()->find($invitation->id))->not->toBeNull();
 });

@@ -2,6 +2,7 @@
 
 namespace VentureDrake\LaravelCrm\Http\Livewire\Components;
 
+use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
 use Illuminate\Support\Facades\Storage;
 use Livewire\Component;
 use VentureDrake\LaravelCrm\Models\File;
@@ -10,6 +11,7 @@ use VentureDrake\LaravelCrm\Traits\NotifyToast;
 
 class LiveFile extends Component
 {
+    use AuthorizesRequests;
     use NotifyToast;
 
     private $settingService;
@@ -43,6 +45,8 @@ class LiveFile extends Component
 
     public function delete()
     {
+        $this->authorize('delete', $this->file);
+
         $this->file->delete();
 
         $this->emit('fileDeleted');

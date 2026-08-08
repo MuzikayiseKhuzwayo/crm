@@ -3,6 +3,7 @@
 namespace VentureDrake\LaravelCrm\Livewire\Users;
 
 use App\User;
+use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Notification;
 use Livewire\Component;
@@ -13,7 +14,7 @@ use VentureDrake\LaravelCrm\Notifications\UserInvitationNotification;
 
 class UserInvite extends Component
 {
-    use Toast;
+    use AuthorizesRequests, Toast;
 
     public $layout = 'full';
 
@@ -92,6 +93,8 @@ class UserInvite extends Component
 
     public function save()
     {
+        $this->authorize('create', User::class);
+
         $data = $this->validate();
 
         $invitation = DB::transaction(function () use ($data) {

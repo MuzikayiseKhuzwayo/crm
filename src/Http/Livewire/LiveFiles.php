@@ -2,6 +2,7 @@
 
 namespace VentureDrake\LaravelCrm\Http\Livewire;
 
+use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
 use Livewire\Component;
 use Livewire\WithFileUploads;
 use Ramsey\Uuid\Uuid;
@@ -11,6 +12,7 @@ use VentureDrake\LaravelCrm\Traits\NotifyToast;
 
 class LiveFiles extends Component
 {
+    use AuthorizesRequests;
     use NotifyToast;
     use WithFileUploads;
 
@@ -48,6 +50,8 @@ class LiveFiles extends Component
 
     public function upload()
     {
+        $this->authorize('create', File::class);
+
         $data = $this->validate([
             'file' => 'required',
         ]);

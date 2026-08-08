@@ -2,15 +2,17 @@
 
 namespace VentureDrake\LaravelCrm\Livewire\EmailCampaigns;
 
+use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
 use Livewire\Component;
 use Mary\Traits\Toast;
 use VentureDrake\LaravelCrm\Mail\EmailCampaignMessage;
+use VentureDrake\LaravelCrm\Models\EmailCampaign;
 use VentureDrake\LaravelCrm\Models\EmailTemplate;
 use VentureDrake\LaravelCrm\Services\EmailCampaignService;
 
 class EmailCampaignCreate extends Component
 {
-    use Toast;
+    use AuthorizesRequests, Toast;
 
     public ?string $name = null;
 
@@ -64,6 +66,8 @@ class EmailCampaignCreate extends Component
 
     public function save(EmailCampaignService $service)
     {
+        $this->authorize('create', EmailCampaign::class);
+
         $this->validate();
 
         $campaign = $service->create([

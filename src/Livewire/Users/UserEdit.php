@@ -2,6 +2,7 @@
 
 namespace VentureDrake\LaravelCrm\Livewire\Users;
 
+use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
 use Livewire\Component;
 use VentureDrake\LaravelCrm\Http\Rules\AssignableRole;
 use VentureDrake\LaravelCrm\Livewire\Users\Traits\HasUserCommon;
@@ -9,7 +10,7 @@ use VentureDrake\LaravelCrm\Models\Role;
 
 class UserEdit extends Component
 {
-    use HasUserCommon;
+    use AuthorizesRequests, HasUserCommon;
 
     public $user;
 
@@ -87,6 +88,8 @@ class UserEdit extends Component
 
     public function save()
     {
+        $this->authorize('update', $this->user);
+
         $this->validate();
 
         // Vet the role before any of the record is persisted -- otherwise a 403

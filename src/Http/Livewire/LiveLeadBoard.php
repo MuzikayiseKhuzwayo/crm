@@ -2,6 +2,7 @@
 
 namespace VentureDrake\LaravelCrm\Http\Livewire;
 
+use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
 use Illuminate\Support\Collection;
 use VentureDrake\LaravelCrm\Http\Livewire\KanbanBoard\KanbanBoard;
 use VentureDrake\LaravelCrm\Models\Lead;
@@ -9,6 +10,8 @@ use VentureDrake\LaravelCrm\Models\Pipeline;
 
 class LiveLeadBoard extends KanbanBoard
 {
+    use AuthorizesRequests;
+
     public $model = 'lead';
 
     public $leads;
@@ -25,8 +28,16 @@ class LiveLeadBoard extends KanbanBoard
 
     public function onStageSorted($orderedIds)
     {
+        // The id list arrives straight from the browser, so every record it names is
+        // authorized in its own right before it is touched. Mirrors LeadBoard.
         foreach ($orderedIds as $orderNumber => $leadId) {
-            Lead::find($leadId)->update([
+            if (! $record = Lead::find($leadId)) {
+                continue;
+            }
+
+            $this->authorize('update', $record);
+
+            $record->update([
                 'pipeline_stage_order' => $orderNumber + 1,
             ]);
         }
@@ -34,20 +45,28 @@ class LiveLeadBoard extends KanbanBoard
 
     public function onStageChanged($recordId, $stageId, $fromOrderedIds, $toOrderedIds)
     {
-        Lead::find($recordId)->update([
+        if (! $record = Lead::find($recordId)) {
+            return;
+        }
+
+        $this->authorize('update', $record);
+
+        $record->update([
             'pipeline_stage_id' => $stageId,
         ]);
 
-        foreach ($fromOrderedIds as $orderNumber => $leadId) {
-            Lead::find($leadId)->update([
-                'pipeline_stage_order' => $orderNumber + 1,
-            ]);
-        }
+        foreach ([$fromOrderedIds, $toOrderedIds] as $orderedIds) {
+            foreach ($orderedIds as $orderNumber => $leadId) {
+                if (! $reordered = Lead::find($leadId)) {
+                    continue;
+                }
 
-        foreach ($toOrderedIds as $orderNumber => $leadId) {
-            Lead::find($leadId)->update([
-                'pipeline_stage_order' => $orderNumber + 1,
-            ]);
+                $this->authorize('update', $reordered);
+
+                $reordered->update([
+                    'pipeline_stage_order' => $orderNumber + 1,
+                ]);
+            }
         }
     }
 

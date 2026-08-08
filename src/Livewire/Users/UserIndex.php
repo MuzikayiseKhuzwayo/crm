@@ -9,7 +9,6 @@ use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
 use Illuminate\Pagination\LengthAwarePaginator;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\Notification;
 use Illuminate\Support\Facades\Schema;
 use Livewire\Attributes\Url;
@@ -149,9 +148,7 @@ class UserIndex extends Component
 
     public function resendInvitation(int $id): void
     {
-        if (! Gate::allows('create', User::class)) {
-            return;
-        }
+        $this->authorize('create', User::class);
 
         $invitation = $this->pendingInvitationsQuery()->whereKey($id)->first();
 
@@ -169,9 +166,7 @@ class UserIndex extends Component
 
     public function deleteInvitation(int $id): void
     {
-        if (! Gate::allows('create', User::class)) {
-            return;
-        }
+        $this->authorize('create', User::class);
 
         $invitation = $this->pendingInvitationsQuery()->whereKey($id)->first();
 

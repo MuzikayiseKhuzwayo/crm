@@ -3,13 +3,14 @@
 namespace VentureDrake\LaravelCrm\Livewire\Users;
 
 use App\User;
+use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
 use Livewire\Component;
 use Mary\Traits\Toast;
-use VentureDrake\LaravelCrm\Models\Product;
+use VentureDrake\LaravelCrm\Support\TeamMembership;
 
 class UserShow extends Component
 {
-    use Toast;
+    use AuthorizesRequests, Toast;
 
     public User $user;
 
@@ -26,11 +27,29 @@ class UserShow extends Component
 
     public function delete($id)
     {
-        /* if ($product = Product::find($id)) {
-             $product->delete();
+        $user = User::find($id);
 
-             $this->success(ucfirst(trans('laravel-crm::lang.product_deleted')), redirectTo: route('laravel-crm.products.index'));
-         }*/
+        if (! $user) {
+            return;
+        }
+
+        $this->authorize('delete', $user);
+
+        // Self-deletion is a user error, not a permission failure -- see UserIndex::delete().
+        if ((int) $user->getKey() === (int) auth()->id()) {
+            $this->error(ucfirst(trans('laravel-crm::lang.user_cannot_delete_self')));
+
+            return;
+        }
+
+        abort_unless(TeamMembership::inCurrentTeam($user), 403);
+
+        $user->delete();
+
+        $this->success(
+            ucfirst(trans('laravel-crm::lang.user_deleted')),
+            redirectTo: route('laravel-crm.users.index')
+        );
     }
 
     public function render()

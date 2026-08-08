@@ -3,6 +3,7 @@
 namespace VentureDrake\LaravelCrm\Livewire\Users;
 
 use App\User;
+use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use Livewire\Component;
@@ -12,7 +13,7 @@ use VentureDrake\LaravelCrm\Models\Role;
 
 class UserCreate extends Component
 {
-    use HasUserCommon;
+    use AuthorizesRequests, HasUserCommon;
 
     public $layout = 'full';
 
@@ -37,6 +38,8 @@ class UserCreate extends Component
 
     public function save()
     {
+        $this->authorize('create', User::class);
+
         $this->validate();
 
         // Resolve and vet the role *before* the user row is written. The

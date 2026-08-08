@@ -10,6 +10,7 @@ use VentureDrake\LaravelCrm\Livewire\Users\UserCreate;
 use VentureDrake\LaravelCrm\Livewire\Users\UserEdit;
 use VentureDrake\LaravelCrm\Livewire\Users\UserIndex;
 use VentureDrake\LaravelCrm\Livewire\Users\UserInvite;
+use VentureDrake\LaravelCrm\Livewire\Users\UserShow;
 use VentureDrake\LaravelCrm\Models\Role;
 use VentureDrake\LaravelCrm\Models\Team;
 use VentureDrake\LaravelCrm\Models\UserInvitation;
@@ -71,6 +72,30 @@ class AuthzUserEdit extends UserEdit
     public function render()
     {
         return '<div></div>';
+    }
+}
+class AuthzUserShow extends UserShow
+{
+    /** Toast titles captured so tests can assert on the message, not the JS payload. */
+    public array $errorToasts = [];
+
+    public function render()
+    {
+        return '<div></div>';
+    }
+
+    public function error(
+        string $title,
+        ?string $description = null,
+        ?string $position = null,
+        string $icon = 'o-x-circle',
+        string $css = 'alert-error',
+        int $timeout = 3000,
+        ?string $redirectTo = null,
+        bool $noProgress = false,
+        ?string $progressClass = null,
+    ) {
+        $this->errorToasts[] = $title;
     }
 }
 
@@ -232,6 +257,70 @@ it('blocks self-deletion with an error toast rather than a 403', function () {
     expect(User::find($me->id))->not->toBeNull()
         ->and($component->get('errorToasts'))
         ->toBe([ucfirst(trans('laravel-crm::lang.user_cannot_delete_self'))]);
+});
+
+/*
+ * ---------------------------------------------------------------------------
+ * UserShow::delete -- the same delete, reached from the record page. Its body used
+ * to be a commented-out copy of ProductShow::delete, so the trash button opened a
+ * modal and then did nothing at all.
+ * ---------------------------------------------------------------------------
+ */
+
+it('forbids deleting a user from the show page without the delete permission', function () {
+    $this->actingAsUserWithPermissions(['view crm users']);
+
+    $target = us005MakeUser('show-target@example.test');
+
+    Livewire::test(AuthzUserShow::class, ['user' => $target])
+        ->call('delete', $target->id)
+        ->assertForbidden();
+
+    expect(User::find($target->id))->not->toBeNull();
+});
+
+it('403s when deleting a user outside the current team from the show page', function () {
+    $original = config('laravel-crm.teams');
+    config(['laravel-crm.teams' => true]);
+
+    $this->actingAsUserWithPermissions(
+        ['delete crm users'],
+        ['current_team_id' => 1, 'team_ids' => json_encode([1])]
+    );
+
+    $foreign = us005MakeUser('show-foreign@example.test', ['team_ids' => json_encode([2])]);
+
+    Livewire::test(AuthzUserShow::class, ['user' => $foreign])
+        ->call('delete', $foreign->id)
+        ->assertForbidden();
+
+    expect(User::find($foreign->id))->not->toBeNull();
+
+    config(['laravel-crm.teams' => $original]);
+});
+
+it('blocks self-deletion from the show page with an error toast rather than a 403', function () {
+    $me = $this->actingAsUserWithPermissions(['delete crm users']);
+
+    $component = Livewire::test(AuthzUserShow::class, ['user' => $me])
+        ->call('delete', $me->id)
+        ->assertOk();
+
+    expect(User::find($me->id))->not->toBeNull()
+        ->and($component->get('errorToasts'))
+        ->toBe([ucfirst(trans('laravel-crm::lang.user_cannot_delete_self'))]);
+});
+
+it('deletes a user from the show page with the delete permission', function () {
+    $this->actingAsUserWithPermissions(['delete crm users']);
+
+    $target = us005MakeUser('show-deletable@example.test');
+
+    Livewire::test(AuthzUserShow::class, ['user' => $target])
+        ->call('delete', $target->id)
+        ->assertOk();
+
+    expect(User::find($target->id))->toBeNull();
 });
 
 /*

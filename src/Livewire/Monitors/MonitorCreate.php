@@ -2,12 +2,14 @@
 
 namespace VentureDrake\LaravelCrm\Livewire\Monitors;
 
+use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
 use Livewire\Component;
 use VentureDrake\LaravelCrm\Livewire\Monitors\Traits\HasMonitorCommon;
+use VentureDrake\LaravelCrm\Models\Monitor;
 
 class MonitorCreate extends Component
 {
-    use HasMonitorCommon;
+    use AuthorizesRequests, HasMonitorCommon;
 
     public function mount(): void
     {
@@ -16,6 +18,8 @@ class MonitorCreate extends Component
 
     public function save()
     {
+        $this->authorize('create', Monitor::class);
+
         $validated = $this->validate();
 
         try {

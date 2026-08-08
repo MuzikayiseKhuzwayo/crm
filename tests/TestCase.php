@@ -5,6 +5,7 @@ namespace VentureDrake\LaravelCrm\Tests;
 use BladeUI\Heroicons\BladeHeroiconsServiceProvider;
 use BladeUI\Icons\BladeIconsServiceProvider;
 use Codeat3\BladeForkAwesome\BladeForkAwesomeServiceProvider;
+use Flasher\Laravel\FlasherServiceProvider;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Schema;
@@ -63,6 +64,9 @@ abstract class TestCase extends OrchestraTestCase
             BladeForkAwesomeServiceProvider::class,
             MaryServiceProvider::class,
             SanctumServiceProvider::class,
+            // Auto-discovered in host apps. Without it the global flash() helper used by
+            // the legacy src/Http/Livewire components throws FlasherContainer errors.
+            FlasherServiceProvider::class,
             LaravelCrmServiceProvider::class,
         ];
     }

@@ -2,12 +2,15 @@
 
 namespace VentureDrake\LaravelCrm\Http\Livewire;
 
+use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
 use Livewire\Component;
 use Ramsey\Uuid\Uuid;
 use VentureDrake\LaravelCrm\Models\Organization;
 
 class LiveRelatedContactOrganization extends Component
 {
+    use AuthorizesRequests;
+
     public $model;
 
     public $contacts;
@@ -30,6 +33,8 @@ class LiveRelatedContactOrganization extends Component
 
     public function link()
     {
+        $this->authorize('update', $this->model);
+
         $data = $this->validate([
             'organization_name' => 'required',
         ]);
@@ -37,6 +42,8 @@ class LiveRelatedContactOrganization extends Component
         if ($this->organization_id) {
             $organization = Organization::find($this->organization_id);
         } else {
+            $this->authorize('create', Organization::class);
+
             $organization = Organization::create([
                 'external_id' => Uuid::uuid4()->toString(),
                 'name' => $data['organization_name'],
@@ -64,6 +71,8 @@ class LiveRelatedContactOrganization extends Component
     public function remove($id)
     {
         if ($organization = Organization::find($id)) {
+            $this->authorize('update', $this->model);
+
             $this->model->contacts()
                 ->where([
                     'entityable_type' => $organization->getMorphClass(),
