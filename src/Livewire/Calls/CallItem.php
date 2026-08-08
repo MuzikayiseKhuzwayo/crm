@@ -34,43 +34,42 @@ class CallItem extends Component
 
     public ?int $user_assigned_id = null;
 
-    private array $revert = [];
-
     public function mount(Call $call, bool $related = false): void
     {
         $this->call = $call;
         $this->related = $related;
-        $this->name = $call->name ?? '';
-        $this->description = $call->description;
-        $this->start_at = $call->start_at?->format('Y-m-d\TH:i');
-        $this->finish_at = $call->finish_at?->format('Y-m-d\TH:i');
-        $this->location = $call->location;
-        $this->user_owner_id = $call->user_owner_id;
-        $this->user_assigned_id = $call->user_assigned_id;
-        $this->guests = $call->contacts->pluck('entityable_id')->toArray();
+
+        $this->hydrateFromRecord();
+    }
+
+    /**
+     * Fill the form fields from the stored record.
+     *
+     * Cancelling restores from the record rather than from a snapshot taken in edit():
+     * edit() and cancel() are separate requests, so a snapshot would have to survive the
+     * round trip on a public property. Reading the record back is both cheaper and
+     * correct when someone else has edited it in the meantime.
+     */
+    private function hydrateFromRecord(): void
+    {
+        $this->name = $this->call->name ?? '';
+        $this->description = $this->call->description;
+        $this->start_at = $this->call->start_at?->format('Y-m-d\TH:i');
+        $this->finish_at = $this->call->finish_at?->format('Y-m-d\TH:i');
+        $this->location = $this->call->location;
+        $this->user_owner_id = $this->call->user_owner_id;
+        $this->user_assigned_id = $this->call->user_assigned_id;
+        $this->guests = $this->call->contacts()->pluck('entityable_id')->toArray();
     }
 
     public function edit(): void
     {
-        $this->revert = [
-            'name' => $this->name,
-            'description' => $this->description,
-            'start_at' => $this->start_at,
-            'finish_at' => $this->finish_at,
-            'location' => $this->location,
-            'user_owner_id' => $this->user_owner_id,
-            'user_assigned_id' => $this->user_assigned_id,
-            'guests' => $this->guests,
-        ];
-
         $this->editing = true;
     }
 
     public function cancel(): void
     {
-        foreach ($this->revert as $key => $value) {
-            $this->$key = $value;
-        }
+        $this->hydrateFromRecord();
         $this->editing = false;
     }
 

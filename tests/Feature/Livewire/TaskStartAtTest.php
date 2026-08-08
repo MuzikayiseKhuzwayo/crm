@@ -147,29 +147,19 @@ test('the inline card editor preserves both timestamps when only the name change
     expect($task->due_at->toDateTimeString())->toBe('2026-08-09 17:00:00');
 });
 
-/*
- * Driven in-process rather than through Livewire::test because $revert is a private
- * property: Livewire does not dehydrate it, so it is always empty by the time cancel()
- * runs on a later request. That is a pre-existing limitation shared by CallItem and
- * MeetingItem. This asserts the part this change owns -- that edit() captures start_at
- * into the revert map and cancel() puts it back.
- */
 test('cancelling the inline card editor restores the start date', function () {
     $task = Task::create([
         'name' => 'Original name',
         'start_at' => '2026-08-08 09:00:00',
     ]);
 
-    $component = new StartAtTaskItem;
-    $component->mount($task);
+    Livewire::test(StartAtTaskItem::class, ['task' => $task])
+        ->assertSet('start_at', '2026-08-08T09:00')
+        ->call('edit')
+        ->set('start_at', '2026-12-25T09:00')
+        ->call('cancel')
+        ->assertSet('start_at', '2026-08-08T09:00');
 
-    expect($component->start_at)->toBe('2026-08-08T09:00');
-
-    $component->edit();
-    $component->start_at = '2026-12-25T09:00';
-    $component->cancel();
-
-    expect($component->start_at)->toBe('2026-08-08T09:00');
     expect($task->fresh()->start_at->toDateTimeString())->toBe('2026-08-08 09:00:00');
 });
 

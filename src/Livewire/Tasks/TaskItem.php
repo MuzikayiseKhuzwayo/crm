@@ -31,41 +31,42 @@ class TaskItem extends Component
 
     public ?int $user_assigned_id = null;
 
-    private array $revert = [];
-
     public function mount(Task $task, bool $related = false): void
     {
         $this->task = $task;
         $this->related = $related;
-        $this->name = $task->name ?? '';
-        $this->description = $task->description;
+
+        $this->hydrateFromRecord();
+    }
+
+    /**
+     * Fill the form fields from the stored record.
+     *
+     * Cancelling restores from the record rather than from a snapshot taken in edit():
+     * edit() and cancel() are separate requests, so a snapshot would have to survive the
+     * round trip on a public property. Reading the record back is both cheaper and
+     * correct when someone else has edited it in the meantime.
+     */
+    private function hydrateFromRecord(): void
+    {
+        $this->name = $this->task->name ?? '';
+        $this->description = $this->task->description;
         // Both are bound to datetime-local inputs, which only accept Y-m-d\TH:i.
-        $this->start_at = $task->start_at?->format('Y-m-d\TH:i');
-        $this->due_at = $task->due_at?->format('Y-m-d\TH:i');
-        $this->completed_at = $task->completed_at?->toDateTimeString();
-        $this->user_owner_id = $task->user_owner_id;
-        $this->user_assigned_id = $task->user_assigned_id;
+        $this->start_at = $this->task->start_at?->format('Y-m-d\TH:i');
+        $this->due_at = $this->task->due_at?->format('Y-m-d\TH:i');
+        $this->completed_at = $this->task->completed_at?->toDateTimeString();
+        $this->user_owner_id = $this->task->user_owner_id;
+        $this->user_assigned_id = $this->task->user_assigned_id;
     }
 
     public function edit(): void
     {
-        $this->revert = [
-            'name' => $this->name,
-            'description' => $this->description,
-            'start_at' => $this->start_at,
-            'due_at' => $this->due_at,
-            'user_owner_id' => $this->user_owner_id,
-            'user_assigned_id' => $this->user_assigned_id,
-        ];
-
         $this->editing = true;
     }
 
     public function cancel(): void
     {
-        foreach ($this->revert as $key => $value) {
-            $this->$key = $value;
-        }
+        $this->hydrateFromRecord();
         $this->editing = false;
     }
 

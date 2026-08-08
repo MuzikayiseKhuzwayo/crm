@@ -21,30 +21,36 @@ class NoteItem extends Component
 
     public ?string $noted_at = null;
 
-    private array $revert = [];
-
     public function mount(Note $note, bool $related = false): void
     {
         $this->note = $note;
         $this->related = $related;
-        $this->content = $note->content ?? '';
-        $this->noted_at = $note->noted_at?->toDateTimeString();
+
+        $this->hydrateFromRecord();
+    }
+
+    /**
+     * Fill the form fields from the stored record.
+     *
+     * Cancelling restores from the record rather than from a snapshot taken in edit():
+     * edit() and cancel() are separate requests, so a snapshot would have to survive the
+     * round trip on a public property. Reading the record back is both cheaper and
+     * correct when someone else has edited it in the meantime.
+     */
+    private function hydrateFromRecord(): void
+    {
+        $this->content = $this->note->content ?? '';
+        $this->noted_at = $this->note->noted_at?->toDateTimeString();
     }
 
     public function edit(): void
     {
-        $this->revert = [
-            'content' => $this->content,
-            'noted_at' => $this->noted_at,
-        ];
-
         $this->editing = true;
     }
 
     public function cancel(): void
     {
-        $this->content = $this->revert['content'];
-        $this->noted_at = $this->revert['noted_at'];
+        $this->hydrateFromRecord();
         $this->editing = false;
     }
 
