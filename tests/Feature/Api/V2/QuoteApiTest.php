@@ -89,7 +89,7 @@ test('POST /quotes creates a quote with nested line items', function () {
     expect($payload['organization']['id'])->toBe($organization->external_id);
     expect($payload['line_items'])->toHaveCount(2);
     expect($payload['line_items'][0]['product_id'])->toBe($productA->external_id);
-    expect($payload['line_items'][0]['quantity'])->toBe(2);
+    expect($payload['line_items'][0]['quantity'])->toEqual(2.0);
     expect($payload['line_items'][0]['unit_price'])->toEqual(50.00);
     expect($payload['line_items'][0]['amount'])->toEqual(100.00);
 
@@ -217,11 +217,11 @@ test('PUT /quotes/{quote} updates line items in place', function () {
     expect($response->json('data.title'))->toBe('Updated');
     expect($response->json('data.line_items'))->toHaveCount(1);
     expect($response->json('data.line_items.0.id'))->toBe($lineItemId);
-    expect($response->json('data.line_items.0.quantity'))->toBe(4);
+    expect($response->json('data.line_items.0.quantity'))->toEqual(4.0);
 
     // QuoteProduct row was updated, not duplicated.
     $stored = QuoteProduct::where('external_id', $lineItemId)->first();
-    expect((int) $stored->quantity)->toBe(4);
+    expect($stored->quantity)->toBe(4.0);
     expect((int) $stored->amount)->toBe(4000);
 });
 
@@ -244,4 +244,65 @@ test('DELETE /quotes/{quote} returns 403 when policy denies delete', function ()
     $this->withHeaders(quoteApiHeaders($user))
         ->deleteJson('/crm/api/v2/quotes/'.$quote->external_id)
         ->assertStatus(403);
+});
+
+/*
+ * Decimal quantities. quantity is decimal(15,3) so a product can be sold by
+ * weight; the API widened from `integer|min:1` to `numeric|min:0.001` and its
+ * response type changed from int to number.
+ */
+
+test('POST /quotes accepts a fractional line item quantity', function () {
+    $user = quoteApiUser();
+    $product = createApiProduct('By weight');
+
+    $response = $this->withHeaders(quoteApiHeaders($user))
+        ->postJson('/crm/api/v2/quotes', [
+            'title' => 'Sold by weight',
+            'currency' => 'USD',
+            'line_items' => [
+                ['product_id' => $product->external_id, 'quantity' => 3.5, 'unit_price' => 1.99, 'amount' => 6.97],
+            ],
+        ]);
+
+    $response->assertStatus(201);
+
+    expect($response->json('data.line_items.0.quantity'))->toBe(3.5);
+
+    $stored = Quote::where('external_id', $response->json('data.id'))->first();
+    expect($stored->quoteProducts->first()->quantity)->toBe(3.5);
+});
+
+test('POST /quotes returns 422 for a quantity finer than 3 decimal places', function () {
+    $user = quoteApiUser();
+    $product = createApiProduct('By weight');
+
+    $this->withHeaders(quoteApiHeaders($user))
+        ->postJson('/crm/api/v2/quotes', [
+            'title' => 'Too precise',
+            'currency' => 'USD',
+            'line_items' => [
+                ['product_id' => $product->external_id, 'quantity' => 3.5555, 'unit_price' => 1.99, 'amount' => 7.09],
+            ],
+        ])
+        ->assertStatus(422)
+        ->assertJsonValidationErrors(['line_items.0.quantity']);
+});
+
+test('POST /quotes returns 422 for a zero quantity', function () {
+    $user = quoteApiUser();
+    $product = createApiProduct('By weight');
+
+    // min:0.001 rather than gt:0 - 0.0001 would round to 0 on store and the
+    // services' isPositive() guards would silently discard the line.
+    $this->withHeaders(quoteApiHeaders($user))
+        ->postJson('/crm/api/v2/quotes', [
+            'title' => 'Nothing',
+            'currency' => 'USD',
+            'line_items' => [
+                ['product_id' => $product->external_id, 'quantity' => 0, 'unit_price' => 1.99, 'amount' => 0],
+            ],
+        ])
+        ->assertStatus(422)
+        ->assertJsonValidationErrors(['line_items.0.quantity']);
 });

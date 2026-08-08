@@ -60,6 +60,7 @@ class DeliveryEdit extends Component
         $this->authorize('update', $this->delivery);
 
         // $this->validate();
+        $this->validateLineItemQuantities();
 
         // Create a request object to pass to services
         $request = \VentureDrake\LaravelCrm\Http\Helpers\PublicProperties\asRequest($this);

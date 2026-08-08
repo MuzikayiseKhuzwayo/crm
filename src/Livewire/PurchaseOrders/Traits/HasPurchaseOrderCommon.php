@@ -3,6 +3,7 @@
 namespace VentureDrake\LaravelCrm\Livewire\PurchaseOrders\Traits;
 
 use Mary\Traits\Toast;
+use VentureDrake\LaravelCrm\Livewire\Traits\HasLineItemQuantityRules;
 use VentureDrake\LaravelCrm\Livewire\Traits\HasPdfTemplate;
 use VentureDrake\LaravelCrm\Models\Pipeline;
 use VentureDrake\LaravelCrm\Models\PurchaseOrder;
@@ -14,6 +15,7 @@ use VentureDrake\LaravelCrm\Traits\HasCustomFormFields;
 trait HasPurchaseOrderCommon
 {
     use HasCustomFormFields;
+    use HasLineItemQuantityRules;
     use HasPdfTemplate;
     use Toast;
 
@@ -89,7 +91,7 @@ trait HasPurchaseOrderCommon
             'person_id' => 'required_without_all:organization_name,organization_id,person_name|max:255',
             'organization_name' => 'required_without_all:person_name,person_id|max:255',
             'organization_id' => 'required_without_all:person_name,person_id,organization_name|max:255',
-        ], $this->pdfTemplateRules(), $this->customFieldRules());
+        ], $this->lineItemQuantityRules(), $this->pdfTemplateRules(), $this->customFieldRules());
     }
 
     protected function messages()
@@ -99,7 +101,7 @@ trait HasPurchaseOrderCommon
             'organization_name.required_without_all' => 'The organization field is required if no contact person.',
             'person_id.required_without_all' => 'The contact person field is required if no organization.',
             'organization_id.required_without_all' => 'The organization field is required of no contact person.',
-        ], $this->customFieldMessages());
+        ], $this->lineItemQuantityMessages(), $this->customFieldMessages());
     }
 
     protected function validationAttributes()

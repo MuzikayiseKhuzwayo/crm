@@ -43,11 +43,18 @@
                                         @endif
                                     @endif
 
-                                    @if(in_array($from, ['Order']) && $creating != 'PurchaseOrder')
-                                        <x-mary-select wire:model.live="products.{{ $index }}.quantity" label="{{ ucfirst(__('laravel-crm::lang.quantity')) }}" :options="$products[$index]['quantities']" />
-                                    @else
-                                        <x-mary-input wire:model.live.debounce.500ms="products.{{ $index }}.quantity" label="{{ ucfirst(__('laravel-crm::lang.quantity')) }}" type="number" />
-                                    @endif
+                                    {{-- The cap is bound rather than wrapped in an @if inside the tag:
+                                         component tags compile before directives, so an @if between the
+                                         attributes stops the tag matching and it renders as literal text.
+                                         A null :max is dropped from the attribute bag and a null :hint
+                                         reads as "not passed". --}}
+                                    @php($quantityMax = $product['quantity_max'] ?? null)
+                                    @php($quantityMaxLabel = $quantityMax !== null ? \VentureDrake\LaravelCrm\Support\Quantity::format($quantityMax) : null)
+                                    <x-mary-input wire:model.live.debounce.500ms="products.{{ $index }}.quantity"
+                                                  label="{{ ucfirst(__('laravel-crm::lang.quantity')) }}"
+                                                  type="number" step="0.001" min="0" inputmode="decimal"
+                                                  :max="$quantityMaxLabel"
+                                                  :hint="$quantityMaxLabel !== null ? ucfirst(__('laravel-crm::lang.remaining')).': '.$quantityMaxLabel : null" />
 
                                     @if($creating != 'Delivery')    
                                         <x-mary-input wire:model.blur="products.{{ $index }}.tax_amount" label="{{ ucfirst(__('laravel-crm::lang.tax')) }}" prefix="$" x-mask:dynamic="$money($input)" x-on:keyup="$el.dispatchEvent(new Event('input'))" readonly />

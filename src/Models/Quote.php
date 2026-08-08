@@ -5,6 +5,7 @@ namespace VentureDrake\LaravelCrm\Models;
 use App\User;
 use Illuminate\Database\Eloquent\SoftDeletes;
 use VentureDrake\LaravelCrm\Support\Money;
+use VentureDrake\LaravelCrm\Support\Quantity;
 use VentureDrake\LaravelCrm\Traits\BelongsToTeams;
 use VentureDrake\LaravelCrm\Traits\HasCrmActivities;
 use VentureDrake\LaravelCrm\Traits\HasCrmFields;
@@ -178,15 +179,18 @@ class Quote extends Model
     public function orderComplete()
     {
         foreach ($this->quoteProducts as $quoteProduct) {
-            $quantity = $quoteProduct->quantity;
+            $quantity = Quantity::toFloat($quoteProduct->quantity);
 
             foreach ($this->orders as $order) {
                 if ($orderProduct = $order->orderProducts()->where('quote_product_id', $quoteProduct->id)->first()) {
-                    $quantity -= $orderProduct->quantity;
+                    $quantity -= Quantity::toFloat($orderProduct->quantity);
                 }
             }
 
-            if ($quantity > 0) {
+            // Not `> 0`: subtracting decimal quantities leaves binary float
+            // dust (1.1 less 0.7 less 0.4 is 1.11e-16), which would leave the
+            // quote showing as not fully ordered forever.
+            if (Quantity::isPositive($quantity)) {
                 return false;
             }
         }

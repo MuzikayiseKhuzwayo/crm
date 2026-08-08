@@ -8,6 +8,53 @@ do what, and the failure mode is a `403` for a user who could previously click t
 
 ## Upgrading
 
+### Line item quantities become decimal — six `ALTER TABLE`s
+
+Line item `quantity` widens from `integer` to `decimal(15,3)` so a product can be sold by
+weight or volume (3.5 Kg, 0.25 L). `php artisan laravelcrm:update` publishes and runs
+`change_quantity_to_decimal_on_laravel_crm_tables`, which alters six tables:
+
+| Table |
+| --- |
+| `crm_quote_products` |
+| `crm_order_products` |
+| `crm_deal_products` |
+| `crm_invoice_lines` |
+| `crm_purchase_order_lines` |
+| `crm_delivery_products` |
+
+**No data is lost.** `decimal(15,3)` strictly contains the old `INT` range
+(2,147,483,647), so every existing row widens exactly. NULL quantities stay NULL. Nothing
+needs backfilling.
+
+**Plan for a brief write lock.** On MySQL each `ALTER` rewrites the table. On a small CRM
+that is a fraction of a second; on a large install with millions of invoice lines, budget
+for it or run the migration in a maintenance window. Postgres is likewise a table rewrite.
+
+**Rolling back truncates.** `down()` puts the column back to `integer`, which discards the
+decimal part of any quantity entered since. There is no lossless inverse — if you need to
+roll back after users have entered fractional quantities, export those rows first.
+
+**Verify afterwards.** `laravelcrm:update` swallows migration failures and still prints
+success, so confirm the change landed rather than trusting the output:
+
+```sql
+SHOW COLUMNS FROM crm_quote_products LIKE 'quantity';   -- decimal(15,3), Null: YES
+```
+
+Two behaviour changes ride along with it:
+
+- **The Order → Invoice and Order → Delivery quantity dropdown is now a number input.** A
+  dropdown cannot express 3.5. The cap on the outstanding quantity is unchanged but has
+  moved server-side — previously it existed only in the browser, so an over-invoice was
+  reachable by anyone posting the form directly. On submit the remainder is recomputed
+  from the order line and the invoices or deliveries already raised against it, so a
+  request is checked against the database rather than against anything it sent.
+- **The API `quantity` field is now a JSON number rather than an integer.** See
+  [docs/api.md](api.md#quantity-accepts-decimals-up-to-3-places).
+
+---
+
 ### Authorization is now enforced on every mutating action
 
 This release closes a long-standing gap: the UI has always advertised permissions via Blade

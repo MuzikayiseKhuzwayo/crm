@@ -195,9 +195,9 @@ The `line_items` array is accepted on `POST` and `PUT`. Each item has the follow
 {
   "id": "8f1a...optional-uuid-for-existing-line",
   "product_id": "44d4...product-uuid",
-  "quantity": 2,
+  "quantity": 3.5,
   "unit_price": 100.00,
-  "amount": 200.00,
+  "amount": 350.00,
   "comments": "Optional notes"
 }
 ```
@@ -206,6 +206,20 @@ The `line_items` array is accepted on `POST` and `PUT`. Each item has the follow
 - **Update in place:** include the existing line's `id` (UUID). The line is updated.
 - **Replace lines:** omit `id` on every line in a `PUT`. Existing lines not matched in the
   payload are deleted.
+
+#### `quantity` accepts decimals (up to 3 places)
+
+`quantity` is stored as `decimal(15,3)`, so a product sold by weight or volume can be
+invoiced as `3.5` Kg or `0.25` L. The rule is `numeric`, `min:0.001`, `max:999999999`,
+at most 3 decimal places — a value finer than that is a `422`, not a silent rounding.
+
+`min:0.001` rather than `gt:0`: a quantity like `0.0001` would round to `0` on store and
+the line would then be discarded without an error.
+
+> **Breaking (response type).** `quantity` was previously cast to an integer in every
+> response; it is now a JSON number and may come back fractional. Clients that decode it
+> into an `int` field will truncate or fail. This is a widening on the request side —
+> every payload that was valid before is still valid.
 
 ---
 

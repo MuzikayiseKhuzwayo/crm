@@ -64,3 +64,37 @@ test('line amount returns false when quantity is null', function () {
 
     expect(lineAmount($item))->toBeFalse();
 });
+
+/*
+ * Decimal quantities. Price is integer cents, so a fractional line computes a
+ * half-cent remainder that an exact == would flag as a mismatch on every
+ * show page and index.
+ */
+
+test('line amount accepts a fractional quantity within half a cent', function () {
+    // $9.99 x 3.5 is 3496.5 cents; the stored amount rounds to 3497.
+    $item = new stdClass;
+    $item->price = 999;
+    $item->quantity = 3.5;
+    $item->amount = 3497;
+
+    expect(lineAmount($item))->toBeTrue();
+});
+
+test('line amount still rejects a fractional quantity priced wrong', function () {
+    $item = new stdClass;
+    $item->price = 1000;
+    $item->quantity = 3.5;
+    $item->amount = 3000;
+
+    expect(lineAmount($item))->toBeFalse();
+});
+
+test('line amount reads the string shape a decimal column returns', function () {
+    $item = new stdClass;
+    $item->price = 1000;
+    $item->quantity = '3.500';
+    $item->amount = 3500;
+
+    expect(lineAmount($item))->toBeTrue();
+});

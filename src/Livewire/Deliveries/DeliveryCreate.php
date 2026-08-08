@@ -51,6 +51,7 @@ class DeliveryCreate extends Component
         $this->authorize('create', Delivery::class);
 
         // $this->validate();
+        $this->validateLineItemQuantities();
 
         // Create a request object to pass to services
         $request = \VentureDrake\LaravelCrm\Http\Helpers\PublicProperties\asRequest($this);

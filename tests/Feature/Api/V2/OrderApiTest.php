@@ -70,7 +70,7 @@ test('POST /orders creates an order with nested line items', function () {
     expect($payload['total'])->toEqual(220.00);
     expect($payload['line_items'])->toHaveCount(1);
     expect($payload['line_items'][0]['product_id'])->toBe($product->external_id);
-    expect($payload['line_items'][0]['quantity'])->toBe(4);
+    expect($payload['line_items'][0]['quantity'])->toEqual(4.0);
     expect($payload['line_items'][0]['unit_price'])->toEqual(50.00);
     expect($payload['line_items'][0]['amount'])->toEqual(200.00);
 
@@ -196,4 +196,58 @@ test('DELETE /orders/{order} soft-deletes the order', function () {
 
     expect(Order::query()->where('external_id', $order->external_id)->exists())->toBeFalse();
     expect(Order::withTrashed()->where('external_id', $order->external_id)->exists())->toBeTrue();
+});
+
+/*
+ * Decimal quantities - see the matching block in QuoteApiTest.
+ */
+
+test('POST /orders accepts a fractional line item quantity', function () {
+    $user = orderApiUser();
+    $product = createOrderApiProduct('By weight');
+
+    $response = $this->withHeaders(orderApiHeaders($user))
+        ->postJson('/crm/api/v2/orders', [
+            'currency' => 'USD',
+            'line_items' => [
+                ['product_id' => $product->external_id, 'quantity' => 3.5, 'unit_price' => 1.99, 'amount' => 6.97],
+            ],
+        ]);
+
+    $response->assertStatus(201);
+
+    expect($response->json('data.line_items.0.quantity'))->toBe(3.5);
+
+    $stored = Order::where('external_id', $response->json('data.id'))->first();
+    expect($stored->orderProducts->first()->quantity)->toBe(3.5);
+});
+
+test('POST /orders returns 422 for a quantity finer than 3 decimal places', function () {
+    $user = orderApiUser();
+    $product = createOrderApiProduct('By weight');
+
+    $this->withHeaders(orderApiHeaders($user))
+        ->postJson('/crm/api/v2/orders', [
+            'currency' => 'USD',
+            'line_items' => [
+                ['product_id' => $product->external_id, 'quantity' => 3.5555, 'unit_price' => 1.99, 'amount' => 7.09],
+            ],
+        ])
+        ->assertStatus(422)
+        ->assertJsonValidationErrors(['line_items.0.quantity']);
+});
+
+test('POST /orders returns 422 for a zero quantity', function () {
+    $user = orderApiUser();
+    $product = createOrderApiProduct('By weight');
+
+    $this->withHeaders(orderApiHeaders($user))
+        ->postJson('/crm/api/v2/orders', [
+            'currency' => 'USD',
+            'line_items' => [
+                ['product_id' => $product->external_id, 'quantity' => 0, 'unit_price' => 1.99, 'amount' => 0],
+            ],
+        ])
+        ->assertStatus(422)
+        ->assertJsonValidationErrors(['line_items.0.quantity']);
 });

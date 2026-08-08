@@ -12,6 +12,8 @@
 
 use Livewire\Livewire;
 use VentureDrake\LaravelCrm\Livewire\ModelProducts;
+use VentureDrake\LaravelCrm\Models\Invoice;
+use VentureDrake\LaravelCrm\Models\Order;
 use VentureDrake\LaravelCrm\Models\Product;
 use VentureDrake\LaravelCrm\Models\Quote;
 
@@ -97,4 +99,112 @@ test('it retotals when a line is removed', function () {
     $component->assertSet('sub_total', 14000.0)
         ->assertSet('tax', 1400.0)
         ->assertSet('total', 15400.0);
+});
+
+/*
+ * Decimal quantities. Quantity is decimal(15,3) so a product can be sold by
+ * weight, and the Order-to-Invoice / Order-to-Delivery forms have swapped
+ * their bounded `<select>` for a free number input capped server-side.
+ */
+
+test('it prices a fractional quantity in full', function () {
+    $this->actingAsUser();
+
+    // The old (int) cast truncated 3.5 to 3, silently under-charging by a
+    // whole unit while the header still agreed with the lines.
+    $component = Livewire::test(ModelProducts::class, ['model' => quoteWithLines()]);
+
+    $component->set('products.1.quantity', 3.5);
+
+    // Line 1 is 3500.00 a unit, so 3.5 of it is 12250.00 - the (int) cast
+    // priced it at 10500.00 and lost a whole unit.
+    expect($component->get('products.1.amount'))->toBe(12250.0);
+    $component->assertSet('sub_total', 25750.0);
+});
+
+test('it rounds a typed quantity to 3 decimal places', function () {
+    $this->actingAsUser();
+
+    $component = Livewire::test(ModelProducts::class, ['model' => quoteWithLines()]);
+
+    $component->set('products.1.quantity', 3.5555);
+
+    expect($component->get('products.1.quantity'))->toBe(3.556);
+});
+
+test('it no longer builds a quantity dropdown', function () {
+    $this->actingAsUser();
+
+    $component = Livewire::test(ModelProducts::class, ['model' => quoteWithLines()]);
+
+    expect($component->get('products.0'))->not->toHaveKey('quantities');
+});
+
+function orderPartlyInvoiced(): Order
+{
+    $product = Product::create(['name' => 'By weight']);
+
+    $order = Order::create(['currency' => 'USD']);
+    $orderProduct = $order->orderProducts()->create([
+        'product_id' => $product->id, 'quantity' => 3.5, 'price' => 1000,
+        'tax_rate' => 10, 'tax_amount' => 350000, 'amount' => 35000,
+    ]);
+
+    $invoice = Invoice::create(['order_id' => $order->id, 'currency' => 'USD']);
+    $invoice->invoiceLines()->create([
+        'product_id' => $product->id, 'order_product_id' => $orderProduct->id,
+        'quantity' => 1, 'price' => 1000, 'amount' => 10000,
+    ]);
+
+    return $order->fresh();
+}
+
+test('invoicing from an order seeds the quantity with what is left outstanding', function () {
+    $this->actingAsUser();
+
+    $component = Livewire::test(ModelProducts::class, [
+        'model' => orderPartlyInvoiced(), 'creating' => 'Invoice', 'from' => 'Order',
+    ]);
+
+    expect($component->get('products.0.quantity'))->toBe(2.5)
+        ->and($component->get('products.0.quantity_max'))->toBe(2.5);
+});
+
+test('it clamps a quantity typed above what is outstanding', function () {
+    $this->actingAsUser();
+
+    // The `<select>` this replaced was the only guard against over-invoicing,
+    // and it only ever existed in the browser.
+    $component = Livewire::test(ModelProducts::class, [
+        'model' => orderPartlyInvoiced(), 'creating' => 'Invoice', 'from' => 'Order',
+    ]);
+
+    $component->set('products.0.quantity', 4);
+
+    expect($component->get('products.0.quantity'))->toBe(2.5);
+    $component->assertHasErrors('products.0.quantity');
+});
+
+test('it leaves a quantity within what is outstanding alone', function () {
+    $this->actingAsUser();
+
+    $component = Livewire::test(ModelProducts::class, [
+        'model' => orderPartlyInvoiced(), 'creating' => 'Invoice', 'from' => 'Order',
+    ]);
+
+    $component->set('products.0.quantity', 1.25);
+
+    expect($component->get('products.0.quantity'))->toBe(1.25);
+    $component->assertHasNoErrors('products.0.quantity');
+});
+
+test('a plain quote line has no cap and is not clamped', function () {
+    $this->actingAsUser();
+
+    $component = Livewire::test(ModelProducts::class, ['model' => quoteWithLines()]);
+
+    $component->set('products.0.quantity', 99.5);
+
+    expect($component->get('products.0.quantity'))->toBe(99.5);
+    $component->assertHasNoErrors('products.0.quantity');
 });

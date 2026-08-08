@@ -14,7 +14,7 @@ class AddQuantityToLaravelCrmDeliveryProductsTable extends Migration
     public function up()
     {
         Schema::table(config('laravel-crm.db_table_prefix').'delivery_products', function (Blueprint $table) {
-            $table->integer('quantity')->nullable()->after('order_product_id');
+            $table->decimal('quantity', 15, 3)->nullable()->after('order_product_id');
         });
     }
 

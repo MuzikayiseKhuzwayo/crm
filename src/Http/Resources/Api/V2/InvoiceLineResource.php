@@ -13,7 +13,7 @@ class InvoiceLineResource extends JsonResource
             'id' => $this->external_id,
             'product_id' => $this->whenLoaded('product', fn () => $this->product?->external_id),
             'product' => $this->whenLoaded('product', fn () => $this->product ? new ProductBriefResource($this->product) : null),
-            'quantity' => $this->quantity !== null ? (int) $this->quantity : null,
+            'quantity' => $this->quantity !== null ? (float) $this->quantity : null,
             'unit_price' => $this->price !== null ? $this->price / 100 : null,
             'amount' => $this->amount !== null ? $this->amount / 100 : null,
             'tax_rate' => $this->tax_rate !== null ? (float) $this->tax_rate : null,

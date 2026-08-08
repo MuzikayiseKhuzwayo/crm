@@ -5,6 +5,7 @@ namespace VentureDrake\LaravelCrm\Models;
 use App\User;
 use Illuminate\Database\Eloquent\SoftDeletes;
 use VentureDrake\LaravelCrm\Support\Money;
+use VentureDrake\LaravelCrm\Support\Quantity;
 use VentureDrake\LaravelCrm\Traits\BelongsToTeams;
 use VentureDrake\LaravelCrm\Traits\HasCrmActivities;
 use VentureDrake\LaravelCrm\Traits\HasCrmFields;
@@ -202,15 +203,18 @@ class Order extends Model
     public function invoiceComplete()
     {
         foreach ($this->orderProducts as $orderProduct) {
-            $quantity = $orderProduct->quantity;
+            $quantity = Quantity::toFloat($orderProduct->quantity);
 
             foreach ($this->invoices as $invoice) {
                 if ($invoiceLine = $invoice->invoiceLines()->where('order_product_id', $orderProduct->id)->first()) {
-                    $quantity -= $invoiceLine->quantity;
+                    $quantity -= Quantity::toFloat($invoiceLine->quantity);
                 }
             }
 
-            if ($quantity > 0) {
+            // Not `> 0`: subtracting decimal quantities leaves binary float
+            // dust (1.1 less 0.7 less 0.4 is 1.11e-16), which would leave the
+            // order showing as not fully invoiced forever.
+            if (Quantity::isPositive($quantity)) {
                 return false;
             }
         }
@@ -221,15 +225,16 @@ class Order extends Model
     public function deliveryComplete()
     {
         foreach ($this->orderProducts as $orderProduct) {
-            $quantity = $orderProduct->quantity;
+            $quantity = Quantity::toFloat($orderProduct->quantity);
 
             foreach ($this->deliveries as $delivery) {
                 if ($deliveryProduct = $delivery->deliveryProducts()->where('order_product_id', $orderProduct->id)->first()) {
-                    $quantity -= $deliveryProduct->quantity;
+                    $quantity -= Quantity::toFloat($deliveryProduct->quantity);
                 }
             }
 
-            if ($quantity > 0) {
+            // See invoiceComplete() - the same float dust applies.
+            if (Quantity::isPositive($quantity)) {
                 return false;
             }
         }

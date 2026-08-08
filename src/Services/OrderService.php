@@ -12,6 +12,7 @@ use VentureDrake\LaravelCrm\Models\TaxRate;
 use VentureDrake\LaravelCrm\Repositories\OrderRepository;
 use VentureDrake\LaravelCrm\Support\Money;
 use VentureDrake\LaravelCrm\Support\PdfTemplateRegistry;
+use VentureDrake\LaravelCrm\Support\Quantity;
 
 class OrderService
 {
@@ -57,14 +58,14 @@ class OrderService
             foreach ($request->products as $product) {
                 $orderProductOrder++;
 
-                if (isset($product['id']) && $product['quantity'] > 0) {
+                if (isset($product['id']) && Quantity::isPositive($product['quantity'])) {
                     if (! Product::find($product['id'])) {
                         $newProduct = $this->addProduct($product, $request);
                         $product['id'] = $newProduct->id;
                     }
                 }
 
-                if (isset($product['id']) && $product['id'] > 0 && $product['quantity'] > 0) {
+                if (isset($product['id']) && $product['id'] > 0 && Quantity::isPositive($product['quantity'])) {
                     $taxRate = 0;
                     if ($productForTax = Product::find($product['id'])) {
                         if ($productForTax->taxRate) {
@@ -146,7 +147,7 @@ class OrderService
                 $orderProductOrder++;
 
                 if (isset($product['order_product_id']) && $orderProduct = OrderProduct::find($product['order_product_id'])) {
-                    if (! isset($product['id']) || $product['quantity'] == 0) {
+                    if (! isset($product['id']) || Quantity::isZero($product['quantity'])) {
                         $orderProduct->delete();
                     } else {
                         if (! Product::find($product['id'])) {
@@ -154,7 +155,7 @@ class OrderService
                             $product['id'] = $newProduct->id;
                         }
 
-                        if (isset($product['id']) && $product['id'] > 0 && $product['quantity'] > 0) {
+                        if (isset($product['id']) && $product['id'] > 0 && Quantity::isPositive($product['quantity'])) {
                             $taxRate = 0;
                             if ($productForTax = Product::find($product['id'])) {
                                 if ($productForTax->taxRate) {
@@ -183,13 +184,13 @@ class OrderService
                             $orderProductIds[] = $orderProduct->id;
                         }
                     }
-                } elseif (isset($product['id']) && $product['quantity'] > 0) {
+                } elseif (isset($product['id']) && Quantity::isPositive($product['quantity'])) {
                     if (! Product::find($product['id'])) {
                         $newProduct = $this->addProduct($product, $request);
                         $product['id'] = $newProduct->id;
                     }
 
-                    if (isset($product['id']) && $product['id'] > 0 && $product['quantity'] > 0) {
+                    if (isset($product['id']) && $product['id'] > 0 && Quantity::isPositive($product['quantity'])) {
                         $taxRate = 0;
                         if ($productForTax = Product::find($product['id'])) {
                             if ($productForTax->taxRate) {
