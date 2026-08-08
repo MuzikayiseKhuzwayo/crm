@@ -4,7 +4,6 @@ namespace VentureDrake\LaravelCrm\Console;
 
 use Illuminate\Console\Command;
 use Illuminate\Support\Composer;
-use Illuminate\Support\Facades\Schema;
 use VentureDrake\LaravelCrm\Models\Deal;
 use VentureDrake\LaravelCrm\Models\Delivery;
 use VentureDrake\LaravelCrm\Models\Invoice;
@@ -19,8 +18,35 @@ use VentureDrake\LaravelCrm\Models\Setting;
 use VentureDrake\LaravelCrm\Observers\TeamObserver;
 use VentureDrake\LaravelCrm\Services\SettingService;
 
+/**
+ * The half of the update that touches the database.
+ *
+ * Split out from laravelcrm:upgrade — which republishes assets and clears
+ * caches, runs from the host's composer hook, and never opens a connection.
+ * This command runs migrations, seeders and data backfills, so it stays
+ * explicit: an operator (or a deploy script) runs it, once, after the code is
+ * in place.
+ *
+ * It calls laravelcrm:upgrade first, so a human running one command by hand
+ * still gets everything.
+ *
+ * Every failure here is fatal. This command used to catch migration and seeder
+ * exceptions, downgrade them to warnings and still print "Laravel CRM is now
+ * updated", which made a broken upgrade indistinguishable from a clean one in
+ * a deploy log — and left the deploy script's `&&` chain running happily on.
+ */
 class LaravelCrmUpdate extends Command
 {
+    /**
+     * The setting the database schema version is stamped into on success.
+     *
+     * Distinct from `version`, which Http/Middleware/Settings overwrites with
+     * config('laravel-crm.version') on the first web request after a deploy and
+     * therefore always reads as current. This one only moves when this command
+     * completes, so "code is ahead of database" is detectable.
+     */
+    public const DB_VERSION_SETTING = 'db_version';
+
     /**
      * @var SettingService
      */
@@ -31,14 +57,15 @@ class LaravelCrmUpdate extends Command
      *
      * @var string
      */
-    protected $signature = 'laravelcrm:update';
+    protected $signature = 'laravelcrm:update
+                           {--force : Run without confirmation, for deploy scripts}';
 
     /**
      * The console command description.
      *
      * @var string
      */
-    protected $description = 'Install Laravel CRM package';
+    protected $description = 'Apply Laravel CRM database migrations, seed data and backfills';
 
     /**
      * The Composer instance.
@@ -66,62 +93,77 @@ class LaravelCrmUpdate extends Command
      */
     public function handle()
     {
+        if (! $this->confirmToProceed()) {
+            return self::SUCCESS;
+        }
+
         $this->info('Updating Laravel CRM...');
 
-        // Clear cached config/routes up-front so any stale `config:cache` from
-        // the host doesn't poison reads of freshly-published config or env.
-        $this->info('Clearing cached config/routes...');
-        $this->callSilent('config:clear');
-        $this->callSilent('route:clear');
+        // The safe half: republishes assets, prunes stale build output and
+        // clears cached config/routes/views. Runs first so any stale
+        // `config:cache` from the host can't poison reads of freshly-published
+        // config or env below, and so an operator running this one command by
+        // hand gets the whole upgrade.
+        if ($this->call('laravelcrm:upgrade') !== self::SUCCESS) {
+            $this->error('laravelcrm:upgrade failed. Laravel CRM has NOT been updated.');
+
+            return self::FAILURE;
+        }
 
         $this->info('Publishing migrations...');
 
-        // Force so any previously-published migration stubs are refreshed with the
-        // current package versions (idempotency guards, fixes, etc.). New migrations
-        // still get a fresh timestamp; already-run migrations are unaffected by the
-        // rewrite because Laravel keys the migrations table by filename, not content.
+        // The published stub set is frozen — nothing new is ever added to it
+        // (see LaravelCrmServiceProvider::boot). Migrations added from here on
+        // ship as real .php files in database/updates and reach the host
+        // through loadMigrationsFrom, so they need no publishing at all.
+        //
+        // This forced re-publish stays for the stubs that already exist, so a
+        // host picks up in-place fixes to them (idempotency guards and the
+        // like). Already-run migrations are unaffected by the rewrite because
+        // Laravel keys the migrations table by filename, not content.
         $this->call('vendor:publish', [
             '--provider' => 'VentureDrake\LaravelCrm\LaravelCrmServiceProvider',
             '--tag' => 'migrations',
             '--force' => true,
         ]);
 
-        $this->info('Publishing assets...');
-
-        $this->call('vendor:publish', [
-            '--provider' => 'VentureDrake\LaravelCrm\LaravelCrmServiceProvider',
-            '--tag' => 'assets',
-            '--force' => true,
-        ]);
-
-        $this->info('Publishing Flasher assets...');
-
-        try {
-            $this->call('flasher:install');
-        } catch (\Throwable $e) {
-            $this->warn('Could not publish Flasher assets: '.$e->getMessage());
-        }
-
         $this->info('Running migrations...');
 
+        // Fatal, not a warning. A failed ALTER leaves the schema behind the
+        // code, and every backfill below reads that schema — carrying on would
+        // report success over a half-applied upgrade.
         try {
-            $this->call('migrate', ['--force' => true]);
-        } catch (\Throwable $e) {
-            $this->warn('Migration warning: '.$e->getMessage());
-        }
+            if ($this->call('migrate', ['--force' => true]) !== self::SUCCESS) {
+                $this->error('Migrations failed. Laravel CRM has NOT been updated.');
 
-        $this->checkQuantityColumns();
+                return self::FAILURE;
+            }
+        } catch (\Throwable $e) {
+            $this->error('Migrations failed: '.$e->getMessage());
+            $this->error('Laravel CRM has NOT been updated.');
+
+            return self::FAILURE;
+        }
 
         $this->info('Reseeding base tables...');
 
         try {
-            $this->callSilent('db:seed', [
+            if ($this->callSilent('db:seed', [
                 '--class' => 'VentureDrake\LaravelCrm\Database\Seeders\LaravelCrmTablesSeeder',
                 '--force' => true,
-            ]);
+            ]) !== self::SUCCESS) {
+                $this->error('Seeding base tables failed. Laravel CRM has NOT been updated.');
+
+                return self::FAILURE;
+            }
         } catch (\Throwable $e) {
-            $this->warn('Seeder warning: '.$e->getMessage());
+            $this->error('Seeding base tables failed: '.$e->getMessage());
+            $this->error('Laravel CRM has NOT been updated.');
+
+            return self::FAILURE;
         }
+
+        $this->seedLookupData();
 
         // The db_update_* markers below are written with setInstallWide rather
         // than set. A console command has no authenticated user, so a plain
@@ -381,51 +423,77 @@ class LaravelCrmUpdate extends Command
             $this->settingService->setInstallWide('db_update_1201', 1);
         }
 
+        // Only stamped on the success path, and install-wide for the same
+        // reason as the db_update_* markers above. SystemCheckService reads it
+        // back to answer "is the code ahead of the database?", so stamping it
+        // after a partial run would silence the very alert that would have told
+        // the operator to re-run this command.
+        $this->settingService->setInstallWide(
+            self::DB_VERSION_SETTING,
+            config('laravel-crm.version')
+        );
+
         $this->info('Laravel CRM is now updated.');
+
+        return self::SUCCESS;
     }
 
     /**
-     * Confirm the line item quantity columns actually widened to decimal.
+     * Re-run the lookup-data seeders that upgrading hosts previously had to
+     * know about and run by hand.
      *
-     * The migrate call above swallows its failures and this command still
-     * prints "Laravel CRM is now updated", so a failed ALTER would otherwise
-     * be silent - and the symptom is quiet too: MySQL rounds a 3.5 Kg line to
-     * 4 on write rather than raising.
+     * All six are idempotent — updateOrInsert / firstOrCreate / existence-
+     * checked inserts throughout — so re-running revokes nothing and duplicates
+     * nothing. None is fatal: they seed reference data, not schema, and a host
+     * that has customised its own lookup rows should not have its deploy fail
+     * over one of them.
+     *
+     * laravelcrm:permissions and friends only do anything with teams on; they
+     * fan the global CRM roles and lookup data out to each team.
      */
-    protected function checkQuantityColumns(): void
+    protected function seedLookupData(): void
     {
-        $tables = [
-            'quote_products',
-            'order_products',
-            'deal_products',
-            'invoice_lines',
-            'purchase_order_lines',
-            'delivery_products',
-        ];
+        $commands = ['laravelcrm:lead-sources'];
 
-        $stale = [];
+        if (config('laravel-crm.teams')) {
+            $commands = array_merge($commands, [
+                'laravelcrm:permissions',
+                'laravelcrm:labels',
+                'laravelcrm:addresstypes',
+                'laravelcrm:contacttypes',
+                'laravelcrm:organizationtypes',
+            ]);
+        }
 
-        foreach ($tables as $table) {
-            $name = config('laravel-crm.db_table_prefix').$table;
+        $this->info('Seeding lookup data...');
 
-            if (! Schema::hasTable($name) || ! Schema::hasColumn($name, 'quantity')) {
-                continue;
-            }
-
+        foreach ($commands as $command) {
             try {
-                if (Schema::getColumnType($name, 'quantity') === 'integer') {
-                    $stale[] = $name;
-                }
+                $this->callSilent($command);
             } catch (\Throwable $e) {
-                // Driver cannot introspect the column - nothing to report.
+                $this->warn("Could not run {$command}: ".$e->getMessage());
+                $this->warn("Run \"php artisan {$command}\" manually to finish seeding it.");
             }
         }
+    }
 
-        if ($stale === []) {
-            return;
+    /**
+     * Whether to go ahead.
+     *
+     * Only ever asks on a production console with a real operator in front of
+     * it. Defaults to yes so a deploy script that inherited the old
+     * no-confirmation behaviour and does not pass --force still proceeds.
+     */
+    protected function confirmToProceed(): bool
+    {
+        if ($this->option('force') || ! $this->input->isInteractive()) {
+            return true;
         }
 
-        $this->error('Line item quantity is still an integer column on: '.implode(', ', $stale));
-        $this->error('Decimal quantities will be rounded to whole numbers on save. Re-run "php artisan migrate --force" and check its output.');
+        if (! app()->environment('production')) {
+            return true;
+        }
+
+        return $this->confirm('Application in production. Run Laravel CRM database updates?', true);
     }
 }

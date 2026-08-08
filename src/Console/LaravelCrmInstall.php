@@ -117,6 +117,11 @@ class LaravelCrmInstall extends Command
 
             // Configure environment flags (teams, encryption) before migrations run
             $this->configureEnv();
+
+            // Wire laravelcrm:upgrade into the host's composer lifecycle so
+            // future `composer install`/`composer update` runs republish assets
+            // and clear caches on their own.
+            $this->patchComposerScripts();
         }
 
         // TBC: Check if audits table exists already
@@ -239,6 +244,14 @@ class LaravelCrmInstall extends Command
         foreach (array_keys(SystemCheckService::DB_UPDATES) as $flag) {
             $settingService->setInstallWide($flag, 1);
         }
+
+        // Same reasoning, for the marker that says which release the database
+        // has actually had applied. Without it a brand-new install reports a
+        // pending database update on its first page load.
+        $settingService->setInstallWide(
+            SystemCheckService::DB_VERSION_SETTING,
+            config('laravel-crm.version')
+        );
 
         if ($userClass::where('crm_access', 1)->count() < 1) {
             $this->info('Create your default owner user');
@@ -479,6 +492,114 @@ class LaravelCrmInstall extends Command
 
         $this->info("✅ Patched {$path}");
         $this->line("   Backup written to {$backup}");
+    }
+
+    /**
+     * Add `@php artisan laravelcrm:upgrade --ansi` to the host's
+     * `post-autoload-dump` composer scripts.
+     *
+     * post-autoload-dump rather than post-update-cmd because it fires on
+     * `composer install` as well as `composer update` — so a production
+     * `composer install --no-dev` republishes assets and clears caches without
+     * anyone having to know this package ships a command. It is the hook
+     * Filament uses, for the same reason.
+     *
+     * Only ever adds the safe, database-free half. laravelcrm:update stays
+     * explicit and belongs in the deploy script.
+     */
+    private function patchComposerScripts(): void
+    {
+        $this->info('Configuring composer scripts...');
+
+        $path = base_path('composer.json');
+        $entry = '@php artisan laravelcrm:upgrade --ansi';
+
+        if (! File::exists($path)) {
+            $this->warn("⚠️  Could not locate {$path}.");
+            $this->printComposerScriptInstructions($entry);
+
+            return;
+        }
+
+        $original = File::get($path);
+
+        // Decoded to objects, not associative arrays. json_decode($json, true)
+        // turns an empty JSON object into an empty PHP array, which re-encodes
+        // as `[]` — so a `"require-dev": {}` or `"config": {}` anywhere in the
+        // file would come back out as a JSON array and composer would reject
+        // the manifest. Objects round-trip as objects.
+        $composer = json_decode($original);
+
+        // Never rewrite a file we could not fully understand — a composer.json
+        // is hand-maintained and losing it is worse than not patching it.
+        if (! $composer instanceof \stdClass || json_last_error() !== JSON_ERROR_NONE) {
+            $this->warn("⚠️  Could not parse {$path}: ".json_last_error_msg());
+            $this->printComposerScriptInstructions($entry);
+
+            return;
+        }
+
+        $scripts = $composer->scripts ?? null;
+
+        // An absent "scripts", or one written as an empty JSON array, is the
+        // object we are about to build. Anything else that is not an object is
+        // something we do not understand.
+        if ($scripts === null || $scripts === []) {
+            $scripts = new \stdClass;
+        }
+
+        if (! $scripts instanceof \stdClass) {
+            $this->warn("⚠️  Unexpected \"scripts\" value in {$path}.");
+            $this->printComposerScriptInstructions($entry);
+
+            return;
+        }
+
+        $hook = $scripts->{'post-autoload-dump'} ?? [];
+
+        // Composer allows a bare string as well as an array of them.
+        $hook = is_array($hook) ? array_values($hook) : [$hook];
+
+        foreach ($hook as $line) {
+            if (is_string($line) && str_contains($line, 'laravelcrm:upgrade')) {
+                $this->info('  composer.json already runs laravelcrm:upgrade. Skipping.');
+
+                return;
+            }
+        }
+
+        // Appended, not prepended: package:discover has to have run before an
+        // artisan command from a package can be resolved.
+        $hook[] = $entry;
+
+        $scripts->{'post-autoload-dump'} = $hook;
+        $composer->scripts = $scripts;
+
+        $encoded = json_encode(
+            $composer,
+            JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE
+        );
+
+        if ($encoded === false) {
+            $this->warn("⚠️  Could not re-encode {$path}.");
+            $this->printComposerScriptInstructions($entry);
+
+            return;
+        }
+
+        File::put($path, $encoded.PHP_EOL);
+
+        $this->info("✅ Added \"{$entry}\" to post-autoload-dump in composer.json");
+    }
+
+    /**
+     * Print the line to add by hand when composer.json could not be patched.
+     */
+    private function printComposerScriptInstructions(string $entry): void
+    {
+        $this->warn('   Add this to the "post-autoload-dump" scripts in your composer.json:');
+        $this->warn('     "'.$entry.'"');
+        $this->warn('   Without it, `composer update` will not republish CRM assets.');
     }
 
     /**

@@ -95,7 +95,8 @@ All components are manually registered in `LaravelCrmServiceProvider` (not auto-
 | `src/Scopes/` | Query scopes (`BelongsToTeamsScope`) |
 | `resources/views/livewire/` | Livewire component views |
 | `resources/lang/` | i18n strings under `laravel-crm::` namespace |
-| `database/migrations/` | Migration `.stub` files published to host app during install |
+| `database/updates/` | **New migrations go here** — real `.php` files, loaded via `loadMigrationsFrom`, run by a plain `php artisan migrate` |
+| `database/migrations/` | Legacy `.stub` files published to the host app. **Frozen — do not add to it or to the publish array in the service provider** |
 
 ## Model Conventions
 
@@ -136,7 +137,7 @@ All components are manually registered in `LaravelCrmServiceProvider` (not auto-
 
 ## Adding a New CRM Entity
 
-1. Migration stub in `database/migrations/` with `crm_` prefix, include `external_id`, `team_id`, `user_created_id`, `user_updated_id`
+1. Migration in `database/updates/` as a real timestamped `.php` file (not a `.stub`, and no service provider entry) with `crm_` prefix, include `external_id`, `team_id`, `user_created_id`, `user_updated_id`
 2. Model in `src/Models/` extending base `Model`
 3. Observer in `src/Observers/` — set `external_id` (UUID) and auto-increment `*_id` on `creating`
 4. Policy in `src/Policies/` — register in `ServiceProvider::$policies`

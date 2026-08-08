@@ -1,12 +1,158 @@
 # Upgrade guide
 
-Notes for operators upgrading an existing `venturedrake/laravel-crm` install. Read the section
-for the release you are moving to **before** you deploy — some releases change who is allowed to
-do what, and the failure mode is a `403` for a user who could previously click the button.
+Notes for operators upgrading an existing `venturedrake/laravel-crm` install.
+
+Two things to read: **How to update** below, which is the same every release, and the
+**version-specific notes** at the bottom for the release you are moving to. Read the latter
+**before** you deploy — some releases change who is allowed to do what, and the failure mode is a
+`403` for a user who could previously click the button.
 
 ---
 
-## Upgrading
+## How to update (local)
+
+```bash
+composer update venturedrake/laravel-crm
+php artisan laravelcrm:update
+```
+
+That is the whole procedure. The first command republishes assets and clears caches via the
+composer hook; the second applies database changes.
+
+> `composer update && php artisan migrate` is **not** enough. Migrations published before 2.4.0
+> ship as `.stub` files that have to be published into your `database/migrations` before the
+> migrator can see them, and a stale `manifest.json` will point at asset filenames that no longer
+> exist on disk. `laravelcrm:update` does both.
+
+---
+
+## How to update (production deploy)
+
+```bash
+composer install --no-dev --optimize-autoloader   # post-autoload-dump fires laravelcrm:upgrade
+php artisan laravelcrm:update --force             # migrations + backfills, no prompts
+php artisan config:cache && php artisan route:cache && php artisan view:cache
+```
+
+`--force` skips the production confirmation prompt. `laravelcrm:update` exits non-zero if
+migrations or seeding fail, so `&&` chains and CI steps stop where they should.
+
+### Zero-downtime deploys (Envoyer, Deployer, Vapor)
+
+The two commands belong in different hooks:
+
+| Command | Hook | Why |
+| --- | --- | --- |
+| `laravelcrm:upgrade` | **Build / install** (it fires automatically from `composer install`) | It writes into *that release's* `public/`, so it has to run per release directory, before the symlink flips |
+| `laravelcrm:update` | **Activate / after-deploy**, once | It touches the shared database. Running it per server would run the same migrations concurrently |
+
+If your platform builds each release in a fresh directory, nothing extra is needed for the first
+one — the composer hook handles it. Just make sure the second is not in a per-server hook.
+
+---
+
+## What each command does
+
+| | `laravelcrm:upgrade` | `laravelcrm:update` |
+| --- | --- | --- |
+| Republishes built assets (JS/CSS/images) | ✅ | ✅ (calls `upgrade` first) |
+| Prunes stale content-hashed build files | ✅ | ✅ |
+| Clears cached config, routes, views | ✅ | ✅ |
+| Publishes Flasher assets | ✅ | ✅ |
+| Publishes migration stubs | ❌ | ✅ |
+| Runs `migrate` | ❌ | ✅ |
+| Runs seeders and data backfills | ❌ | ✅ |
+| Stamps the `db_version` marker | ❌ | ✅ |
+| Prompts | never | only on an interactive production console, unless `--force` |
+| Exits non-zero on failure | only if asset publishing itself errors | on any failure |
+
+**`laravelcrm:upgrade` never opens a database connection.** That is deliberate: it runs from a
+composer hook, which can fire during a build when the database is unreachable, mid-migration, or
+belongs to a different release. All database work is in `laravelcrm:update`, which you run
+explicitly.
+
+`laravelcrm:update` also runs the lookup-data seeders that this guide used to tell you to run by
+hand — `laravelcrm:lead-sources`, and on teams installs `laravelcrm:permissions`,
+`laravelcrm:labels`, `laravelcrm:addresstypes`, `laravelcrm:contacttypes` and
+`laravelcrm:organizationtypes`. All are idempotent.
+
+---
+
+## One-time step for installs from before 2.4.0
+
+New installs get this from `laravelcrm:install`. Existing hosts add it once, to the host
+application's `composer.json`:
+
+```json
+"scripts": {
+    "post-autoload-dump": [
+        "@php artisan package:discover --ansi",
+        "@php artisan laravelcrm:upgrade --ansi"
+    ]
+}
+```
+
+Then run `composer dump-autoload` to confirm it fires. From that point on, every `composer install`
+and `composer update` republishes CRM assets and clears caches on its own.
+
+The line must come **after** `package:discover` — that is what makes the package's artisan
+commands resolvable.
+
+---
+
+## Caveats
+
+**Published views are frozen.** If you ran `vendor:publish --tag=views`, your host's copies in
+`resources/views/vendor/laravel-crm` shadow the package's and will *not* pick up template changes
+from a release. Re-publish with `--force` and re-apply your edits, or diff the package's
+`resources/views` against your copies before upgrading. The same applies to published lang files.
+
+**New config keys arrive automatically, but caches hide them.** Keys added to
+`config/package.php` and `config/laravel-crm.php` reach your app through `mergeConfigFrom`, so you
+do not need to re-publish the config. A stale `php artisan config:cache` from the previous release
+will hide them — the composer hook runs `config:clear` for exactly this reason. Keys you have
+overridden in your published `config/laravel-crm.php` stay as you set them.
+
+**The database can be behind the code without anything looking wrong.** The CRM stamps a
+`db_version` setting when `laravelcrm:update` completes and reports a banner when the installed
+code is ahead of it, or when one of *this package's* migrations has not run. Migrations belonging
+to your own application or to other packages are not counted — an unrun migration of yours will
+never raise a CRM banner. If you see *"Your Laravel CRM version requires some database updates"*,
+run `php artisan laravelcrm:update`.
+
+**Rolling back the package does not roll back the database.** Migrations are not reversed by
+downgrading the composer constraint. Restore from a backup if you need to go back.
+
+**Remove the composer hook before you remove the package.** `post-autoload-dump` fires on
+`composer remove venturedrake/laravel-crm` too, at which point `laravelcrm:upgrade` no longer
+exists and composer reports the script returned a non-zero exit code. Delete the
+`@php artisan laravelcrm:upgrade --ansi` line from your `composer.json` first.
+
+---
+
+## Version-specific notes
+
+## 2.4.0
+
+### Migrations no longer need publishing
+
+Migrations added from this release ship as real `.php` files inside the package and are loaded
+with `loadMigrationsFrom`, so a plain `php artisan migrate` runs them. The existing `.stub` set is
+frozen and still published into your `database/migrations` — **existing hosts are unaffected and
+keep the filenames they already have.**
+
+One related change: newly published stubs are now stamped from a fixed `2024_01_01` epoch rather
+than the moment of publishing, so a fresh install orders them correctly against the package-loaded
+migrations. This only affects stubs that have never been published on a given host; anything
+already in your `database/migrations` keeps its name.
+
+### `laravelcrm:update` now fails loudly
+
+It used to catch migration and seeder exceptions, print a warning, and still report
+`Laravel CRM is now updated.` with exit code 0 — so a broken upgrade and a clean one looked
+identical in a deploy log. It now prints an error and exits non-zero. **If your deploy script was
+relying on it always succeeding, it will now stop where it previously carried on.** That is the
+point, but check your pipeline for it.
 
 ### Line item quantities become decimal — six `ALTER TABLE`s
 
@@ -35,8 +181,9 @@ for it or run the migration in a maintenance window. Postgres is likewise a tabl
 decimal part of any quantity entered since. There is no lossless inverse — if you need to
 roll back after users have entered fractional quantities, export those rows first.
 
-**Verify afterwards.** `laravelcrm:update` swallows migration failures and still prints
-success, so confirm the change landed rather than trusting the output:
+**Verify afterwards.** `laravelcrm:update` now exits non-zero when a migration fails, so its
+output can be trusted — but if you ran an older build of it, which swallowed failures and printed
+success anyway, confirm the change actually landed:
 
 ```sql
 SHOW COLUMNS FROM crm_quote_products LIKE 'quantity';   -- decimal(15,3), Null: YES
@@ -116,6 +263,8 @@ php artisan laravelcrm:update
 php artisan db:seed --class="VentureDrake\LaravelCrm\Database\Seeders\LaravelCrmTablesSeeder" --force
 
 # 2. Multi-tenant (laravel-crm.teams = true) installs ONLY — run after step 1.
+#    laravelcrm:update now runs this for you; it is listed here so you can run it
+#    on its own, and so the ordering is explicit.
 php artisan laravelcrm:permissions
 ```
 

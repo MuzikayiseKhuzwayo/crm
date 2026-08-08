@@ -86,6 +86,46 @@ php artisan laravelcrm:install
 
 Navigate to http://yoursite.com/crm (or whatever you set LARAVEL_CRM_ROUTE_PREFIX to). Log in with the owner credentials you created during installation.
 
+## Updating
+
+```bash
+composer update venturedrake/laravel-crm   # republishes assets and clears caches
+php artisan laravelcrm:update              # migrations, seed data, backfills
+```
+
+The first command is enough on its own only for code. Because the CRM ships database changes, the
+second one is what applies them — `php artisan migrate` alone is not sufficient.
+
+Two commands, because they need different permissions and run at different times:
+
+| Command | Does | When |
+| --- | --- | --- |
+| `laravelcrm:upgrade` | Republishes assets, prunes stale build output, clears cached config/routes/views. **Never touches the database.** | Automatically, from your app's `post-autoload-dump` composer hook — so `composer install` on a production box does it too |
+| `laravelcrm:update` | Runs `laravelcrm:upgrade`, then migrations, seeders and data backfills. Exits non-zero if any of it fails. | Explicitly, by you or your deploy script |
+
+The installer adds the composer hook to your `composer.json` for you. **Installs from before 2.4.0
+need to add it once, by hand:**
+
+```json
+"scripts": {
+    "post-autoload-dump": [
+        "@php artisan package:discover --ansi",
+        "@php artisan laravelcrm:upgrade --ansi"
+    ]
+}
+```
+
+On a production deploy:
+
+```bash
+composer install --no-dev --optimize-autoloader   # the hook fires laravelcrm:upgrade
+php artisan laravelcrm:update --force             # migrations + backfills, non-interactive
+php artisan config:cache && php artisan route:cache && php artisan view:cache
+```
+
+See [docs/upgrading.md](docs/upgrading.md) for zero-downtime deploys, caveats, and
+version-specific notes.
+
 ## Testing
 
 ``` bash

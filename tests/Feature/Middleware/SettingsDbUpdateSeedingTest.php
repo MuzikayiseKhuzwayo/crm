@@ -154,12 +154,14 @@ test('adopts a row written without the global flag instead of duplicating it', f
 // -----------------------------------------------------------------------
 
 test('a fresh install followed by a request reports no pending db updates', function () {
-    // The loop laravelcrm:install runs once the schema is in place.
+    // The marking laravelcrm:install runs once the schema is in place.
     $settingService = app('laravel-crm.settings');
 
     foreach (array_keys(SystemCheckService::DB_UPDATES) as $flag) {
         $settingService->set($flag, 1);
     }
+
+    $settingService->set(SystemCheckService::DB_VERSION_SETTING, config('laravel-crm.version'));
 
     runSettingsMiddleware();
 
@@ -229,6 +231,8 @@ test('a fresh install on a teams host reports no pending db updates', function (
         $settingService->setInstallWide($flag, 1);
     }
 
+    $settingService->setInstallWide(SystemCheckService::DB_VERSION_SETTING, config('laravel-crm.version'));
+
     $this->actingAsUserWithPermissions([], ['current_team_id' => 1]);
 
     runSettingsMiddleware();
@@ -271,6 +275,10 @@ test('setInstallWide collapses per-team duplicates rather than updating only the
     });
 
     app('laravel-crm.settings')->setInstallWide('db_update_1200', 1);
+    app('laravel-crm.settings')->setInstallWide(
+        SystemCheckService::DB_VERSION_SETTING,
+        config('laravel-crm.version')
+    );
 
     expect(dbUpdateValuesAcrossTeams('db_update_1200'))->toBe([1, 1]);
 

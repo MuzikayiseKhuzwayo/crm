@@ -13,11 +13,22 @@ use VentureDrake\LaravelCrm\Models\Pipeline;
 use VentureDrake\LaravelCrm\Models\PurchaseOrder;
 use VentureDrake\LaravelCrm\Models\Quote;
 use VentureDrake\LaravelCrm\Models\Setting;
+use VentureDrake\LaravelCrm\Tests\ScratchPublicPathTestCase;
 use VentureDrake\LaravelCrm\Tests\TestCase;
 use VentureDrake\LaravelCrm\Tests\V1TestCase;
 
 uses(TestCase::class)->in('Feature', 'Unit');
 uses(V1TestCase::class)->in('Upgrade');
+
+/*
+ * Publishing tests need the application's public path pointed somewhere
+ * disposable, and it has to be set before the service provider boots — it
+ * evaluates public_path() when registering its publish map, so relocating the
+ * path from a beforeEach comes too late. Hence a base class rather than a hook,
+ * and its own suite: Pest binds one base test case per directory tree and
+ * cannot override it for a folder nested under tests/Feature.
+ */
+uses(ScratchPublicPathTestCase::class)->in('Publishing');
 
 /*
  * The authorization suite mounts real CRM Livewire components. Their mount() methods

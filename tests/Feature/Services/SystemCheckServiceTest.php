@@ -2,6 +2,7 @@
 
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\File;
 use Illuminate\Support\Facades\Schema;
 use VentureDrake\LaravelCrm\Models\Setting;
 use VentureDrake\LaravelCrm\Services\SystemCheckService;
@@ -56,15 +57,79 @@ function withoutCrmUsersColumn(string $column, callable $callback): void
     }
 }
 
+/**
+ * Clear the db_version marker, putting the install back in the state every
+ * host that predates the marker is in.
+ */
+function forgetDbVersion(): void
+{
+    Setting::where('name', SystemCheckService::DB_VERSION_SETTING)->delete();
+
+    app('laravel-crm.settings')->forgetCache();
+}
+
+/**
+ * Where the package ships its own, loadMigrationsFrom-delivered migrations.
+ */
+function packageMigrationsPath(): string
+{
+    return dirname(__DIR__, 3).'/database/updates';
+}
+
+/**
+ * Run a callback with database_path() pointed at an empty scratch directory,
+ * and the migration repository standing.
+ *
+ * Both are needed to make the pending-migration signal deterministic. The
+ * repository has to exist at all — hasPendingMigrations() short-circuits on
+ * repositoryExists(), because a host that has never migrated is the
+ * UPGRADE_REQUIRED case instead. And the real database_path('migrations') under
+ * testbench accumulates published CRM stubs from whichever suites have run
+ * before this one, so a test that asserted against it would pass or fail on the
+ * order of the run.
+ *
+ * The callback receives the scratch migrations directory.
+ */
+function withScratchDatabasePath(callable $callback): void
+{
+    $scratch = sys_get_temp_dir().'/crm-database-path-'.uniqid();
+    $migrations = $scratch.'/migrations';
+
+    mkdir($migrations, 0777, true);
+
+    $original = app()->databasePath();
+    app()->useDatabasePath($scratch);
+
+    app('migrator')->getRepository()->createRepository();
+
+    try {
+        $callback($migrations);
+    } finally {
+        app()->useDatabasePath($original);
+        Schema::dropIfExists('migrations');
+        File::deleteDirectory($scratch);
+    }
+}
+
 beforeEach(function () {
     Cache::forget(SystemCheckService::CACHE_KEY);
     app('laravel-crm.settings')->forgetCache();
     config(['laravel-crm.update_notifications' => true]);
+
+    // Every case below other than the db_version ones was written to exercise a
+    // single signal, so stamp the marker level with the code and leave the
+    // db_update flags as the variable. The cases that exercise the marker move
+    // or clear it explicitly.
+    seedSystemCheckSetting(SystemCheckService::DB_VERSION_SETTING, config('laravel-crm.version'));
 });
 
 test('exposes the cache key and ttl constants', function () {
     expect(SystemCheckService::CACHE_KEY)->toBe('app.crm-system-check')
         ->and(SystemCheckService::CACHE_TTL)->toBe(300);
+});
+
+test('exposes the db_version setting name', function () {
+    expect(SystemCheckService::DB_VERSION_SETTING)->toBe('db_version');
 });
 
 test('exposes the three alert type constants', function () {
@@ -158,6 +223,198 @@ test('db_update_required lists every pending flag in DB_UPDATES order', function
         ->firstWhere('type', SystemCheckService::DB_UPDATE_REQUIRED);
 
     expect($alert['updates'])->toBe(['db_update_0180', 'db_update_1200']);
+});
+
+/* -------------------------------------------------------------------------
+ | The db_version marker
+ |
+ | The `version` setting cannot carry this: Http/Middleware/Settings overwrites
+ | it with config('laravel-crm.version') on the first web request after a
+ | deploy, so it always reads as current no matter what the database has had
+ | applied.
+ | ------------------------------------------------------------------------- */
+
+test('a missing db_version marker triggers db_update_required', function () {
+    // The state every host that predates the marker is in: it has never run the
+    // update command that stamps it, so it should be told to.
+    forgetDbVersion();
+
+    $alerts = systemCheckService()->check();
+
+    expect(systemCheckAlertTypes($alerts))->toContain(SystemCheckService::DB_UPDATE_REQUIRED);
+
+    $alert = collect($alerts)->firstWhere('type', SystemCheckService::DB_UPDATE_REQUIRED);
+
+    expect($alert['version_behind'])->toBeTrue()
+        ->and($alert['updates'])->toBe([]);
+});
+
+test('a db_version behind the code version triggers db_update_required', function () {
+    config(['laravel-crm.version' => '2.4.0']);
+    seedSystemCheckSetting(SystemCheckService::DB_VERSION_SETTING, '2.3.0');
+
+    $alert = collect(systemCheckService()->check())
+        ->firstWhere('type', SystemCheckService::DB_UPDATE_REQUIRED);
+
+    expect($alert)->not->toBeNull()
+        ->and($alert['version_behind'])->toBeTrue();
+});
+
+test('db_version compares numerically rather than as a string', function () {
+    // '2.9.0' < '2.10.0' is false lexicographically — the same defect that
+    // silently stopped the update banner once the minor hit double digits.
+    config(['laravel-crm.version' => '2.10.0']);
+    seedSystemCheckSetting(SystemCheckService::DB_VERSION_SETTING, '2.9.0');
+
+    expect(systemCheckAlertTypes(systemCheckService()->check()))
+        ->toContain(SystemCheckService::DB_UPDATE_REQUIRED);
+});
+
+test('a db_version level with the code does not trigger db_update_required', function () {
+    config(['laravel-crm.version' => '2.4.0']);
+    seedSystemCheckSetting(SystemCheckService::DB_VERSION_SETTING, '2.4.0');
+
+    expect(systemCheckAlertTypes(systemCheckService()->check()))
+        ->not->toContain(SystemCheckService::DB_UPDATE_REQUIRED);
+});
+
+test('a db_version ahead of the code does not trigger db_update_required', function () {
+    // A rollback to an older release. The database is ahead, not behind, and
+    // there is nothing to run.
+    config(['laravel-crm.version' => '2.3.0']);
+    seedSystemCheckSetting(SystemCheckService::DB_VERSION_SETTING, '2.4.0');
+
+    expect(systemCheckAlertTypes(systemCheckService()->check()))
+        ->not->toContain(SystemCheckService::DB_UPDATE_REQUIRED);
+});
+
+test('db_version is read install-wide so a console-written marker is visible', function () {
+    // setInstallWide is what laravelcrm:update and laravelcrm:install use: a
+    // console command has no team, so the row it writes is invisible to a
+    // team-scoped read and the check would report an update it just completed.
+    forgetDbVersion();
+
+    app('laravel-crm.settings')->setInstallWide(
+        SystemCheckService::DB_VERSION_SETTING,
+        config('laravel-crm.version')
+    );
+    app('laravel-crm.settings')->forgetCache();
+
+    expect(systemCheckAlertTypes(systemCheckService()->check()))
+        ->not->toContain(SystemCheckService::DB_UPDATE_REQUIRED);
+});
+
+test('a stale db_version and a pending flag both report in the same alert', function () {
+    forgetDbVersion();
+    seedSystemCheckSetting('db_update_1201', 0);
+
+    $alert = collect(systemCheckService()->check())
+        ->firstWhere('type', SystemCheckService::DB_UPDATE_REQUIRED);
+
+    expect($alert['updates'])->toBe(['db_update_1201'])
+        ->and($alert['version_behind'])->toBeTrue();
+});
+
+/* -------------------------------------------------------------------------
+ | Pending migrations
+ |
+ | The signal that needs nobody to remember to register anything — the reason
+ | DB_UPDATES is no longer load-bearing for detection.
+ | ------------------------------------------------------------------------- */
+
+test('the alert reports whether migrations are pending', function () {
+    $alerts = systemCheckService()->check();
+
+    // Nothing pending on a healthy install, and no alert raised on its account.
+    expect(systemCheckAlertTypes($alerts))->not->toContain(SystemCheckService::DB_UPDATE_REQUIRED);
+
+    forgetDbVersion();
+
+    $alert = collect(systemCheckService()->check())
+        ->firstWhere('type', SystemCheckService::DB_UPDATE_REQUIRED);
+
+    expect($alert)->toHaveKey('migrations_pending')
+        ->and($alert['migrations_pending'])->toBeBool();
+});
+
+test('a database with no migrations table does not report pending migrations', function () {
+    // repositoryExists() is false here — a host that has never migrated at all
+    // is the UPGRADE_REQUIRED case, not this one, and introspecting it must not
+    // throw on the way to rendering a banner.
+    expect(Schema::hasTable('migrations'))->toBeFalse();
+
+    $alerts = systemCheckService()->check();
+
+    expect(systemCheckAlertTypes($alerts))->not->toContain(SystemCheckService::DB_UPDATE_REQUIRED);
+});
+
+test('a published stub that has not run triggers db_update_required', function () {
+    // The state a host is in after `composer update` republished the stubs and
+    // before `laravelcrm:update` ran them. `create_laravel_crm_tables` is a real
+    // entry in the frozen stub set, so it matches back to this package.
+    withScratchDatabasePath(function (string $migrations) {
+        file_put_contents($migrations.'/2026_01_01_000000_create_laravel_crm_tables.php', '<?php');
+
+        $alert = collect(systemCheckService()->check())
+            ->firstWhere('type', SystemCheckService::DB_UPDATE_REQUIRED);
+
+        expect($alert)->not->toBeNull()
+            ->and($alert['migrations_pending'])->toBeTrue()
+            // The other two signals are clean — this alert is the migration's doing.
+            ->and($alert['updates'])->toBe([])
+            ->and($alert['version_behind'])->toBeFalse();
+    });
+});
+
+test('a migration shipped in database/updates triggers db_update_required', function () {
+    // The delivery route every migration added from 2.4.0 on takes: a real .php
+    // file inside the package, reaching the host through loadMigrationsFrom.
+    $path = packageMigrationsPath().'/2099_01_01_000000_a_pending_crm_migration.php';
+
+    withScratchDatabasePath(function () use ($path) {
+        file_put_contents($path, '<?php');
+
+        try {
+            $alert = collect(systemCheckService()->check())
+                ->firstWhere('type', SystemCheckService::DB_UPDATE_REQUIRED);
+
+            expect($alert)->not->toBeNull()
+                ->and($alert['migrations_pending'])->toBeTrue();
+        } finally {
+            unlink($path);
+        }
+    });
+});
+
+test('a pending migration belonging to the host application is not a CRM update', function () {
+    // The regression this guards: scoping the check to "every path the migrator
+    // knows about" made someone else's unrun migration raise a CRM banner — one
+    // that tells the operator to run laravelcrm:update, which would have
+    // migrated it for them.
+    withScratchDatabasePath(function (string $migrations) {
+        file_put_contents($migrations.'/2026_01_01_000000_add_widgets_to_orders_table.php', '<?php');
+
+        expect(systemCheckAlertTypes(systemCheckService()->check()))
+            ->not->toContain(SystemCheckService::DB_UPDATE_REQUIRED);
+    });
+});
+
+test('a pending migration registered by another package is not a CRM update', function () {
+    // Same regression, from the other direction: `$migrator->paths()` holds the
+    // path every package registered via loadMigrationsFrom, not just ours.
+    $path = sys_get_temp_dir().'/crm-other-package-migrations-'.uniqid();
+    mkdir($path);
+    file_put_contents($path.'/2026_01_01_000000_create_someone_elses_table.php', '<?php');
+
+    app('migrator')->path($path);
+
+    withScratchDatabasePath(function () {
+        expect(systemCheckAlertTypes(systemCheckService()->check()))
+            ->not->toContain(SystemCheckService::DB_UPDATE_REQUIRED);
+    });
+
+    unlink($path.'/2026_01_01_000000_create_someone_elses_table.php');
+    rmdir($path);
 });
 
 test('upgrade_required short-circuits so no update_available appears alongside it', function () {

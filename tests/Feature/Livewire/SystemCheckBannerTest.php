@@ -71,6 +71,12 @@ beforeEach(function () {
     Cache::forget(SystemCheckService::CACHE_KEY);
     app('laravel-crm.settings')->forgetCache();
     Setting::query()->delete();
+
+    // Stamp the database level with the code, as laravelcrm:install and
+    // laravelcrm:update do. Without it every case here starts out with a
+    // db_update_required alert it did not ask for, and the ones that assert on
+    // an empty banner have nothing to assert.
+    seedBannerSetting(SystemCheckService::DB_VERSION_SETTING, config('laravel-crm.version'));
 });
 
 it('renders the banner inside the layout content slot behind the update_notifications check', function () {
@@ -139,6 +145,20 @@ it('uses the info level for a db update alert', function () {
         ->assertSee('alert-info', false)
         ->assertDontSee('alert-warning', false)
         ->assertSee('update database');
+});
+
+it('prints the command the operator has to run for a db update alert', function () {
+    // The fix is a line typed into a terminal, and the person reading this
+    // banner is the person who has to type it. Neither this banner nor the
+    // updates page used to say what that line was.
+    seedBannerSetting('version', '2.3.0');
+    seedBannerSetting('db_update_1201', 0);
+
+    $this->actingAsUserWithPermissions(['view crm updates']);
+
+    Livewire::test(SystemCheckBanner::class)
+        ->assertSee('php artisan laravelcrm:update')
+        ->assertSee('<code', false);
 });
 
 /**

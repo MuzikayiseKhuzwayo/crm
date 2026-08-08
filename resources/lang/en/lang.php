@@ -319,6 +319,14 @@ return [
     'updated_version_of_laravel_crm_is_available' => 'Updated version of Laravel CRM is available',
     'you_can_update_from_laravel_crm' => 'You can update from Laravel CRM',
     'upgrade_guide' => 'upgrade guide',
+    // Updates page. The two commands are literal shell strings, not translated —
+    // they are typed verbatim into a terminal.
+    'how_to_update' => 'How to update',
+    'run_these_from_your_project_root' => 'Run these two commands from your project root',
+    'update_step_composer' => 'Fetches the release. The composer hook republishes assets and clears caches.',
+    'update_step_artisan' => 'Applies database migrations, seed data and backfills. Never runs on its own.',
+    'database_update_required' => 'Database update required',
+    'your_database_is_behind_the_installed_code' => 'Your database is behind the installed code. Run the update command below to apply the outstanding migrations.',
     // System check banner. Each sentence is a whole string carrying its links as
     // placeholders, rather than fragments concatenated in Blade, so translators
     // control word order — which RTL locales such as fa depend on.
@@ -329,7 +337,12 @@ return [
     'system_check_update_available' => 'A new version of Laravel CRM is available. :details or :update.',
     'system_check_view_version_details' => 'View version :version details',
     'system_check_update_now' => 'update now',
-    'system_check_db_update_required' => 'Your Laravel CRM version requires some database updates to function correctly. Please :update.',
+    // :updates_page rather than :update — the substituted :command value ends in
+    // the literal "laravelcrm:update", and Laravel replaces placeholders longest
+    // key first, so a :update placeholder here would go on to eat the colon-word
+    // inside the command it had just inserted.
+    'system_check_db_update_required' => 'Your Laravel CRM version requires some database updates to function correctly. Run :command from your project root, or :updates_page.',
+    'system_check_db_update_command' => 'php artisan laravelcrm:update',
     'system_check_update_database' => 'update database',
     'settings_updated' => 'settings updated',
     'organization_name' => 'organization name',

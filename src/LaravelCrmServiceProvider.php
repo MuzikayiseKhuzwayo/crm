@@ -39,6 +39,7 @@ use VentureDrake\LaravelCrm\Console\LaravelCrmReminders;
 use VentureDrake\LaravelCrm\Console\LaravelCrmSampleData;
 use VentureDrake\LaravelCrm\Console\LaravelCrmSmsCampaignsDispatch;
 use VentureDrake\LaravelCrm\Console\LaravelCrmUpdate;
+use VentureDrake\LaravelCrm\Console\LaravelCrmUpgrade;
 use VentureDrake\LaravelCrm\Console\LaravelCrmV2;
 use VentureDrake\LaravelCrm\Console\LaravelCrmXero;
 use VentureDrake\LaravelCrm\Http\Livewire\Components\LiveCall;
@@ -530,7 +531,12 @@ class LaravelCrmServiceProvider extends ServiceProvider
         $this->loadTranslationsFrom(__DIR__.'/../resources/lang', 'laravel-crm');
         // TBC: BS or TW mode, setting on config
         $this->loadViewsFrom(__DIR__.'/../resources/views', 'laravel-crm');
-        $this->loadMigrationsFrom(__DIR__.'/../database/migrations');
+        // database/migrations holds .stub files, which the migrator's *_*.php
+        // glob cannot see — loading it was inert. Real, package-loaded
+        // migrations live in database/updates and reach every host through a
+        // plain `php artisan migrate`, with no publish step and no entry in the
+        // (now frozen) publish array below.
+        $this->loadMigrationsFrom(__DIR__.'/../database/updates');
 
         // Middleware
         $router->aliasMiddleware('auth.laravel-crm', Authenticate::class);
@@ -686,6 +692,19 @@ class LaravelCrmServiceProvider extends ServiceProvider
             ], 'lang');
 
             // Publishing the migrations.
+            //
+            // FROZEN. Do not add to this array, and do not add a new .stub to
+            // database/migrations. Every entry here needs a hand-picked order
+            // number and a publish step before `php artisan migrate` can see
+            // it, which is why a host that runs the obvious
+            // `composer update && php artisan migrate` gets no schema changes.
+            //
+            // New migrations go in database/updates as real .php files. They
+            // are loaded by loadMigrationsFrom() above and run on every host
+            // from a plain `migrate`, with no publish and no entry here.
+            //
+            // This array stays only so existing hosts keep receiving in-place
+            // fixes to stubs they have already published.
             $this->publishes([
                 __DIR__.'/../database/migrations/create_permission_tables.php.stub' => $this->getMigrationFileName($filesystem, 'create_permission_tables.php', 1), // Spatie Permissions
                 __DIR__.'/../database/migrations/create_laravel_crm_tables.php.stub' => $this->getMigrationFileName($filesystem, 'create_laravel_crm_tables.php', 3),
@@ -848,6 +867,7 @@ class LaravelCrmServiceProvider extends ServiceProvider
                 LaravelCrmInstall::class,
                 LaravelCrmAddUser::class,
                 LaravelCrmUpdate::class,
+                LaravelCrmUpgrade::class,
                 LaravelCrmPermissions::class,
                 LaravelCrmLabels::class,
                 LaravelCrmLeadSources::class,
@@ -1409,11 +1429,24 @@ class LaravelCrmServiceProvider extends ServiceProvider
     }
 
     /**
-     * Returns existing migration file if found, else uses the current timestamp.
+     * Returns existing migration file if found, else mints one from a fixed epoch.
+     *
+     * The base used to be now(), so a stub published today was stamped with
+     * today's date — which sorts *after* any package-loaded migration in
+     * database/updates authored earlier, and the migrator would try to alter
+     * tables that did not exist yet.
+     *
+     * 2024-01-01 is late enough to sort after the host's own baseline (users,
+     * and Jetstream's 2020_05_21_* teams table) and early enough that every
+     * package-loaded migration sorts after the whole stub set, permanently. The
+     * +$order spacing is preserved, so the stubs keep their relative order.
+     *
+     * Existing hosts are unaffected: the glob below finds the file they already
+     * published and returns that path unchanged, whatever it was named.
      */
     protected function getMigrationFileName(Filesystem $filesystem, $filename, $order): string
     {
-        $timestamp = date('Y_m_d_His', strtotime("+$order sec"));
+        $timestamp = date('Y_m_d_His', strtotime('2024-01-01 00:00:00') + $order);
 
         return Collection::make($this->app->databasePath().DIRECTORY_SEPARATOR.'migrations'.DIRECTORY_SEPARATOR)
             ->flatMap(function ($path) use ($filesystem, $filename) {

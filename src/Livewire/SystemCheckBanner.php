@@ -107,8 +107,18 @@ class SystemCheckBanner extends Component
                 ]);
 
             case SystemCheckService::DB_UPDATE_REQUIRED:
+                // The command itself, not just a link to a page about it — the
+                // fix is a line typed into a terminal, and the operator reading
+                // this banner is the person who has to type it.
+                //
+                // The link placeholder is :updates_page, not :update: the
+                // command value ends in the literal "laravelcrm:update", and
+                // Laravel substitutes longest key first — so a :update
+                // placeholder would be applied *after* :command and chew the
+                // colon-word out of the command it had just inserted.
                 return __('laravel-crm::lang.system_check_db_update_required', [
-                    'update' => $this->link(
+                    'command' => $this->code(__('laravel-crm::lang.system_check_db_update_command')),
+                    'updates_page' => $this->link(
                         route('laravel-crm.updates.index'),
                         __('laravel-crm::lang.system_check_update_database'),
                         false
@@ -175,5 +185,14 @@ class SystemCheckBanner extends Component
         $target = $external ? ' target="_blank" rel="noopener noreferrer"' : '';
 
         return '<a href="'.e($href).'"'.$target.' class="link">'.e($label).'</a>';
+    }
+
+    /**
+     * A shell command rendered inline. Escaped for the same reason link() is —
+     * it arrives through the translator, so a locale file is the input.
+     */
+    protected function code(string $command): string
+    {
+        return '<code class="font-mono text-sm">'.e($command).'</code>';
     }
 }

@@ -1,9 +1,12 @@
 <?php
 
+use Illuminate\Console\OutputStyle;
 use Illuminate\Contracts\Console\Kernel;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
+use Symfony\Component\Console\Input\ArrayInput;
+use Symfony\Component\Console\Output\BufferedOutput;
 use VentureDrake\LaravelCrm\Console\LaravelCrmInstall;
 use VentureDrake\LaravelCrm\Models\Setting;
 use VentureDrake\LaravelCrm\Services\SystemCheckService;
@@ -196,7 +199,7 @@ function installCommandSource(): string
     );
 }
 
-/** The loop laravelcrm:install runs once the schema and seeders are in place. */
+/** The marking laravelcrm:install runs once the schema and seeders are in place. */
 function markInstalledDbUpdates(): void
 {
     $settingService = app('laravel-crm.settings');
@@ -204,6 +207,11 @@ function markInstalledDbUpdates(): void
     foreach (array_keys(SystemCheckService::DB_UPDATES) as $flag) {
         $settingService->setInstallWide($flag, 1);
     }
+
+    $settingService->setInstallWide(
+        SystemCheckService::DB_VERSION_SETTING,
+        config('laravel-crm.version')
+    );
 
     $settingService->forgetCache();
 }
@@ -257,4 +265,219 @@ test('a fresh install reports no pending db updates', function () {
     $types = array_column(app(SystemCheckService::class)->check(), 'type');
 
     expect($types)->not->toContain(SystemCheckService::DB_UPDATE_REQUIRED);
+});
+
+test('install stamps db_version so a fresh install is not reported as behind', function () {
+    config(['laravel-crm.version' => '2.4.0']);
+
+    markInstalledDbUpdates();
+
+    expect(Setting::where('name', SystemCheckService::DB_VERSION_SETTING)->value('value'))
+        ->toBe('2.4.0');
+});
+
+test('install stamps db_version install-wide alongside the db_update flags', function () {
+    // Same reasoning as the flags: a console command stamps no team_id, so a
+    // plain set() writes a row a teams-enabled host reads through
+    // BelongsToTeamsScope and cannot see.
+    $source = installCommandSource();
+
+    $flags = strpos($source, '$settingService->setInstallWide($flag, 1);');
+    $version = strpos($source, 'SystemCheckService::DB_VERSION_SETTING');
+
+    expect($version)->not->toBeFalse()
+        ->and($version)->toBeGreaterThan($flags)
+        ->and($source)->toContain('$settingService->setInstallWide(');
+});
+
+// -----------------------------------------------------------------------
+// composer.json patching
+//
+// The install adds `@php artisan laravelcrm:upgrade --ansi` to the host's
+// post-autoload-dump scripts, so every later `composer install`/`composer
+// update` republishes assets and clears caches without the developer having to
+// know this package ships a command.
+// -----------------------------------------------------------------------
+
+/**
+ * Run just the composer.json patch against a temporary base path.
+ *
+ * The full command publishes, migrates and prompts, so the private method is
+ * invoked directly with base_path() pointed at a scratch directory — patching
+ * the repository's own composer.json would be a fine way to lose it.
+ */
+function patchComposerScriptsIn(?string $contents): array
+{
+    $base = sys_get_temp_dir().'/crm-composer-patch-'.uniqid();
+    mkdir($base);
+
+    $path = $base.'/composer.json';
+
+    if ($contents !== null) {
+        file_put_contents($path, $contents);
+    }
+
+    $originalBase = app()->basePath();
+    app()->setBasePath($base);
+
+    $command = app(LaravelCrmInstall::class);
+    $command->setLaravel(app());
+
+    $output = new BufferedOutput;
+    $command->setInput(new ArrayInput([]));
+    $command->setOutput(new OutputStyle(
+        new ArrayInput([]),
+        $output
+    ));
+
+    try {
+        (function () {
+            $this->patchComposerScripts();
+        })->call($command);
+
+        $result = file_exists($path) ? file_get_contents($path) : null;
+    } finally {
+        app()->setBasePath($originalBase);
+
+        if (file_exists($path)) {
+            unlink($path);
+        }
+
+        rmdir($base);
+    }
+
+    return ['contents' => $result, 'output' => $output->fetch()];
+}
+
+test('patching adds the upgrade command to post-autoload-dump', function () {
+    $result = patchComposerScriptsIn(json_encode([
+        'name' => 'acme/app',
+        'scripts' => [
+            'post-autoload-dump' => ['@php artisan package:discover --ansi'],
+        ],
+    ]));
+
+    $decoded = json_decode($result['contents'], true);
+
+    expect($decoded['scripts']['post-autoload-dump'])->toBe([
+        '@php artisan package:discover --ansi',
+        '@php artisan laravelcrm:upgrade --ansi',
+    ]);
+});
+
+test('patching appends after package:discover rather than before it', function () {
+    // package:discover has to have run before an artisan command from a package
+    // can be resolved at all.
+    $result = patchComposerScriptsIn(json_encode([
+        'scripts' => ['post-autoload-dump' => ['@php artisan package:discover --ansi']],
+    ]));
+
+    $hook = json_decode($result['contents'], true)['scripts']['post-autoload-dump'];
+
+    expect(array_search('@php artisan laravelcrm:upgrade --ansi', $hook, true))
+        ->toBeGreaterThan(array_search('@php artisan package:discover --ansi', $hook, true));
+});
+
+test('patching creates the scripts block when the host has none', function () {
+    $result = patchComposerScriptsIn(json_encode(['name' => 'acme/app']));
+
+    $decoded = json_decode($result['contents'], true);
+
+    expect($decoded['name'])->toBe('acme/app')
+        ->and($decoded['scripts']['post-autoload-dump'])->toBe(['@php artisan laravelcrm:upgrade --ansi']);
+});
+
+test('patching normalises a string hook into an array', function () {
+    // Composer allows a bare string as well as a list of them.
+    $result = patchComposerScriptsIn(json_encode([
+        'scripts' => ['post-autoload-dump' => '@php artisan package:discover --ansi'],
+    ]));
+
+    expect(json_decode($result['contents'], true)['scripts']['post-autoload-dump'])->toBe([
+        '@php artisan package:discover --ansi',
+        '@php artisan laravelcrm:upgrade --ansi',
+    ]);
+});
+
+test('patching is idempotent', function () {
+    $first = patchComposerScriptsIn(json_encode([
+        'scripts' => ['post-autoload-dump' => ['@php artisan package:discover --ansi']],
+    ]));
+
+    $second = patchComposerScriptsIn($first['contents']);
+
+    expect($second['contents'])->toBe($first['contents'])
+        ->and($second['output'])->toContain('already runs laravelcrm:upgrade');
+});
+
+test('patching leaves the rest of composer.json intact', function () {
+    $original = json_encode([
+        'name' => 'acme/app',
+        'require' => ['php' => '^8.2', 'venturedrake/laravel-crm' => '^2.4'],
+        'autoload' => ['psr-4' => ['App\\' => 'app/']],
+        'scripts' => ['test' => 'phpunit'],
+    ]);
+
+    $decoded = json_decode(patchComposerScriptsIn($original)['contents'], true);
+
+    expect($decoded['require'])->toBe(['php' => '^8.2', 'venturedrake/laravel-crm' => '^2.4'])
+        ->and($decoded['autoload'])->toBe(['psr-4' => ['App\\' => 'app/']])
+        ->and($decoded['scripts']['test'])->toBe('phpunit');
+});
+
+test('patching preserves empty JSON objects rather than turning them into arrays', function () {
+    // json_decode($json, true) maps an empty object to an empty PHP array, which
+    // re-encodes as `[]` — and composer rejects a manifest whose "require-dev"
+    // or "config" is an array. Whatever else this method does, it must not
+    // rewrite a valid composer.json into an invalid one.
+    $original = '{"name":"acme/app","require-dev":{},"config":{},"extra":{"laravel":{"dont-discover":[]}}}';
+
+    $patched = patchComposerScriptsIn($original)['contents'];
+
+    expect($patched)->toContain('"require-dev": {}')
+        ->and($patched)->toContain('"config": {}')
+        // A genuinely empty *array* still round-trips as an array.
+        ->and($patched)->toContain('"dont-discover": []')
+        ->and(json_decode($patched, true)['scripts']['post-autoload-dump'])
+        ->toBe(['@php artisan laravelcrm:upgrade --ansi']);
+});
+
+test('patching writes unescaped slashes so paths stay readable', function () {
+    $decoded = patchComposerScriptsIn(json_encode(['config' => ['vendor-dir' => 'vendor/custom']]));
+
+    expect($decoded['contents'])->toContain('vendor/custom')
+        ->and($decoded['contents'])->not->toContain('vendor\\/custom');
+});
+
+test('malformed composer.json is reported, not corrupted', function () {
+    $malformed = '{ "name": "acme/app", ';
+
+    $result = patchComposerScriptsIn($malformed);
+
+    expect($result['contents'])->toBe($malformed)
+        ->and($result['output'])->toContain('Could not parse')
+        ->and($result['output'])->toContain('laravelcrm:upgrade');
+});
+
+test('a missing composer.json is reported, not created', function () {
+    $result = patchComposerScriptsIn(null);
+
+    expect($result['contents'])->toBeNull()
+        ->and($result['output'])->toContain('Could not locate');
+});
+
+test('composer.json patching is skipped in production mode', function () {
+    // Grouped with patchUserModel and configureEnv inside the same
+    // `! $this->isProduction()` block: a production box is deployed to, not
+    // installed into, and its composer.json belongs to the release artifact.
+    $source = installCommandSource();
+
+    $guard = strpos($source, 'if (! $this->isProduction()) {');
+    $patch = strpos($source, '$this->patchComposerScripts();');
+    $publishing = strpos($source, "\$this->info('Publishing configuration...');");
+
+    expect($patch)->not->toBeFalse()
+        ->and($guard)->not->toBeFalse()
+        ->and($patch)->toBeGreaterThan($guard)
+        ->and($patch)->toBeLessThan($publishing);
 });
