@@ -18,6 +18,8 @@ trait HasTaskCommon
 
     public $description;
 
+    public $start_at;
+
     public $due_at;
 
     public $user_owner_id;
@@ -34,7 +36,13 @@ trait HasTaskCommon
         return array_merge([
             'name' => 'required|max:255',
             'description' => 'nullable',
-            'due_at' => 'nullable',
+            'start_at' => 'nullable',
+            // Only compare against a start date the user actually entered: Laravel resolves a
+            // null start_at to now(), which would forbid an otherwise valid past due date.
+            'due_at' => array_filter([
+                'nullable',
+                filled($this->start_at) ? 'after_or_equal:start_at' : null,
+            ]),
             'user_owner_id' => 'nullable',
             'user_assigned_id' => 'nullable',
         ], $this->customFieldRules());

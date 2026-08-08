@@ -33,6 +33,12 @@
                     <strong>{{ ucfirst(__('laravel-crm::lang.created')) }}</strong>
                     <span>{{ $task->created_at->diffForHumans() }}</span>
                 </div>
+                @if($task->start_at)
+                    <div class="flex flex-row gap-5">
+                        <strong>{{ ucfirst(__('laravel-crm::lang.start_at')) }}</strong>
+                        <span>{{ $task->start_at->diffForHumans() }}</span>
+                    </div>
+                @endif
                 @if($task->due_at)
                     <div class="flex flex-row gap-5">
                         <strong>{{ ucfirst(__('laravel-crm::lang.due_date')) }}</strong>

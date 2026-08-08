@@ -4,7 +4,7 @@
         <x-mary-form wire:submit="save">
             <div class="grid gap-3" wire:key="details">
                 <x-mary-input wire:model="name" label="{{ ucfirst(__('laravel-crm::lang.task')) }}" />
-                <x-mary-datetime wire:model="due_at" label="{{ ucfirst(__('laravel-crm::lang.whens_it_due')) }}" type="datetime-local"  />
+                @include('laravel-crm::livewire.tasks.partials.schedule-fields')
                 <x-mary-textarea wire:model="description" label="{{ ucfirst(__('laravel-crm::lang.further_details')) }}" rows="5" />
                 <x-mary-select label="{{ ucfirst(__('laravel-crm::lang.who_requested_the_task')) }}" wire:model="user_owner_id" :options="$users" />
                 <x-mary-select label="{{ ucfirst(__('laravel-crm::lang.who_is_responsible')) }}" wire:model="user_assigned_id" :options="$users" />

@@ -9,8 +9,11 @@
                     @else
                         <x-mary-badge value="{{ ucfirst(__('laravel-crm::lang.pending')) }}" class="badge-sm badge-primary" />
                     @endif
+                    @if($task->start_at)
+                        <x-mary-badge value="{{ ucfirst(__('laravel-crm::lang.start_at')) }} {{ $task->start_at->format('h:i A') }} {{ __('laravel-crm::lang.on') }} {{ $task->start_at->toFormattedDateString() }}" class="badge-soft badge-sm" />
+                    @endif
                     @if($task->due_at)
-                        <x-mary-badge value="{{ ucfirst(__('laravel-crm::lang.due')) }} {{ $task->due_at->format('h:i A') }} on {{ $task->due_at->toFormattedDateString() }}" class="badge-soft badge-sm" />
+                        <x-mary-badge value="{{ ucfirst(__('laravel-crm::lang.due')) }} {{ $task->due_at->format('h:i A') }} {{ __('laravel-crm::lang.on') }} {{ $task->due_at->toFormattedDateString() }}" class="badge-soft badge-sm" />
                     @endif
                 </div>
                 @if($related)
@@ -53,7 +56,7 @@
             <x-mary-form wire:submit="update">
                 <div class="grid gap-3">
                     <x-mary-input wire:model="name" label="{{ ucfirst(__('laravel-crm::lang.task')) }}" />
-                    <x-mary-datetime wire:model="due_at" label="{{ ucfirst(__('laravel-crm::lang.whens_it_due')) }}" />
+                    @include('laravel-crm::livewire.tasks.partials.schedule-fields')
                     <x-mary-textarea wire:model="description" label="{{ ucfirst(__('laravel-crm::lang.further_details')) }}" rows="5" />
                     <x-mary-select label="{{ ucfirst(__('laravel-crm::lang.who_requested_the_task')) }}" wire:model="user_owner_id" :options="$users" />
                     <x-mary-select label="{{ ucfirst(__('laravel-crm::lang.who_is_responsible')) }}" wire:model="user_assigned_id" :options="$users" />
