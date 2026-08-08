@@ -13,6 +13,7 @@ use VentureDrake\LaravelCrm\Models\XeroInvoice;
 use VentureDrake\LaravelCrm\Repositories\InvoiceRepository;
 use VentureDrake\LaravelCrm\Support\Money;
 use VentureDrake\LaravelCrm\Support\PdfTemplateRegistry;
+use VentureDrake\LaravelCrm\Support\Quantity;
 
 class InvoiceService
 {
@@ -53,14 +54,14 @@ class InvoiceService
             foreach ($request->products as $invoiceLine) {
                 $invoiceLineOrder++;
 
-                if (isset($invoiceLine['id']) && $invoiceLine['quantity'] > 0) {
+                if (isset($invoiceLine['id']) && Quantity::isPositive($invoiceLine['quantity'])) {
                     if (! Product::find($invoiceLine['id'])) {
                         $newProduct = $this->addProduct($invoiceLine, $request);
                         $invoiceLine['id'] = $newProduct->id;
                     }
                 }
 
-                if (isset($invoiceLine['id']) && $invoiceLine['id'] > 0 && $invoiceLine['quantity'] > 0) {
+                if (isset($invoiceLine['id']) && $invoiceLine['id'] > 0 && Quantity::isPositive($invoiceLine['quantity'])) {
                     $taxRate = 0;
                     if ($product = Product::find($invoiceLine['id'])) {
                         if ($product->taxRate) {
@@ -161,7 +162,7 @@ class InvoiceService
                 $invoiceLineOrder++;
 
                 if (isset($line['invoice_line_id']) && $invoiceLine = InvoiceLine::find($line['invoice_line_id'])) {
-                    if (! isset($line['id']) || $line['quantity'] == 0) {
+                    if (! isset($line['id']) || Quantity::isZero($line['quantity'])) {
                         $invoiceLine->delete();
                     } else {
                         if (! Product::find($line['id'])) {
@@ -169,7 +170,7 @@ class InvoiceService
                             $line['id'] = $newProduct->id;
                         }
 
-                        if (isset($line['id']) && $line['id'] > 0 && $line['quantity'] > 0) {
+                        if (isset($line['id']) && $line['id'] > 0 && Quantity::isPositive($line['quantity'])) {
                             $taxRate = 0;
                             if ($product = Product::find($invoiceLine['id'])) {
                                 if ($product->taxRate) {
@@ -198,13 +199,13 @@ class InvoiceService
                             $invoiceLineIds[] = $invoiceLine->id;
                         }
                     }
-                } elseif (isset($line['id']) && $line['quantity'] > 0) {
+                } elseif (isset($line['id']) && Quantity::isPositive($line['quantity'])) {
                     if (! Product::find($line['id'])) {
                         $newProduct = $this->addProduct($line, $request);
                         $line['id'] = $newProduct->id;
                     }
 
-                    if (isset($line['id']) && $line['id'] > 0 && $line['quantity'] > 0) {
+                    if (isset($line['id']) && $line['id'] > 0 && Quantity::isPositive($line['quantity'])) {
                         $taxRate = 0;
                         if ($product = Product::find($line['id'])) {
                             if ($product->taxRate) {

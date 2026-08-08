@@ -3,16 +3,19 @@
 namespace VentureDrake\LaravelCrm\Livewire\Deals\Traits;
 
 use Mary\Traits\Toast;
+use VentureDrake\LaravelCrm\Livewire\Traits\HasLineItemQuantityRules;
 use VentureDrake\LaravelCrm\Models\Deal;
 use VentureDrake\LaravelCrm\Models\Product;
 use VentureDrake\LaravelCrm\Services\DealService;
 use VentureDrake\LaravelCrm\Services\OrganizationService;
 use VentureDrake\LaravelCrm\Services\PersonService;
+use VentureDrake\LaravelCrm\Support\Quantity;
 use VentureDrake\LaravelCrm\Traits\HasCustomFormFields;
 
 trait HasDealCommon
 {
     use HasCustomFormFields;
+    use HasLineItemQuantityRules;
     use Toast;
 
     protected DealService $dealService;
@@ -92,7 +95,7 @@ trait HasDealCommon
             'organization_id' => 'required_without_all:person_name,person_id,organization_name|max:255',
             'title' => 'required|max:255',
             'amount' => 'nullable|numeric',
-        ], $this->customFieldRules());
+        ], $this->lineItemQuantityRules(), $this->customFieldRules());
     }
 
     protected function messages()
@@ -102,7 +105,7 @@ trait HasDealCommon
             'organization_name.required_without_all' => 'The organization field is required if no contact person.',
             'person_id.required_without_all' => 'The contact person field is required if no organization.',
             'organization_id.required_without_all' => 'The organization field is required of no contact person.',
-        ], $this->customFieldMessages());
+        ], $this->lineItemQuantityMessages(), $this->customFieldMessages());
     }
 
     protected function validationAttributes()
@@ -139,7 +142,7 @@ trait HasDealCommon
         foreach ($this->products as $index => $product) {
             if ($dealProduct = Product::find($product['id'])) {
                 $price = $dealProduct->getDefaultPrice()->unit_price ?? 0;
-                $quantity = (int) $product['quantity'] ?? 1;
+                $quantity = Quantity::toFloat($product['quantity'] ?? 1);
                 $this->products[$index]['price'] = ($price / 100);
                 $this->products[$index]['amount'] = ($price / 100) * $quantity;
             } elseif ($updating[1] == 'id') {

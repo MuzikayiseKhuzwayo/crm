@@ -96,11 +96,11 @@ class PdfSampleData
         $invoice->due_date = now()->addDays(30);
         $invoice->terms = 'Net 30';
         $invoice->currency = 'USD';
-        $invoice->subtotal = 2700;
-        $invoice->tax = 270;
-        $invoice->total = 2970;
+        $invoice->subtotal = 3450;
+        $invoice->tax = 345;
+        $invoice->total = 3795;
         $invoice->amount_paid = 0;
-        $invoice->amount_due = 2970;
+        $invoice->amount_due = 3795;
 
         $lines = new Collection;
         foreach (self::lineItemSeeds() as $seed) {
@@ -135,11 +135,11 @@ class PdfSampleData
         $order->order_id = 'ORD-SAMPLE';
         $order->reference = 'REF-ORD-001';
         $order->currency = 'USD';
-        $order->subtotal = 2700;
+        $order->subtotal = 3450;
         $order->discount = 0;
-        $order->tax = 270;
+        $order->tax = 345;
         $order->adjustments = 0;
-        $order->total = 2970;
+        $order->total = 3795;
 
         $products = new Collection;
         foreach (self::lineItemSeeds() as $seed) {
@@ -174,9 +174,9 @@ class PdfSampleData
         $purchaseOrder->issue_date = now();
         $purchaseOrder->delivery_date = now()->addDays(14);
         $purchaseOrder->currency = 'USD';
-        $purchaseOrder->subtotal = 2700;
-        $purchaseOrder->tax = 270;
-        $purchaseOrder->total = 2970;
+        $purchaseOrder->subtotal = 3450;
+        $purchaseOrder->tax = 345;
+        $purchaseOrder->total = 3795;
 
         $lines = new Collection;
         foreach (self::lineItemSeeds() as $seed) {
@@ -251,11 +251,11 @@ class PdfSampleData
         $quote->expire_at = now()->addDays(30);
         $quote->terms = 'Valid for 30 days';
         $quote->currency = 'USD';
-        $quote->subtotal = 2700;
+        $quote->subtotal = 3450;
         $quote->discount = 0;
-        $quote->tax = 270;
+        $quote->tax = 345;
         $quote->adjustments = 0;
-        $quote->total = 2970;
+        $quote->total = 3795;
 
         $products = new Collection;
         foreach (self::lineItemSeeds() as $seed) {
@@ -287,7 +287,7 @@ class PdfSampleData
      * multiply by 100 to store as cents, so the on-model values round-trip
      * through the money() helper for display.
      *
-     * @return array<int, array{name:string, description:string, quantity:int, price:int, tax_amount:int, amount:int}>
+     * @return array<int, array{name:string, description:string, quantity:float, price:int, tax_amount:int, amount:int}>
      */
     protected static function lineItemSeeds(): array
     {
@@ -295,10 +295,15 @@ class PdfSampleData
             [
                 'name' => 'Sample product A',
                 'description' => 'First fabricated line item — long enough to exercise wrapping.',
-                'quantity' => 2,
+                // Fractional on purpose: quantity is decimal(15,3) so a product
+                // can be sold by weight, and the previews are the only place
+                // the templates get to prove they render one. 3.5 x 500 keeps
+                // the row self-consistent and its 1750 amount sums into the
+                // 3450 subtotal.
+                'quantity' => 3.5,
                 'price' => 500,
-                'tax_amount' => 100,
-                'amount' => 1000,
+                'tax_amount' => 175,
+                'amount' => 1750,
             ],
             [
                 'name' => 'Sample product B',
@@ -315,7 +320,7 @@ class PdfSampleData
                 // and money() reads an int as minor units but a float as a
                 // major amount — so a decimal price here renders as
                 // $31,667.00 instead of $316.67. 5 x 190 keeps the row
-                // self-consistent and the 950 amount summing into the 2700
+                // self-consistent and the 950 amount summing into the 3450
                 // subtotal.
                 'quantity' => 5,
                 'price' => 190,

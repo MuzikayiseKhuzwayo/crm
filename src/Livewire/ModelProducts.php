@@ -6,6 +6,7 @@ use Livewire\Component;
 use VentureDrake\LaravelCrm\Models\Product;
 use VentureDrake\LaravelCrm\Models\TaxRate;
 use VentureDrake\LaravelCrm\Support\Money;
+use VentureDrake\LaravelCrm\Support\Quantity;
 
 class ModelProducts extends Component
 {
@@ -60,41 +61,29 @@ class ModelProducts extends Component
 
                 case 'Order':
                     foreach ($this->model->orderProducts as $orderProduct) {
+                        // Reset per iteration - leaving it set leaks the previous
+                        // line's remainder onto a line that does not draw down.
+                        $quantityRemaining = null;
+
                         if ($this->creating == 'Invoice' && $this->from == 'Order') {
-                            $quantities = [];
-                            $quantityRemaining = $orderProduct->quantity;
+                            $quantityRemaining = Quantity::toFloat($orderProduct->quantity);
 
                             foreach ($this->model->invoices as $invoice) {
                                 if ($invoiceProduct = $invoice->invoiceLines()->where('order_product_id', $orderProduct->id)->first()) {
-                                    $quantityRemaining -= $invoiceProduct->quantity;
+                                    $quantityRemaining -= Quantity::toFloat($invoiceProduct->quantity);
                                 }
                             }
-
-                            for ($i = 0; $i <= $quantityRemaining; $i++) {
-                                $quantities[] = [
-                                    'id' => $i,
-                                    'name' => $i,
-                                ];
-                            }
                         } elseif ($this->creating == 'Delivery' && $this->from == 'Order') {
-                            $quantities = [];
-                            $quantityRemaining = $orderProduct->quantity;
+                            $quantityRemaining = Quantity::toFloat($orderProduct->quantity);
 
                             foreach ($this->model->deliveries as $delivery) {
                                 if ($deliveryProduct = $delivery->deliveryProducts()->where('order_product_id', $orderProduct->id)->first()) {
-                                    $quantityRemaining -= $deliveryProduct->quantity;
+                                    $quantityRemaining -= Quantity::toFloat($deliveryProduct->quantity);
                                 }
                             }
-
-                            for ($i = 0; $i <= $quantityRemaining; $i++) {
-                                $quantities[] = [
-                                    'id' => $i,
-                                    'name' => $i,
-                                ];
-                            }
                         } elseif ($this->creating == 'PurchaseOrder' && $this->from == 'Order') {
-                            $quantityRemaining = $orderProduct->quantity;
-
+                            // Not capped: the drawdown below is commented out, so
+                            // there is no remainder to cap against.
                             /*foreach ($this->model->purchaseOrders as $purchaseOrder) {
                                  if ($purchaseOrderProduct = $purchaseOrder->purchaseOrderLines()->where('order_product_id', $orderProduct->id)->first()) {
                                      $quantityRemaining -= $purchaseOrderProduct->quantity;
@@ -102,11 +91,15 @@ class ModelProducts extends Component
                             }*/
                         }
 
+                        if ($quantityRemaining !== null) {
+                            $quantityRemaining = max(0.0, Quantity::round($quantityRemaining));
+                        }
+
                         $this->products[] = [
                             'order_product_id' => $orderProduct->id,
                             'id' => $orderProduct->product_id,
                             'name' => $orderProduct->product->name,
-                            'quantities' => $quantities ?? [],
+                            'quantity_max' => $quantityRemaining,
                             'quantity' => $quantityRemaining ?? $orderProduct->quantity,
                             'unit_price' => $orderProduct->price / 100,
                             'tax_rate' => $orderProduct->tax_rate,
@@ -180,6 +173,10 @@ class ModelProducts extends Component
         if (count($updating) > 1) {
             $index = $updating[0];
 
+            // Ahead of the Product::find() below, because a Delivery line has no
+            // product id and so never reaches recalculateProduct().
+            $this->clampQuantity($index);
+
             if ($updating[1] == 'id') {
                 if ($product = Product::find($value)) {
                     $this->products[$index]['unit_price'] = (($product->getDefaultPrice()->unit_price ?? 0) / 100);
@@ -189,6 +186,10 @@ class ModelProducts extends Component
             } elseif ($product = Product::find($this->products[$index]['id'] ?? null)) {
                 $this->recalculateProduct($index, $product);
             }
+        } else {
+            foreach (array_keys($this->products) as $index) {
+                $this->clampQuantity($index);
+            }
         }
 
         $this->recalculateTotals();
@@ -197,12 +198,54 @@ class ModelProducts extends Component
     }
 
     /**
+     * Round a typed quantity to the stored scale and hold it inside the
+     * amount still outstanding on the order line it draws down.
+     *
+     * The invoice and delivery forms used to pick their quantity from a
+     * `<select>` built by an integer loop over the remainder, which was the
+     * only thing stopping an over-invoice - and only in the browser. A
+     * decimal quantity cannot come from a dropdown, so the cap moves here.
+     *
+     * This is the live nudge, not the guard: `quantity_max` is a public
+     * property and so round-trips through the browser. QuantityWithinRemaining
+     * recomputes the remainder from the order line on submit.
+     */
+    protected function clampQuantity($index): void
+    {
+        if (! isset($this->products[$index]) || ! array_key_exists('quantity', $this->products[$index])) {
+            return;
+        }
+
+        $value = $this->products[$index]['quantity'];
+
+        // A blank or absent quantity stays blank - it is not a quantity of
+        // zero, and turning it into one would have the services' isPositive()
+        // guards drop the line.
+        if ($value === null || $value === '') {
+            return;
+        }
+
+        $quantity = max(0.0, Quantity::round($value));
+        $max = $this->products[$index]['quantity_max'] ?? null;
+
+        if ($max !== null && Quantity::greaterThan($quantity, $max)) {
+            $quantity = Quantity::round($max);
+
+            $this->addError("products.$index.quantity", __('laravel-crm::lang.quantity_exceeds_remaining', [
+                'remaining' => Quantity::format($max),
+            ]));
+        }
+
+        $this->products[$index]['quantity'] = $quantity;
+    }
+
+    /**
      * Recalculate a single line from its unit price, quantity and tax rate.
      */
     protected function recalculateProduct($index, Product $product): void
     {
         $taxRate = $this->resolveTaxRate($product);
-        $quantity = (int) ($this->products[$index]['quantity'] ?? 1);
+        $quantity = Quantity::toFloat($this->products[$index]['quantity'] ?? 1);
         $unitPrice = Money::toFloat($this->products[$index]['unit_price'] ?? 0);
 
         $this->products[$index]['tax_rate'] = $taxRate;
@@ -259,6 +302,7 @@ class ModelProducts extends Component
             'id' => null,
             'name' => null,
             'quantity' => 1,
+            'quantity_max' => null,
             'unit_price' => null,
             'tax_rate' => null,
             'tax_amount' => null,

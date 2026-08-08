@@ -2,20 +2,53 @@
 
 namespace VentureDrake\LaravelCrm\Http\Helpers\CheckAmount;
 
-function subTotal($model)
+use VentureDrake\LaravelCrm\Support\Quantity;
+
+/**
+ * Half a cent - the smallest amount the stored integer cents can tell apart.
+ */
+const TOLERANCE = 0.5;
+
+/**
+ * Does a computed money value agree with the one stored on the record?
+ *
+ * Prices are integer cents and quantities are decimal(15,3), so a line of
+ * 3.5 at $9.99 computes 3496.5 cents against a stored 3497 - the computed
+ * value is rounded to the cent the same way the stored one was before the
+ * two are compared. An exact `==` would put a red mismatch icon on every
+ * fractional line and a "broken document" badge on the index.
+ */
+function matches(float $computed, $stored): bool
+{
+    return abs(round($computed) - (float) $stored) < TOLERANCE;
+}
+
+/**
+ * A line's value in cents, rounded the way the stored one was.
+ *
+ * The form rounds each line to the cent before summing them into the
+ * subtotal, so the check has to round per line too. Summing the raw
+ * products and rounding once at the end accumulates the half-cent
+ * remainders - two lines of 0.5 at $9.99 store 500 + 500 = 1000 but
+ * compute 499.5 + 499.5 = 999, and the document reads as broken.
+ */
+function lineTotal($item): float
+{
+    return round(Quantity::toFloat($item->quantity) * $item->price);
+}
+
+function subTotal($model): bool
 {
     $total = 0;
 
     foreach (\VentureDrake\LaravelCrm\Http\Helpers\CheckAmount\getItems($model) as $item) {
-        $total += $item->quantity * $item->price;
+        $total += lineTotal($item);
     }
 
-    if ($model->subtotal == $total) {
-        return true;
-    }
+    return matches($total, $model->subtotal);
 }
 
-function tax($model)
+function tax($model): bool
 {
     $total = 0;
 
@@ -23,24 +56,20 @@ function tax($model)
         $total += $item->tax_amount;
     }
 
-    if ($model->tax == $total) {
-        return true;
-    }
+    return matches($total, $model->tax);
 }
 
-function total($model)
+function total($model): bool
 {
     $total = 0;
 
     foreach (\VentureDrake\LaravelCrm\Http\Helpers\CheckAmount\getItems($model) as $item) {
-        $total += $item->quantity * $item->price;
+        $total += lineTotal($item);
     }
 
     $total = $total - $model->discount + $model->tax + $model->adjustments;
 
-    if ($model->total == $total) {
-        return true;
-    }
+    return matches($total, $model->total);
 }
 
 function lineAmount($item): bool
@@ -49,7 +78,7 @@ function lineAmount($item): bool
         return false;
     }
 
-    return ($item->price * $item->quantity) == $item->amount;
+    return matches(lineTotal($item), $item->amount);
 }
 
 function getItems($model)

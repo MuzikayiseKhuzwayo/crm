@@ -73,7 +73,7 @@ test('POST /invoices creates an invoice with nested line items', function () {
     expect($payload['total'])->toEqual(330.00);
     expect($payload['line_items'])->toHaveCount(1);
     expect($payload['line_items'][0]['product_id'])->toBe($product->external_id);
-    expect($payload['line_items'][0]['quantity'])->toBe(3);
+    expect($payload['line_items'][0]['quantity'])->toEqual(3.0);
     expect($payload['line_items'][0]['amount'])->toEqual(300.00);
 
     $stored = Invoice::where('external_id', $payload['id'])->first();
@@ -165,10 +165,10 @@ test('PUT /invoices/{invoice} updates an existing invoice line in place', functi
     expect($response->json('data.reference'))->toBe('INV-A-updated');
     expect($response->json('data.line_items'))->toHaveCount(1);
     expect($response->json('data.line_items.0.id'))->toBe($lineId);
-    expect($response->json('data.line_items.0.quantity'))->toBe(5);
+    expect($response->json('data.line_items.0.quantity'))->toEqual(5.0);
 
     $stored = InvoiceLine::where('external_id', $lineId)->first();
-    expect((int) $stored->quantity)->toBe(5);
+    expect($stored->quantity)->toBe(5.0);
     expect((int) $stored->amount)->toBe(25000);
 });
 
@@ -182,4 +182,58 @@ test('DELETE /invoices/{invoice} soft-deletes the invoice', function () {
 
     expect(Invoice::query()->where('external_id', $invoice->external_id)->exists())->toBeFalse();
     expect(Invoice::withTrashed()->where('external_id', $invoice->external_id)->exists())->toBeTrue();
+});
+
+/*
+ * Decimal quantities - see the matching block in QuoteApiTest.
+ */
+
+test('POST /invoices accepts a fractional line item quantity', function () {
+    $user = invoiceApiUser();
+    $product = createInvoiceApiProduct('By weight');
+
+    $response = $this->withHeaders(invoiceApiHeaders($user))
+        ->postJson('/crm/api/v2/invoices', [
+            'currency' => 'USD',
+            'line_items' => [
+                ['product_id' => $product->external_id, 'quantity' => 3.5, 'unit_price' => 1.99, 'amount' => 6.97],
+            ],
+        ]);
+
+    $response->assertStatus(201);
+
+    expect($response->json('data.line_items.0.quantity'))->toBe(3.5);
+
+    $stored = Invoice::where('external_id', $response->json('data.id'))->first();
+    expect($stored->invoiceLines->first()->quantity)->toBe(3.5);
+});
+
+test('POST /invoices returns 422 for a quantity finer than 3 decimal places', function () {
+    $user = invoiceApiUser();
+    $product = createInvoiceApiProduct('By weight');
+
+    $this->withHeaders(invoiceApiHeaders($user))
+        ->postJson('/crm/api/v2/invoices', [
+            'currency' => 'USD',
+            'line_items' => [
+                ['product_id' => $product->external_id, 'quantity' => 3.5555, 'unit_price' => 1.99, 'amount' => 7.09],
+            ],
+        ])
+        ->assertStatus(422)
+        ->assertJsonValidationErrors(['line_items.0.quantity']);
+});
+
+test('POST /invoices returns 422 for a zero quantity', function () {
+    $user = invoiceApiUser();
+    $product = createInvoiceApiProduct('By weight');
+
+    $this->withHeaders(invoiceApiHeaders($user))
+        ->postJson('/crm/api/v2/invoices', [
+            'currency' => 'USD',
+            'line_items' => [
+                ['product_id' => $product->external_id, 'quantity' => 0, 'unit_price' => 1.99, 'amount' => 0],
+            ],
+        ])
+        ->assertStatus(422)
+        ->assertJsonValidationErrors(['line_items.0.quantity']);
 });

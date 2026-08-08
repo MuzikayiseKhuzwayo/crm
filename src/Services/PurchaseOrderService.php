@@ -15,6 +15,7 @@ use VentureDrake\LaravelCrm\Models\XeroPurchaseOrder;
 use VentureDrake\LaravelCrm\Repositories\PurchaseOrderRepository;
 use VentureDrake\LaravelCrm\Support\Money;
 use VentureDrake\LaravelCrm\Support\PdfTemplateRegistry;
+use VentureDrake\LaravelCrm\Support\Quantity;
 
 class PurchaseOrderService
 {
@@ -65,14 +66,14 @@ class PurchaseOrderService
             $total = 0;
 
             foreach ($request->products as $purchaseOrderLine) {
-                if (isset($purchaseOrderLine['id']) && $purchaseOrderLine['quantity'] > 0) {
+                if (isset($purchaseOrderLine['id']) && Quantity::isPositive($purchaseOrderLine['quantity'])) {
                     if (! Product::find($purchaseOrderLine['id'])) {
                         $newProduct = $this->addProduct($purchaseOrderLine, $request);
                         $purchaseOrderLine['id'] = $newProduct->id;
                     }
                 }
 
-                if (isset($purchaseOrderLine['id']) && $purchaseOrderLine['id'] > 0 && $purchaseOrderLine['quantity'] > 0) {
+                if (isset($purchaseOrderLine['id']) && $purchaseOrderLine['id'] > 0 && Quantity::isPositive($purchaseOrderLine['quantity'])) {
                     $taxRate = 0;
                     if ($product = Product::find($purchaseOrderLine['id'])) {
                         if ($product->taxRate) {
@@ -212,7 +213,7 @@ class PurchaseOrderService
 
             foreach ($request->purchaseOrderLines as $line) {
                 if (isset($line['purchase_order_line_id']) && $purchaseOrderLine = PurchaseOrderLine::find($line['purchase_order_line_id'])) {
-                    if (! isset($line['product_id']) || $line['quantity'] == 0) {
+                    if (! isset($line['product_id']) || Quantity::isZero($line['quantity'])) {
                         $purchaseOrderLine->delete();
                     } else {
                         if (! Product::find($line['product_id'])) {
@@ -220,7 +221,7 @@ class PurchaseOrderService
                             $line['product_id'] = $newProduct->id;
                         }
 
-                        if (isset($line['product_id']) && $line['product_id'] > 0 && $line['quantity'] > 0) {
+                        if (isset($line['product_id']) && $line['product_id'] > 0 && Quantity::isPositive($line['quantity'])) {
                             $taxRate = 0;
                             if ($product = Product::find($purchaseOrderLine['product_id'])) {
                                 if ($product->taxRate) {
@@ -248,13 +249,13 @@ class PurchaseOrderService
                             $purchaseOrderLineIds[] = $purchaseOrderLine->id;
                         }
                     }
-                } elseif (isset($line['product_id']) && $line['quantity'] > 0) {
+                } elseif (isset($line['product_id']) && Quantity::isPositive($line['quantity'])) {
                     if (! Product::find($line['product_id'])) {
                         $newProduct = $this->addProduct($line, $request);
                         $line['product_id'] = $newProduct->id;
                     }
 
-                    if (isset($line['product_id']) && $line['product_id'] > 0 && $line['quantity'] > 0) {
+                    if (isset($line['product_id']) && $line['product_id'] > 0 && Quantity::isPositive($line['quantity'])) {
                         $taxRate = 0;
                         if ($product = Product::find($line['product_id'])) {
                             if ($product->taxRate) {

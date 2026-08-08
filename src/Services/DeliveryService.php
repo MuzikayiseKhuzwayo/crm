@@ -7,6 +7,7 @@ use VentureDrake\LaravelCrm\Models\Address;
 use VentureDrake\LaravelCrm\Models\Delivery;
 use VentureDrake\LaravelCrm\Repositories\DeliveryRepository;
 use VentureDrake\LaravelCrm\Support\PdfTemplateRegistry;
+use VentureDrake\LaravelCrm\Support\Quantity;
 
 class DeliveryService
 {
@@ -35,7 +36,7 @@ class DeliveryService
 
         if (isset($request->products)) {
             foreach ($request->products as $product) {
-                if ($product['quantity'] > 0) {
+                if (Quantity::isPositive($product['quantity'])) {
                     $delivery->deliveryProducts()->create([
                         'order_product_id' => $product['order_product_id'],
                         'quantity' => $product['quantity'],

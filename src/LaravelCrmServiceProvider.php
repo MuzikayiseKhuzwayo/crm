@@ -823,6 +823,7 @@ class LaravelCrmServiceProvider extends ServiceProvider
                 __DIR__.'/../database/migrations/add_soft_deletes_and_last_sent_at_to_crm_user_invitations_table.php.stub' => $this->getMigrationFileName($filesystem, 'add_soft_deletes_and_last_sent_at_to_crm_user_invitations_table.php', 138),
                 __DIR__.'/../database/migrations/add_pdf_template_to_laravel_crm_tables.php.stub' => $this->getMigrationFileName($filesystem, 'add_pdf_template_to_laravel_crm_tables.php', 139),
                 __DIR__.'/../database/migrations/add_start_at_to_laravel_crm_tasks_table.php.stub' => $this->getMigrationFileName($filesystem, 'add_start_at_to_laravel_crm_tasks_table.php', 140),
+                __DIR__.'/../database/migrations/change_quantity_to_decimal_on_laravel_crm_tables.php.stub' => $this->getMigrationFileName($filesystem, 'change_quantity_to_decimal_on_laravel_crm_tables.php', 141),
             ], 'migrations');
 
             // Publishing the seeders

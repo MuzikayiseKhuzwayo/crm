@@ -3,6 +3,7 @@
 namespace VentureDrake\LaravelCrm\Livewire\Quotes\Traits;
 
 use Mary\Traits\Toast;
+use VentureDrake\LaravelCrm\Livewire\Traits\HasLineItemQuantityRules;
 use VentureDrake\LaravelCrm\Livewire\Traits\HasPdfTemplate;
 use VentureDrake\LaravelCrm\Models\Pipeline;
 use VentureDrake\LaravelCrm\Models\Quote;
@@ -14,6 +15,7 @@ use VentureDrake\LaravelCrm\Traits\HasCustomFormFields;
 trait HasQuoteCommon
 {
     use HasCustomFormFields;
+    use HasLineItemQuantityRules;
     use HasPdfTemplate;
     use Toast;
 
@@ -108,7 +110,7 @@ trait HasQuoteCommon
             'organization_id' => 'required_without_all:person_name,person_id,organization_name|max:255',
             'title' => 'required|max:255',
             'amount' => 'nullable|numeric',
-        ], $this->pdfTemplateRules(), $this->customFieldRules());
+        ], $this->lineItemQuantityRules(), $this->pdfTemplateRules(), $this->customFieldRules());
     }
 
     protected function messages()
@@ -118,7 +120,7 @@ trait HasQuoteCommon
             'organization_name.required_without_all' => 'The organization field is required if no contact person.',
             'person_id.required_without_all' => 'The contact person field is required if no organization.',
             'organization_id.required_without_all' => 'The organization field is required of no contact person.',
-        ], $this->customFieldMessages());
+        ], $this->lineItemQuantityMessages(), $this->customFieldMessages());
     }
 
     protected function validationAttributes()

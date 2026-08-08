@@ -11,6 +11,7 @@ use VentureDrake\LaravelCrm\Models\TaxRate;
 use VentureDrake\LaravelCrm\Repositories\QuoteRepository;
 use VentureDrake\LaravelCrm\Support\Money;
 use VentureDrake\LaravelCrm\Support\PdfTemplateRegistry;
+use VentureDrake\LaravelCrm\Support\Quantity;
 
 class QuoteService
 {
@@ -60,14 +61,14 @@ class QuoteService
             foreach ($request->products as $product) {
                 $quoteProductOrder++;
 
-                if (isset($product['id']) && $product['quantity'] > 0) {
+                if (isset($product['id']) && Quantity::isPositive($product['quantity'])) {
                     if (! Product::find($product['id'])) {
                         $newProduct = $this->addProduct($product, $request);
                         $product['id'] = $newProduct->id;
                     }
                 }
 
-                if (isset($product['id']) && $product['id'] > 0 && $product['quantity'] > 0) {
+                if (isset($product['id']) && $product['id'] > 0 && Quantity::isPositive($product['quantity'])) {
                     $taxRate = $this->resolveTaxRate($product['id']);
 
                     $quote->quoteProducts()->create([
@@ -122,7 +123,7 @@ class QuoteService
                 $quoteProductOrder++;
 
                 if (isset($product['quote_product_id']) && $quoteProduct = QuoteProduct::find($product['quote_product_id'])) {
-                    if (! isset($product['id']) || $product['quantity'] == 0) {
+                    if (! isset($product['id']) || Quantity::isZero($product['quantity'])) {
                         $quoteProduct->delete();
                     } else {
                         if (! Product::find($product['id'])) {
@@ -130,7 +131,7 @@ class QuoteService
                             $product['id'] = $newProduct->id;
                         }
 
-                        if (isset($product['id']) && $product['id'] > 0 && $product['quantity'] > 0) {
+                        if (isset($product['id']) && $product['id'] > 0 && Quantity::isPositive($product['quantity'])) {
                             $taxRate = $this->resolveTaxRate($product['id']);
 
                             $quoteProduct->update([
@@ -148,13 +149,13 @@ class QuoteService
                             $quoteProductIds[] = $quoteProduct->id;
                         }
                     }
-                } elseif (isset($product['id']) && $product['quantity'] > 0) {
+                } elseif (isset($product['id']) && Quantity::isPositive($product['quantity'])) {
                     if (! Product::find($product['id'])) {
                         $newProduct = $this->addProduct($product, $request);
                         $product['id'] = $newProduct->id;
                     }
 
-                    if (isset($product['id']) && $product['id'] > 0 && $product['quantity'] > 0) {
+                    if (isset($product['id']) && $product['id'] > 0 && Quantity::isPositive($product['quantity'])) {
                         $taxRate = $this->resolveTaxRate($product['id']);
 
                         $quoteProduct = $quote->quoteProducts()->create([

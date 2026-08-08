@@ -306,7 +306,7 @@ class TestSchema
             $table->text('comments')->nullable();
             $table->integer('order')->nullable();
             $table->integer('price')->nullable();
-            $table->integer('quantity')->nullable();
+            $table->decimal('quantity', 15, 3)->nullable();
             $table->decimal('tax_rate')->nullable();
             $table->integer('tax_amount')->nullable();
             $table->integer('amount')->nullable();
@@ -732,11 +732,14 @@ class TestSchema
             $table->string('external_id')->nullable();
             $table->unsignedBigInteger('team_id')->nullable();
             $table->unsignedBigInteger('delivery_id');
+            // Present in production since the create stub; Order::deliveryComplete()
+            // draws down against it.
+            $table->unsignedBigInteger('order_product_id')->nullable();
             $table->unsignedBigInteger('product_id')->nullable();
             $table->unsignedBigInteger('product_variation_id')->nullable();
             $table->text('comments')->nullable();
             $table->integer('order')->nullable();
-            $table->integer('quantity')->nullable();
+            $table->decimal('quantity', 15, 3)->nullable();
             $table->integer('price')->nullable();
             $table->decimal('tax_rate')->nullable();
             $table->integer('tax_amount')->nullable();
@@ -791,7 +794,7 @@ class TestSchema
             $table->text('comments')->nullable();
             $table->integer('order')->nullable();
             $table->integer('price')->nullable();
-            $table->integer('quantity')->nullable();
+            $table->decimal('quantity', 15, 3)->nullable();
             $table->decimal('tax_rate')->nullable();
             $table->integer('tax_amount')->nullable();
             $table->integer('amount')->nullable();
@@ -847,7 +850,7 @@ class TestSchema
             $table->text('comments')->nullable();
             $table->integer('order')->nullable();
             $table->integer('price')->nullable();
-            $table->integer('quantity')->nullable();
+            $table->decimal('quantity', 15, 3)->nullable();
             $table->decimal('tax_rate')->nullable();
             $table->integer('tax_amount')->nullable();
             $table->integer('amount')->nullable();
@@ -906,7 +909,7 @@ class TestSchema
             $table->text('comments')->nullable();
             $table->integer('order')->nullable();
             $table->integer('price')->nullable();
-            $table->integer('quantity')->nullable();
+            $table->decimal('quantity', 15, 3)->nullable();
             $table->decimal('tax_rate')->nullable();
             $table->integer('tax_amount')->nullable();
             $table->integer('amount')->nullable();
@@ -960,7 +963,7 @@ class TestSchema
             $table->text('comments')->nullable();
             $table->integer('order')->nullable();
             $table->integer('price')->nullable();
-            $table->integer('quantity')->nullable();
+            $table->decimal('quantity', 15, 3)->nullable();
             $table->decimal('tax_rate')->nullable();
             $table->integer('tax_amount')->nullable();
             $table->integer('amount')->nullable();

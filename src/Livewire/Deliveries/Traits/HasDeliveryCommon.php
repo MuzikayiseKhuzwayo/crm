@@ -3,13 +3,16 @@
 namespace VentureDrake\LaravelCrm\Livewire\Deliveries\Traits;
 
 use Mary\Traits\Toast;
+use VentureDrake\LaravelCrm\Livewire\Traits\HasLineItemQuantityRules;
 use VentureDrake\LaravelCrm\Livewire\Traits\HasPdfTemplate;
+use VentureDrake\LaravelCrm\Models\DeliveryProduct;
 use VentureDrake\LaravelCrm\Models\Invoice;
 use VentureDrake\LaravelCrm\Models\Pipeline;
 use VentureDrake\LaravelCrm\Services\DeliveryService;
 
 trait HasDeliveryCommon
 {
+    use HasLineItemQuantityRules;
     use HasPdfTemplate;
     use Toast;
 
@@ -72,5 +75,33 @@ trait HasDeliveryCommon
     public function updateProducts($products): void
     {
         $this->products = $products;
+    }
+
+    /**
+     * Delivery lines draw down the order line they were built from, so the
+     * remaining quantity is recomputed against the deliveries already
+     * raised rather than trusted from the submitted row.
+     */
+    protected function lineItemDrawdown(): ?array
+    {
+        return [
+            'model' => DeliveryProduct::class,
+            'relation' => 'delivery',
+            'key' => 'delivery_product_id',
+        ];
+    }
+
+    /**
+     * The delivery form has never run validate(), so the quantity rules are
+     * applied on their own rather than by uncommenting a bare validate() -
+     * that would switch on the pdf template and custom field rules too,
+     * which have never run here.
+     *
+     * Delivery from Order is one of the two flows that lost its bounded
+     * dropdown, so the remaining quantity does need enforcing on submit.
+     */
+    protected function validateLineItemQuantities(): void
+    {
+        $this->validate($this->lineItemQuantityRules(), $this->lineItemQuantityMessages());
     }
 }

@@ -3,8 +3,10 @@
 namespace VentureDrake\LaravelCrm\Livewire\Invoices\Traits;
 
 use Mary\Traits\Toast;
+use VentureDrake\LaravelCrm\Livewire\Traits\HasLineItemQuantityRules;
 use VentureDrake\LaravelCrm\Livewire\Traits\HasPdfTemplate;
 use VentureDrake\LaravelCrm\Models\Invoice;
+use VentureDrake\LaravelCrm\Models\InvoiceLine;
 use VentureDrake\LaravelCrm\Models\Pipeline;
 use VentureDrake\LaravelCrm\Services\InvoiceService;
 use VentureDrake\LaravelCrm\Services\OrganizationService;
@@ -14,6 +16,7 @@ use VentureDrake\LaravelCrm\Traits\HasCustomFormFields;
 trait HasInvoiceCommon
 {
     use HasCustomFormFields;
+    use HasLineItemQuantityRules;
     use HasPdfTemplate;
     use Toast;
 
@@ -77,6 +80,20 @@ trait HasInvoiceCommon
         return 'invoice';
     }
 
+    /**
+     * An invoice raised from an order draws down the order line it was built
+     * from, so the remaining quantity is recomputed against the invoices
+     * already raised rather than trusted from the submitted row.
+     */
+    protected function lineItemDrawdown(): ?array
+    {
+        return [
+            'model' => InvoiceLine::class,
+            'relation' => 'invoice',
+            'key' => 'invoice_line_id',
+        ];
+    }
+
     protected function rules()
     {
         return array_merge([
@@ -84,7 +101,7 @@ trait HasInvoiceCommon
             'person_id' => 'required_without_all:organization_name,organization_id,person_name|max:255',
             'organization_name' => 'required_without_all:person_name,person_id|max:255',
             'organization_id' => 'required_without_all:person_name,person_id,organization_name|max:255',
-        ], $this->pdfTemplateRules(), $this->customFieldRules());
+        ], $this->lineItemQuantityRules(), $this->pdfTemplateRules(), $this->customFieldRules());
     }
 
     protected function messages()
@@ -94,7 +111,7 @@ trait HasInvoiceCommon
             'organization_name.required_without_all' => 'The organization field is required if no contact person.',
             'person_id.required_without_all' => 'The contact person field is required if no organization.',
             'organization_id.required_without_all' => 'The organization field is required of no contact person.',
-        ], $this->customFieldMessages());
+        ], $this->lineItemQuantityMessages(), $this->customFieldMessages());
     }
 
     protected function validationAttributes()

@@ -4,6 +4,7 @@ namespace VentureDrake\LaravelCrm\Console;
 
 use Illuminate\Console\Command;
 use Illuminate\Support\Composer;
+use Illuminate\Support\Facades\Schema;
 use VentureDrake\LaravelCrm\Models\Deal;
 use VentureDrake\LaravelCrm\Models\Delivery;
 use VentureDrake\LaravelCrm\Models\Invoice;
@@ -108,6 +109,8 @@ class LaravelCrmUpdate extends Command
         } catch (\Throwable $e) {
             $this->warn('Migration warning: '.$e->getMessage());
         }
+
+        $this->checkQuantityColumns();
 
         $this->info('Reseeding base tables...');
 
@@ -379,5 +382,50 @@ class LaravelCrmUpdate extends Command
         }
 
         $this->info('Laravel CRM is now updated.');
+    }
+
+    /**
+     * Confirm the line item quantity columns actually widened to decimal.
+     *
+     * The migrate call above swallows its failures and this command still
+     * prints "Laravel CRM is now updated", so a failed ALTER would otherwise
+     * be silent - and the symptom is quiet too: MySQL rounds a 3.5 Kg line to
+     * 4 on write rather than raising.
+     */
+    protected function checkQuantityColumns(): void
+    {
+        $tables = [
+            'quote_products',
+            'order_products',
+            'deal_products',
+            'invoice_lines',
+            'purchase_order_lines',
+            'delivery_products',
+        ];
+
+        $stale = [];
+
+        foreach ($tables as $table) {
+            $name = config('laravel-crm.db_table_prefix').$table;
+
+            if (! Schema::hasTable($name) || ! Schema::hasColumn($name, 'quantity')) {
+                continue;
+            }
+
+            try {
+                if (Schema::getColumnType($name, 'quantity') === 'integer') {
+                    $stale[] = $name;
+                }
+            } catch (\Throwable $e) {
+                // Driver cannot introspect the column - nothing to report.
+            }
+        }
+
+        if ($stale === []) {
+            return;
+        }
+
+        $this->error('Line item quantity is still an integer column on: '.implode(', ', $stale));
+        $this->error('Decimal quantities will be rounded to whole numbers on save. Re-run "php artisan migrate --force" and check its output.');
     }
 }

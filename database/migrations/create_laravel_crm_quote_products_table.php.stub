@@ -21,7 +21,7 @@ class CreateLaravelCrmQuoteProductsTable extends Migration
             $table->unsignedBigInteger('product_id')->index()->nullable();
             $table->unsignedBigInteger('product_variation_id')->index()->nullable();
             $table->integer('price')->nullable();
-            $table->integer('quantity')->nullable();
+            $table->decimal('quantity', 15, 3)->nullable();
             $table->decimal('tax_rate')->nullable();
             $table->integer('tax_amount')->nullable();
             $table->integer('amount')->nullable();

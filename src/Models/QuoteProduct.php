@@ -5,10 +5,12 @@ namespace VentureDrake\LaravelCrm\Models;
 use Illuminate\Database\Eloquent\SoftDeletes;
 use VentureDrake\LaravelCrm\Support\Money;
 use VentureDrake\LaravelCrm\Traits\BelongsToTeams;
+use VentureDrake\LaravelCrm\Traits\HasDecimalQuantity;
 
 class QuoteProduct extends Model
 {
     use BelongsToTeams;
+    use HasDecimalQuantity;
     use SoftDeletes;
 
     protected $guarded = ['id'];
