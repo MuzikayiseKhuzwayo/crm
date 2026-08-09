@@ -4,6 +4,7 @@ namespace VentureDrake\LaravelCrm\Livewire\Portal\Features;
 
 use Livewire\Component;
 use VentureDrake\LaravelCrm\Models\Feature;
+use VentureDrake\LaravelCrm\Support\PortalTeam;
 
 class PublicFeatureShow extends Component
 {
@@ -13,29 +14,19 @@ class PublicFeatureShow extends Component
     {
         abort_unless($feature->is_public, 404);
 
-        if (config('laravel-crm.teams')) {
-            $portalTeamId = $this->portalTeamId();
+        if (PortalTeam::scoped()) {
+            // Mirrors PublicFeatureController::ensurePortalTeam(). The check
+            // is repeated here rather than trusted from the controller because
+            // Livewire re-mounts this component on every update, outside the
+            // controller action that first rendered it.
+            abort_if($feature->team_id === null, 404);
 
-            abort_if($portalTeamId === null, 404);
-            abort_if((int) $feature->team_id !== $portalTeamId, 404);
+            $featureTeamId = (int) $feature->team_id;
+
+            abort_if(PortalTeam::adopt($featureTeamId) !== $featureTeamId, 404);
         }
 
         $this->feature = $feature;
-    }
-
-    protected function portalTeamId(): ?int
-    {
-        $configured = config('laravel-crm.portal.team_id');
-
-        if ($configured !== null && $configured !== '') {
-            return (int) $configured;
-        }
-
-        if (($user = auth()->user()) && ($team = $user->currentTeam ?? null)) {
-            return (int) $team->id;
-        }
-
-        return null;
     }
 
     public function hasVoted(): bool

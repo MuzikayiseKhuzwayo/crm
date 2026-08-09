@@ -144,10 +144,23 @@ exists and composer reports the script returned a non-zero exit code. Delete the
 
 ### Migrations no longer need publishing
 
-Migrations added from this release ship as real `.php` files inside the package and are loaded
-with `loadMigrationsFrom`, so a plain `php artisan migrate` runs them. The existing `.stub` set is
-frozen and still published into your `database/migrations` — **existing hosts are unaffected and
-keep the filenames they already have.**
+Migrations added from this release ship as real `.php` files inside the package, in
+`database/updates`, and are loaded with `loadMigrationsFrom`, so a plain `php artisan migrate` runs
+them. The existing `.stub` set is frozen and still published into your `database/migrations` —
+**existing hosts are unaffected and keep the filenames they already have.**
+
+The seven migrations this release adds all arrive this way, so there is nothing to publish for any
+of them:
+
+| Migration | What it does |
+|---|---|
+| `add_perf_notified_at_to_laravel_crm_monitors_table` | Performance-alert dedup timestamp |
+| `add_recovered_notified_at_to_laravel_crm_monitors_table` | Recovery-alert dedup timestamp |
+| `create_crm_user_invitations_table` | The user invitation lifecycle |
+| `add_soft_deletes_and_last_sent_at_to_crm_user_invitations_table` | Resend + revoke support |
+| `add_pdf_template_to_laravel_crm_tables` | Per-document PDF template choice |
+| `add_start_at_to_laravel_crm_tasks_table` | Task start time |
+| `change_quantity_to_decimal_on_laravel_crm_tables` | Decimal line item quantities (see below) |
 
 One related change: newly published stubs are now stamped from a fixed `2024_01_01` epoch rather
 than the moment of publishing, so a fresh install orders them correctly against the package-loaded
@@ -197,7 +210,7 @@ success anyway, confirm the change actually landed:
 SHOW COLUMNS FROM crm_quote_products LIKE 'quantity';   -- decimal(15,3), Null: YES
 ```
 
-Two behaviour changes ride along with it:
+Three behaviour changes ride along with it:
 
 - **The Order → Invoice and Order → Delivery quantity dropdown is now a number input.** A
   dropdown cannot express 3.5. The cap on the outstanding quantity is unchanged but has
@@ -207,6 +220,116 @@ Two behaviour changes ride along with it:
   request is checked against the database rather than against anything it sent.
 - **The API `quantity` field is now a JSON number rather than an integer.** See
   [docs/api.md](api.md#quantity-accepts-decimals-up-to-3-places).
+- **`$lineItem->quantity` now reads back as a PHP `float`, not an `int`.** The new
+  `HasDecimalQuantity` trait casts it on `QuoteProduct`, `OrderProduct`, `DealProduct`,
+  `InvoiceLine`, `PurchaseOrderLine` and `DeliveryProduct`. Host code doing
+  `is_int($line->quantity)` or `$line->quantity === 2` breaks — a whole quantity of 2 now
+  compares as `2.0`, so `===` against an integer is `false` and `is_int()` is `false`. Loose
+  `==` and arithmetic are unaffected. Search your app for strict comparisons and `is_int` /
+  `gettype` checks against a line item quantity before you deploy; `(int)` casts of your own
+  still work but will silently truncate a fractional quantity, which is the thing this
+  release exists to allow.
+
+---
+
+### The per-team backfill rewrites `pipeline_stage_id` on seven tables
+
+**Teams installs only** (`laravel-crm.teams = true`) — single-tenant installs skip this
+entirely. Take a database backup before running `laravelcrm:update`, as you should for any
+release, and read this first if you have customised your pipelines.
+
+`laravelcrm:update` runs a one-time backfill (`db_update_1201`) that gives every pre-existing
+team its own copy of the CRM lookup data and pipelines, then **re-points existing records at
+the per-team pipeline stages**. Without it, `/leads/create` on a teams install renders against
+an empty per-team pipeline. The rewrite touches `pipeline_stage_id` on seven tables:
+
+| Table |
+| --- |
+| `crm_leads` |
+| `crm_deals` |
+| `crm_quotes` |
+| `crm_orders` |
+| `crm_invoices` |
+| `crm_deliveries` |
+| `crm_purchase_orders` |
+
+What it does, precisely:
+
+- **Matching is by stage name**, within the same pipeline model — a global stage on the Lead
+  pipeline maps only to the per-team Lead stage of the same name, never to a Deal stage that
+  happens to share it.
+- **Only rows belonging to the team being backfilled are touched.** Other teams' rows are left
+  where they are.
+- **A stage name with no per-team counterpart is left alone.** Nothing is nulled out and
+  nothing errors — the record keeps pointing at the global stage. If you renamed stages per
+  team, add or rename the missing stage first and re-run, otherwise those records stay on the
+  global pipeline.
+- **There is no `down()`.** This is a data migration, not a schema one, so rolling the package
+  back does not put the ids back. Restore from a backup if you need to reverse it.
+- **It is safe to re-run.** The lookup copy upserts on the team plus the row's own name, and
+  the re-point matches on `pipeline_stage_id = <global id>`, which the first run has already
+  replaced. Running `laravelcrm:update` (or `laravelcrm:v2`) twice adds no duplicate labels,
+  tax rates, industries, types or pipelines, and re-migrates nothing.
+
+> Builds before this one seeded the six lookup tables with a plain `INSERT`, so a team that
+> already held them — which is every team created since 2.3.0 — got a **second full copy** the
+> first time the backfill ran: duplicate labels, tax rates, industries and type lookups in
+> every dropdown. If you ran a pre-release build of `laravelcrm:update` or `laravelcrm:v2`,
+> check for duplicates by name before upgrading:
+>
+> ```sql
+> SELECT team_id, name, COUNT(*) FROM crm_labels GROUP BY team_id, name HAVING COUNT(*) > 1;
+> ```
+>
+> Repeat for `crm_tax_rates`, `crm_industries`, `crm_organization_types`, `crm_address_types`
+> and `crm_contact_types`. Released 2.4.0 cannot produce them.
+
+---
+
+### PDF documents render through a template, and your published view still wins
+
+Quotes, orders, invoices, deliveries and purchase orders now render through one of five shipped
+templates, picked per document type under **Settings → Templates** and overridable per record on
+the document form. The shipped default is **Modern**.
+
+**If you customised a PDF by publishing and editing it** — `resources/views/vendor/laravel-crm/
+invoices/pdf.blade.php` and its siblings, which was the only way to restyle a PDF before this
+release — **nothing changes.** Those documents keep rendering through your file until you pick a
+template on the Templates page. The check compares your published copy against the packaged one,
+so an untouched `vendor:publish --tag=views` does not count as a customisation and gets the new
+default like everyone else.
+
+Two things to know:
+
+- **Saving the Templates page retires the override**, for every document type at once — the form
+  writes a choice for all five. The page warns you on any tab where an override is currently in
+  effect. To keep your view *and* opt into the picker, choose **Classic**: it is a thin
+  `@include` of the original views, so a published override of those files still applies.
+- **Emailed PDFs now match downloaded ones.** `SendQuote`, `SendInvoice` and `SendPurchaseOrder`
+  loaded the original views directly and so ignored the picker. They resolve the same way as the
+  download routes now, including the published-view fallback.
+
+---
+
+### Every team gets its own public portal
+
+The public feature board is team-aware on a `laravel-crm.teams` install. Each team's board lives
+at `/p/features/team/{team_id}` — a shareable URL that works for an anonymous visitor, which is
+the whole point of a public roadmap.
+
+`LARAVEL_CRM_PORTAL_TEAM_ID` is **no longer required**. Bare `/p/features` resolves the board
+from, in order: the team in the URL, the board remembered in the visitor's session, the signed-in
+user's current team, and finally — when exactly one team has a public board — that team. So a
+single-team install needs no configuration at all. Admins can copy the right link from the
+**Public board** button on `/crm/features`.
+
+If you *have* set `portal.team_id`, it still behaves exactly as before: a hard single-tenant lock
+that 404s every feature outside that team. Unset it to give the other teams a portal.
+
+One behaviour fix comes with this: submitting a feature through the portal used to require the
+submitter's `currentTeam` to match the board's team, which `403`'d every visitor who registered
+through `/p/register` — they hold no host-app team. Submissions are now stamped with the board's
+team regardless of the submitter's own.
 
 ---
 
@@ -391,6 +514,50 @@ because they are now enforced rather than merely advertised:
 
 If your Managers or Employees are expected to run campaigns, manage monitors, or edit customers,
 grant those permissions explicitly under **Settings → Roles** before you upgrade.
+
+---
+
+### Smaller breaking changes for host code
+
+None of these affect a stock install. Each one only matters if you have extended, published or
+integrated against the thing named.
+
+**The `laravel-crm.users.sendinvite` route is gone.** It is the only named route dropped since
+2.3.0 — user invitations now run through the `crm_user_invitations` table and its Livewire
+surface. `route('laravel-crm.users.sendinvite')` throws `RouteNotFoundException`, so grep your
+app for it. The package's own last caller,
+`resources/v1/views/users/partials/card-invite.blade.php`, is unreachable dead code —
+`resources/v1` is not registered as a view namespace anywhere — and is left as it is.
+
+**`SystemCheck` middleware is replaced by the `crm-system-check` Livewire component.** It was
+pushed onto the `crm` middleware group and did its work through flash messages; the banner is a
+Livewire component now, backed by `SystemCheckService`. If you referenced
+`VentureDrake\LaravelCrm\Http\Middleware\SystemCheck` in your own middleware stack, remove the
+reference — the class no longer exists.
+
+**`ModelProducts` renamed the `quantities` row key to `quantity_max`.** The per-row array the
+line-item component builds carried a `quantities` array of `<select>` options; it now carries a
+single `quantity_max` number, because the control is a bounded number input rather than a
+dropdown. A **published** copy of `resources/views/vendor/laravel-crm/livewire/model-products.blade.php`
+still iterates `$products[$index]['quantities']` and will render an empty control. Re-publish
+that view with `--force` and re-apply your edits.
+
+**`UserIndex` swapped its query-string filters.** The `#[Url]` properties `user_id` and
+`label_id` are replaced by `role_id` (array) and `crm_access` (nullable string), matching the
+filters the page actually offers. Bookmarked or generated links carrying `?user_id=` /
+`?label_id=` are ignored rather than erroring.
+
+**`CheckAmount`'s `subTotal()` / `tax()` / `total()` return a real `bool`.** They previously
+returned `true` on a match and fell off the end returning `null` on a mismatch. Code doing
+`=== false` against them never matched and now does; `=== null` no longer matches. Loose
+falsy checks are unaffected.
+
+**The REST API rejects `subtotal` and `total` on quote / order / invoice writes.** They are
+computed from `line_items`. Sending them is now a `422` naming the cause, where a pre-release
+build silently ignored them and returned recomputed numbers. See
+[docs/api.md](api.md#subtotal-and-total-are-computed-and-rejected-on-input) for this and the
+other API changes in this release — cross-team ids now `422`, `discount` / `tax` gained
+`min:0`, and `POST /auth/token` can now return `429`.
 
 ---
 

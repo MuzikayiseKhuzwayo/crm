@@ -15,6 +15,16 @@
 
             <x-mary-button label="Board" link="{{ url(route('laravel-crm.features.board')) }}" icon="o-view-columns" class="btn" responsive />
 
+            {{-- The shareable public board. Team-scoped on a teams install so an
+                 admin copies a link that works for someone with no account and no
+                 session. --}}
+            <x-mary-button label="{{ ucfirst(__('laravel-crm::lang.public_board')) }}"
+                           link="{{ $this->publicBoardUrl() }}"
+                           icon="o-globe-alt"
+                           class="btn"
+                           external
+                           responsive />
+
             @can('create crm features')
                 <x-mary-button label="{{ ucfirst(__('laravel-crm::lang.submit_feature')) }}" link="{{ url(route('laravel-crm.features.create')) }}" icon="o-plus" class="btn-primary text-white" responsive />
             @endcan

@@ -136,6 +136,43 @@ it('gates the product sub-resources on manageProducts, not on crm products', fun
     assertRouteForbidden($prefix.'.index', [$param => $parent->getRouteKey()]);
 })->with('productSubResources');
 
+it('does not require the parent view permission to reach the product sub-resources', function (
+    string $prefix,
+    string $param,
+    string $permission,
+    string $model
+) {
+    // The regression: every route in the group also carried a per-route
+    // can:view,{param} / can:update,{param} guard underneath the group's
+    // can:manageProducts. can:update duplicated manageProducts exactly, but
+    // can:view resolved to `view crm <entity>` — a permission manageProducts
+    // deliberately does not ask for. A custom role built under Settings → Roles
+    // with edit-but-not-view could open the parent's form and then 403 on the
+    // line items embedded in it.
+    $this->actingAsUserWithPermissions([$permission]);
+    $parent = $model::create(['title' => 'Seeded']);
+
+    expect(Gate::allows('view', $parent))->toBeFalse()
+        ->and(Gate::allows('manageProducts', $model))->toBeTrue();
+
+    assertRouteNotForbidden($prefix.'.index', [$param => $parent->getRouteKey()]);
+    assertRouteNotForbidden($prefix.'.show', [$param => $parent->getRouteKey(), 'product' => 1]);
+    assertRouteNotForbidden($prefix.'.edit', [$param => $parent->getRouteKey(), 'product' => 1]);
+})->with('productSubResources');
+
+it('404s the product sub-resources when the parent does not exist', function (
+    string $prefix,
+    string $param,
+    string $permission,
+    string $model
+) {
+    // The parent is type-hinted on every method, so a bad key fails at the
+    // binding rather than reaching a handler that ignores it.
+    $this->actingAsUserWithPermissions([$permission]);
+
+    expect(test()->get(route($prefix.'.index', [$param => 999999]))->status())->toBe(404);
+})->with('productSubResources');
+
 it('forbids the stray deals create-product route without the deal edit permission', function () {
     $this->actingAsUserWithPermissions([]);
 

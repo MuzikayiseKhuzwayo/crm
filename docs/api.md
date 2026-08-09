@@ -131,6 +131,15 @@ When the host app runs in teams mode (`config('laravel-crm.teams', true)`):
   endpoints. `GET /{resource}/{uuid}` resolves the route-bound model using the user's *default*
   current team because Laravel's `SubstituteBindings` runs before `SetApiTeamContext`. Use the
   list endpoints (filtered by `X-Team-ID`) to discover the correct UUIDs for the active team.
+- **A token whose user has no current team cannot reference anything.** Every FK on a write
+  whose table is team-scoped (`person_id`, `organization_id`, `pipeline_stage_id`, `labels[]`,
+  `line_items.*.product_id`, …) is validated against the active team. When teams are on and
+  the token's user has no `currentTeam` — and none was supplied via `X-Team-ID` — the rule
+  matches nothing rather than falling back to unscoped, so **every** such id comes back
+  `422` at once. It
+  presents as "all my ids are suddenly invalid". The fix is on the user record, not the
+  payload: give the user a current team, or send `X-Team-ID`. Service accounts created outside
+  the host app's normal registration flow are the usual cause.
 
 ---
 
@@ -165,9 +174,13 @@ The `{uuid}` in URIs is the entity's `external_id` (UUID), exposed as `id` in JS
 | Organization | `/crm/api/v2/organizations` | `name`, `website`, `email`, `phone`, `annual_revenue`, `total_money_raised`, `number_of_employees`, `industry_id`, `organization_type_id`, `timezone_id`, `labels[]`, `user_owner_id` |
 | Person | `/crm/api/v2/people` | `first_name`, `last_name`, `gender`, `birthday`, `description`, `organization_id`, `labels[]`, `user_owner_id` |
 | Deal | `/crm/api/v2/deals` | `title`, `description`, `amount`, `currency`, `expected_close`, `lead_id`, `person_id`, `organization_id`, `pipeline_stage_id`, `labels[]`, `user_owner_id` |
-| Quote | `/crm/api/v2/quotes` | `title`, `description`, `issue_at`, `expire_at`, `currency`, `sub_total`, `discount`, `tax`, `adjustment`, `total`, `person_id`, `organization_id`, `labels[]`, `line_items[]` |
-| Order | `/crm/api/v2/orders` | `description`, `currency`, `sub_total`, `discount`, `tax`, `adjustment`, `total`, `person_id`, `organization_id`, `labels[]`, `line_items[]` |
-| Invoice | `/crm/api/v2/invoices` | `reference`, `issue_date`, `due_date`, `currency`, `sub_total`, `discount`, `tax`, `adjustment`, `total`, `amount_due`, `amount_paid`, `person_id`, `organization_id`, `labels[]`, `line_items[]` |
+| Quote | `/crm/api/v2/quotes` | `title`, `description`, `reference`, `issue_at`, `expire_at`, `currency`, `terms`, `discount`, `tax`, `adjustments`, `person_id`, `organization_id`, `lead_id`, `pipeline_stage_id`, `labels[]`, `line_items[]` |
+| Order | `/crm/api/v2/orders` | `reference`, `description`, `currency`, `terms`, `discount`, `tax`, `adjustments`, `person_id`, `organization_id`, `labels[]`, `line_items[]` |
+| Invoice | `/crm/api/v2/invoices` | `reference`, `issue_date`, `due_date`, `currency`, `terms`, `tax`, `order_id`, `person_id`, `organization_id`, `labels[]`, `line_items[]` |
+
+Quote / order / invoice responses additionally carry `subtotal` and `total` (and, on invoices,
+`amount_due` / `amount_paid` / `fully_paid_at`). These are **computed, not writable** — see
+[`subtotal` and `total`](#subtotal-and-total-are-computed-and-rejected-on-input) below.
 
 ### Conventions across all entity endpoints
 
@@ -186,6 +199,15 @@ The `{uuid}` in URIs is the entity's `external_id` (UUID), exposed as `id` in JS
   endpoints. Other filters are documented per-resource as needed.
 - **Soft deletes:** `DELETE` returns `204` and soft-deletes the row. Subsequent `GET`s return
   `404`.
+- **Referenced ids must belong to the active team.** *(Changed in 2.4.0.)* Every UUID
+  reference on a write is checked against the request's team as well as the table. An id
+  belonging to another team is a `422` on that field, where it previously validated and
+  produced a cross-team record. Single-tenant installs (`laravel-crm.teams = false`) are
+  unaffected — the check is skipped entirely — as are package-wide lookup tables that carry
+  no `team_id` column, which are still checked against the table alone.
+- **`discount` and `tax` reject negatives.** *(Changed in 2.4.0.)* Both gained `min:0` on
+  quote / order / invoice writes. A negative discount was a way to inflate a total; send an
+  `adjustments` value instead.
 
 ### Nested line items (Quote / Order / Invoice)
 
@@ -220,6 +242,28 @@ the line would then be discarded without an error.
 > response; it is now a JSON number and may come back fractional. Clients that decode it
 > into an `int` field will truncate or fail. This is a widening on the request side —
 > every payload that was valid before is still valid.
+
+#### `subtotal` and `total` are computed, and rejected on input
+
+*(Changed in 2.4.0.)* `subtotal` and `total` were accepted on quote / order / invoice
+`POST` and `PUT` and are now derived from `line_items`, `discount`, `tax` and
+`adjustments`. Sending either returns a `422` naming the cause:
+
+```json
+{
+  "message": "The subtotal field is prohibited.",
+  "errors": {
+    "subtotal": ["The subtotal is calculated from line_items and can no longer be set on the request. Remove it from the payload."],
+    "total": ["The total is calculated from line_items and can no longer be set on the request. Remove it from the payload."]
+  }
+}
+```
+
+They are rejected rather than ignored deliberately: a client posting its own authoritative
+totals would otherwise get different numbers back with no error, and only notice when the
+figures stopped reconciling. **Remove both fields from your write payloads.** Both are still
+returned in responses, computed. A payload that omits them, or sends them as `null`, is
+unaffected.
 
 ---
 
@@ -282,6 +326,33 @@ The API enforces a single named rate limiter, `laravel-crm-api`:
 | Unauthenticated | **30 requests / minute / IP** |
 
 Exceeding the limit returns `429 Too Many Requests` with `Retry-After` in seconds.
+
+### `POST /auth/token` is throttled twice
+
+*(Changed in 2.4.0.)* On top of the per-IP limit above, token issuing carries a fixed
+`throttle:6,1` (6 attempts / minute / IP) and a **per-account** counter on failed attempts:
+
+| Setting | Default | Env |
+|---|---|---|
+| `laravel-crm.api.token_attempts_per_account` | 5 | `LARAVEL_CRM_API_TOKEN_ATTEMPTS_PER_ACCOUNT` |
+| `laravel-crm.api.token_attempts_decay_seconds` | 600 | `LARAVEL_CRM_API_TOKEN_ATTEMPTS_DECAY_SECONDS` |
+
+The per-account counter is keyed on the submitted email, incremented only on a failed
+attempt, and cleared on success. Once it trips, the endpoint returns `429` with the error
+under `errors.email` rather than the usual `429` envelope:
+
+```json
+{
+  "message": "Too many login attempts. Try again in 540 seconds.",
+  "errors": { "email": ["Too many login attempts. Try again in 540 seconds."] }
+}
+```
+
+**`POST /auth/token` could not return `429` before this release.** A client that re-issues a
+token on every request, or retries on failure without backing off, will start seeing it —
+issue a token once and reuse it, and back off on `429`. Both limits are per-IP or per-email,
+so one misbehaving integration can lock out a shared address; raise the two config keys if
+your deployment legitimately issues tokens in bursts.
 
 ---
 

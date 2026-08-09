@@ -4,7 +4,7 @@ use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\Schema;
 
-class AddPdfTemplateToLaravelCrmTables extends Migration
+return new class extends Migration
 {
     /**
      * The tables holding a document that can be downloaded as a PDF, in
@@ -51,4 +51,4 @@ class AddPdfTemplateToLaravelCrmTables extends Migration
             });
         }
     }
-}
+};

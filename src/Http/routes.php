@@ -248,39 +248,43 @@ Route::group(['prefix' => 'deals', 'middleware' => 'auth.laravel-crm'], function
 
     /* Deal Products */
 
-    // Group-level can:manageProducts uses the no-model class-string form deliberately.
-    // DealProductController@show|update|destroy take $id rather than a typed Deal, so
-    // implicit binding never populates {deal}. can:update,deal would hand Gate a raw
-    // string, Gate::getPolicyFor('42') would return null, and every user including Owner
-    // would be denied. Mirrors the shipped can:manageStatuses,...\Feature precedent.
+    // Gated once, at the group, on can:manageProducts,<Model>.
+    //
+    // manageProducts keys off the parent's *edit* permission - that is the whole
+    // reason it exists rather than reusing ProductPolicy, since Manager and Employee
+    // hold no `crm products` permission at all and still have to build a quote.
+    //
+    // The per-route can:view,{param} / can:update,{param} guards that used to sit
+    // underneath this are gone. can:update,{param} resolved to the same
+    // `edit crm deals` check as manageProducts, so it was pure duplication; can:view
+    // resolved to `view crm deals`, a *stronger* requirement the design had explicitly
+    // rejected, so a custom role holding edit-without-view could open the parent's
+    // form and then 403 on the line items embedded in it.
+    //
+    // The class-string form is deliberate: manageProducts is a class-wide ability
+    // with no instance to check, mirroring the shipped can:manageStatuses,...\Feature
+    // precedent.
     Route::group(['prefix' => '{deal}/products', 'middleware' => ['auth.laravel-crm', 'can:manageProducts,VentureDrake\LaravelCrm\Models\Deal']], function () {
         Route::get('', 'VentureDrake\LaravelCrm\Http\Controllers\DealProductController@index')
-            ->name('laravel-crm.deal-products.index')
-            ->middleware(['can:view,deal']);
+            ->name('laravel-crm.deal-products.index');
 
         Route::get('create', 'VentureDrake\LaravelCrm\Http\Controllers\DealProductController@create')
-            ->name('laravel-crm.deal-products.create')
-            ->middleware(['can:update,deal']);
+            ->name('laravel-crm.deal-products.create');
 
         Route::post('', 'VentureDrake\LaravelCrm\Http\Controllers\DealProductController@store')
-            ->name('laravel-crm.deal-products.store')
-            ->middleware(['can:update,deal']);
+            ->name('laravel-crm.deal-products.store');
 
         Route::get('{product}', 'VentureDrake\LaravelCrm\Http\Controllers\DealProductController@show')
-            ->name('laravel-crm.deal-products.show')
-            ->middleware(['can:view,deal']);
+            ->name('laravel-crm.deal-products.show');
 
         Route::get('{product}/edit', 'VentureDrake\LaravelCrm\Http\Controllers\DealProductController@edit')
-            ->name('laravel-crm.deal-products.edit')
-            ->middleware(['can:update,deal']);
+            ->name('laravel-crm.deal-products.edit');
 
         Route::put('{product}', 'VentureDrake\LaravelCrm\Http\Controllers\DealProductController@update')
-            ->name('laravel-crm.deal-products.update')
-            ->middleware(['can:update,deal']);
+            ->name('laravel-crm.deal-products.update');
 
         Route::delete('{product}', 'VentureDrake\LaravelCrm\Http\Controllers\DealProductController@destroy')
-            ->name('laravel-crm.deal-products.destroy')
-            ->middleware(['can:update,deal']);
+            ->name('laravel-crm.deal-products.destroy');
     });
 });
 
@@ -337,36 +341,43 @@ Route::group(['prefix' => 'quotes', 'middleware' => 'auth.laravel-crm'], functio
 
     /* Quote Products */
 
-    // No-model class-string form: QuoteProductController@show|update|destroy take $id,
-    // so {quote} never becomes a model and can:update,quote would deny everyone.
+    // Gated once, at the group, on can:manageProducts,<Model>.
+    //
+    // manageProducts keys off the parent's *edit* permission - that is the whole
+    // reason it exists rather than reusing ProductPolicy, since Manager and Employee
+    // hold no `crm products` permission at all and still have to build a quote.
+    //
+    // The per-route can:view,{param} / can:update,{param} guards that used to sit
+    // underneath this are gone. can:update,{param} resolved to the same
+    // `edit crm quotes` check as manageProducts, so it was pure duplication; can:view
+    // resolved to `view crm quotes`, a *stronger* requirement the design had explicitly
+    // rejected, so a custom role holding edit-without-view could open the parent's
+    // form and then 403 on the line items embedded in it.
+    //
+    // The class-string form is deliberate: manageProducts is a class-wide ability
+    // with no instance to check, mirroring the shipped can:manageStatuses,...\Feature
+    // precedent.
     Route::group(['prefix' => '{quote}/products', 'middleware' => ['auth.laravel-crm', 'can:manageProducts,VentureDrake\LaravelCrm\Models\Quote']], function () {
         Route::get('', 'VentureDrake\LaravelCrm\Http\Controllers\QuoteProductController@index')
-            ->name('laravel-crm.quote-products.index')
-            ->middleware(['can:view,quote']);
+            ->name('laravel-crm.quote-products.index');
 
         Route::get('create', 'VentureDrake\LaravelCrm\Http\Controllers\QuoteProductController@create')
-            ->name('laravel-crm.quote-products.create')
-            ->middleware(['can:update,quote']);
+            ->name('laravel-crm.quote-products.create');
 
         Route::post('', 'VentureDrake\LaravelCrm\Http\Controllers\QuoteProductController@store')
-            ->name('laravel-crm.quote-products.store')
-            ->middleware(['can:update,quote']);
+            ->name('laravel-crm.quote-products.store');
 
         Route::get('{product}', 'VentureDrake\LaravelCrm\Http\Controllers\QuoteProductController@show')
-            ->name('laravel-crm.quote-products.show')
-            ->middleware(['can:view,quote']);
+            ->name('laravel-crm.quote-products.show');
 
         Route::get('{product}/edit', 'VentureDrake\LaravelCrm\Http\Controllers\QuoteProductController@edit')
-            ->name('laravel-crm.quote-products.edit')
-            ->middleware(['can:update,quote']);
+            ->name('laravel-crm.quote-products.edit');
 
         Route::put('{product}', 'VentureDrake\LaravelCrm\Http\Controllers\QuoteProductController@update')
-            ->name('laravel-crm.quote-products.update')
-            ->middleware(['can:update,quote']);
+            ->name('laravel-crm.quote-products.update');
 
         Route::delete('{product}', 'VentureDrake\LaravelCrm\Http\Controllers\QuoteProductController@destroy')
-            ->name('laravel-crm.quote-products.destroy')
-            ->middleware(['can:update,quote']);
+            ->name('laravel-crm.quote-products.destroy');
     });
 });
 
@@ -419,36 +430,43 @@ Route::group(['prefix' => 'orders', 'middleware' => 'auth.laravel-crm'], functio
 
     /* Order Products */
 
-    // No-model class-string form: OrderProductController@show|update|destroy take $id,
-    // so {order} never becomes a model and can:update,order would deny everyone.
+    // Gated once, at the group, on can:manageProducts,<Model>.
+    //
+    // manageProducts keys off the parent's *edit* permission - that is the whole
+    // reason it exists rather than reusing ProductPolicy, since Manager and Employee
+    // hold no `crm products` permission at all and still have to build a quote.
+    //
+    // The per-route can:view,{param} / can:update,{param} guards that used to sit
+    // underneath this are gone. can:update,{param} resolved to the same
+    // `edit crm orders` check as manageProducts, so it was pure duplication; can:view
+    // resolved to `view crm orders`, a *stronger* requirement the design had explicitly
+    // rejected, so a custom role holding edit-without-view could open the parent's
+    // form and then 403 on the line items embedded in it.
+    //
+    // The class-string form is deliberate: manageProducts is a class-wide ability
+    // with no instance to check, mirroring the shipped can:manageStatuses,...\Feature
+    // precedent.
     Route::group(['prefix' => '{order}/products', 'middleware' => ['auth.laravel-crm', 'can:manageProducts,VentureDrake\LaravelCrm\Models\Order']], function () {
         Route::get('', 'VentureDrake\LaravelCrm\Http\Controllers\OrderProductController@index')
-            ->name('laravel-crm.order-products.index')
-            ->middleware(['can:view,order']);
+            ->name('laravel-crm.order-products.index');
 
         Route::get('create', 'VentureDrake\LaravelCrm\Http\Controllers\OrderProductController@create')
-            ->name('laravel-crm.order-products.create')
-            ->middleware(['can:update,order']);
+            ->name('laravel-crm.order-products.create');
 
         Route::post('', 'VentureDrake\LaravelCrm\Http\Controllers\OrderProductController@store')
-            ->name('laravel-crm.order-products.store')
-            ->middleware(['can:update,order']);
+            ->name('laravel-crm.order-products.store');
 
         Route::get('{product}', 'VentureDrake\LaravelCrm\Http\Controllers\OrderProductController@show')
-            ->name('laravel-crm.order-products.show')
-            ->middleware(['can:view,order']);
+            ->name('laravel-crm.order-products.show');
 
         Route::get('{product}/edit', 'VentureDrake\LaravelCrm\Http\Controllers\OrderProductController@edit')
-            ->name('laravel-crm.order-products.edit')
-            ->middleware(['can:update,order']);
+            ->name('laravel-crm.order-products.edit');
 
         Route::put('{product}', 'VentureDrake\LaravelCrm\Http\Controllers\OrderProductController@update')
-            ->name('laravel-crm.order-products.update')
-            ->middleware(['can:update,order']);
+            ->name('laravel-crm.order-products.update');
 
         Route::delete('{product}', 'VentureDrake\LaravelCrm\Http\Controllers\OrderProductController@destroy')
-            ->name('laravel-crm.order-products.destroy')
-            ->middleware(['can:update,order']);
+            ->name('laravel-crm.order-products.destroy');
     });
 });
 

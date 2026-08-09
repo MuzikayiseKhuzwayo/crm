@@ -48,6 +48,35 @@ class PdfTemplateRegistry
     public const THUMBNAIL_DIR = 'vendor/laravel-crm/img/pdf-templates';
 
     /**
+     * The pre-template view each doc type used to render through, keyed by
+     * doc type. These still ship, and `classic` is a thin @include of them,
+     * but nothing resolves to them by default any more.
+     *
+     * They matter because a host that customised its PDFs before the picker
+     * existed did it by publishing and editing exactly these files — see
+     * publishedOverrideView().
+     *
+     * @var array<string, string>
+     */
+    public const LEGACY_VIEWS = [
+        'invoice' => 'invoices.pdf',
+        'order' => 'orders.pdf',
+        'purchase-order' => 'purchase-orders.pdf',
+        'delivery' => 'deliveries.pdf',
+        'quote' => 'quotes.pdf',
+    ];
+
+    /**
+     * Memoised publishedOverrideView() answers, keyed by doc type.
+     *
+     * The probe hashes two files, which is nothing next to rendering a PDF,
+     * but a document with many line items resolves its view more than once.
+     *
+     * @var array<string, string|null>
+     */
+    protected static array $overrides = [];
+
+    /**
      * The default template slug — always resolvable via `viewFor(...)` for
      * every doc type, and used as the fallback when a caller passes an
      * unknown slug.
@@ -208,13 +237,102 @@ class PdfTemplateRegistry
 
     /**
      * Resolve the Blade view path for a single record — the per-record
-     * template when set, else the settings default for `$docType`.
+     * template when set, else the settings default for `$docType`, else a
+     * PDF view the host has customised by hand.
+     *
+     * That last fallback is the whole point of this method existing rather
+     * than callers composing viewFor(slugFor(...)) themselves: before the
+     * picker, the only way to restyle a PDF was to publish
+     * `resources/views/vendor/laravel-crm/invoices/pdf.blade.php` and edit it.
+     * Switching the default to `modern` would have silently thrown that work
+     * away on upgrade, for a host that never asked for a new template and has
+     * no reason to look for a picker.
+     *
+     * An explicit choice — on the record or in Settings → Templates — always
+     * wins, so opting in to a shipped template is one click and stays sticky.
      *
      * @param  object|null  $model  an Invoice/Order/PurchaseOrder/Delivery/Quote
      */
     public static function viewForModel(string $docType, $model = null): string
     {
-        return self::viewFor($docType, self::slugFor($docType, $model));
+        if ($chosen = self::explicitSlugFor($docType, $model)) {
+            return self::viewFor($docType, $chosen);
+        }
+
+        return self::publishedOverrideView($docType)
+            ?? self::viewFor($docType, self::defaultSlug());
+    }
+
+    /**
+     * The template explicitly chosen for this document, or null when nobody
+     * has chosen one and the default is merely being inherited.
+     *
+     * Distinguishing the two is what lets a customised published view act as
+     * the default without overriding a real choice. `slugFor()` cannot answer
+     * this — it collapses "unset" into DEFAULT_SLUG by design.
+     *
+     * @param  object|null  $model
+     */
+    protected static function explicitSlugFor(string $docType, $model = null): ?string
+    {
+        if ($slug = self::sanitize($model->pdf_template ?? null)) {
+            return $slug;
+        }
+
+        return self::sanitize(app('laravel-crm.settings')->get(self::settingKey($docType)));
+    }
+
+    /**
+     * The legacy view for `$docType`, but only when the host has published it
+     * *and changed it*.
+     *
+     * The content comparison matters: `vendor:publish --tag=views` copies the
+     * entire views directory, so the presence of the file says nothing on its
+     * own — a host that published last week has a byte-identical copy it never
+     * intended as an override, and honouring that would pin them to the old
+     * layout forever. A hash mismatch is the only reliable signal that someone
+     * edited it.
+     */
+    public static function publishedOverrideView(string $docType): ?string
+    {
+        if (array_key_exists($docType, self::$overrides)) {
+            return self::$overrides[$docType];
+        }
+
+        return self::$overrides[$docType] = self::probePublishedOverride($docType);
+    }
+
+    /**
+     * Drop the memoised override probe. For tests, and for anything that
+     * writes to the published view directory within a single process.
+     */
+    public static function forgetPublishedOverrides(): void
+    {
+        self::$overrides = [];
+    }
+
+    protected static function probePublishedOverride(string $docType): ?string
+    {
+        $view = self::LEGACY_VIEWS[$docType] ?? null;
+
+        if ($view === null) {
+            return null;
+        }
+
+        $relative = str_replace('.', '/', $view).'.blade.php';
+
+        $published = resource_path('views/vendor/laravel-crm/'.$relative);
+        $shipped = __DIR__.'/../../resources/views/'.$relative;
+
+        if (! is_file($published) || ! is_readable($published) || ! is_file($shipped)) {
+            return null;
+        }
+
+        if (md5_file($published) === md5_file($shipped)) {
+            return null;
+        }
+
+        return 'laravel-crm::'.$view;
     }
 
     /**

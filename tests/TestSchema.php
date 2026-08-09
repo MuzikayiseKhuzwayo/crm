@@ -222,8 +222,11 @@ class TestSchema
             $table->bigIncrements('id');
             $table->string('external_id')->nullable();
             $table->string('name');
+            $table->text('description')->nullable();
             $table->unsignedBigInteger('pipeline_id');
+            $table->unsignedBigInteger('pipeline_stage_probability_id')->nullable();
             $table->integer('order')->default(0);
+            $table->string('color')->nullable();
             $table->integer('probability')->nullable();
             $table->unsignedBigInteger('team_id')->nullable();
             $table->timestamps();

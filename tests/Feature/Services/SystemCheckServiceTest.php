@@ -102,6 +102,16 @@ function withScratchDatabasePath(callable $callback): void
 
     app('migrator')->getRepository()->createRepository();
 
+    // Mark the package's own shipped migrations as already run. The suite
+    // builds its schema from TestSchema rather than by migrating, so every
+    // file in database/updates is genuinely pending — which is a true signal,
+    // and exactly the one the cases below are trying to hold still while they
+    // vary something else. Logged before the callback, so a file the callback
+    // writes is still seen as pending.
+    foreach (glob(packageMigrationsPath().'/*.php') ?: [] as $migration) {
+        app('migrator')->getRepository()->log(basename($migration, '.php'), 1);
+    }
+
     try {
         $callback($migrations);
     } finally {

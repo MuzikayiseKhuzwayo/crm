@@ -12,6 +12,7 @@ use Livewire\WithPagination;
 use Mary\Traits\Toast;
 use VentureDrake\LaravelCrm\Models\Feature;
 use VentureDrake\LaravelCrm\Models\FeatureStatus;
+use VentureDrake\LaravelCrm\Support\PortalTeam;
 use VentureDrake\LaravelCrm\Traits\ClearsProperties;
 use VentureDrake\LaravelCrm\Traits\ResetsPaginationWhenPropsChanges;
 
@@ -78,6 +79,27 @@ class FeatureIndex extends Component
 
             $this->success(ucfirst(trans('laravel-crm::lang.feature_deleted')));
         }
+    }
+
+    /**
+     * The public board this team's features appear on.
+     *
+     * Team-scoped on a teams install so the link an admin copies out of here
+     * works for a customer with no account and no session — the bare
+     * /p/features would resolve to whichever board *they* can be inferred
+     * onto, which for an anonymous visitor is none.
+     */
+    public function publicBoardUrl(): string
+    {
+        if (PortalTeam::scoped()) {
+            $teamId = PortalTeam::locked() ?? (auth()->user()->currentTeam->id ?? null);
+
+            if ($teamId !== null) {
+                return route('laravel-crm.portal.features.team', ['portalTeam' => (int) $teamId]);
+            }
+        }
+
+        return route('laravel-crm.portal.features.index');
     }
 
     public function render()

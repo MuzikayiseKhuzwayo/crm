@@ -10,12 +10,23 @@ use VentureDrake\LaravelCrm\Models\DealProduct;
 
 class DealProductController extends Controller
 {
+    /*
+     * Every method type-hints the parent, including the ones that only
+     * abort(404), so `{deal}` is resolved rather than left as a raw URL segment.
+     *
+     * Two reasons. A nonexistent parent now 404s at the binding rather than
+     * reaching the method. And it puts $id back on the parameter it names:
+     * with two route parameters and neither of them bound, route arguments
+     * were passed positionally, so `show($id)` was handed the deal's key
+     * rather than the product's.
+     */
+
     /**
      * Display a listing of the resource.
      *
      * @return Response
      */
-    public function index()
+    public function index(Deal $deal)
     {
         abort(404);
     }
@@ -50,7 +61,7 @@ class DealProductController extends Controller
      *
      * @return Response
      */
-    public function store(Request $request)
+    public function store(Request $request, Deal $deal)
     {
         abort(404);
     }
@@ -61,7 +72,7 @@ class DealProductController extends Controller
      * @param  int  $id
      * @return Response
      */
-    public function show($id)
+    public function show(Deal $deal, $id)
     {
         abort(404);
     }
@@ -82,7 +93,7 @@ class DealProductController extends Controller
      * @param  int  $id
      * @return Response
      */
-    public function update(Request $request, $id)
+    public function update(Request $request, Deal $deal, $id)
     {
         abort(404);
     }
@@ -93,7 +104,7 @@ class DealProductController extends Controller
      * @param  int  $id
      * @return Response
      */
-    public function destroy($id)
+    public function destroy(Deal $deal, $id)
     {
         abort(404);
     }

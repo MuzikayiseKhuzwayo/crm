@@ -836,13 +836,6 @@ class LaravelCrmServiceProvider extends ServiceProvider
                 __DIR__.'/../database/migrations/make_name_nullable_on_laravel_crm_monitors_table.php.stub' => $this->getMigrationFileName($filesystem, 'make_name_nullable_on_laravel_crm_monitors_table.php', 132),
                 __DIR__.'/../database/migrations/add_views_count_to_laravel_crm_features_table.php.stub' => $this->getMigrationFileName($filesystem, 'add_views_count_to_laravel_crm_features_table.php', 133),
                 __DIR__.'/../database/migrations/create_laravel_crm_feature_views_table.php.stub' => $this->getMigrationFileName($filesystem, 'create_laravel_crm_feature_views_table.php', 134),
-                __DIR__.'/../database/migrations/add_perf_notified_at_to_laravel_crm_monitors_table.php.stub' => $this->getMigrationFileName($filesystem, 'add_perf_notified_at_to_laravel_crm_monitors_table.php', 135),
-                __DIR__.'/../database/migrations/add_recovered_notified_at_to_laravel_crm_monitors_table.php.stub' => $this->getMigrationFileName($filesystem, 'add_recovered_notified_at_to_laravel_crm_monitors_table.php', 136),
-                __DIR__.'/../database/migrations/create_crm_user_invitations_table.php.stub' => $this->getMigrationFileName($filesystem, 'create_crm_user_invitations_table.php', 137),
-                __DIR__.'/../database/migrations/add_soft_deletes_and_last_sent_at_to_crm_user_invitations_table.php.stub' => $this->getMigrationFileName($filesystem, 'add_soft_deletes_and_last_sent_at_to_crm_user_invitations_table.php', 138),
-                __DIR__.'/../database/migrations/add_pdf_template_to_laravel_crm_tables.php.stub' => $this->getMigrationFileName($filesystem, 'add_pdf_template_to_laravel_crm_tables.php', 139),
-                __DIR__.'/../database/migrations/add_start_at_to_laravel_crm_tasks_table.php.stub' => $this->getMigrationFileName($filesystem, 'add_start_at_to_laravel_crm_tasks_table.php', 140),
-                __DIR__.'/../database/migrations/change_quantity_to_decimal_on_laravel_crm_tables.php.stub' => $this->getMigrationFileName($filesystem, 'change_quantity_to_decimal_on_laravel_crm_tables.php', 141),
             ], 'migrations');
 
             // Publishing the seeders

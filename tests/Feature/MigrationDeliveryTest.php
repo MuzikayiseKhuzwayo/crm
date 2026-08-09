@@ -65,6 +65,22 @@ test('database/migrations holds only stubs', function () {
     expect($stray)->toBe([]);
 });
 
+test('the stub set is frozen', function () {
+    // A migration added here instead of database/updates needs a publish step
+    // the documented upgrade path does not include, so it reaches nobody who
+    // runs `composer update && php artisan migrate` — and nothing at runtime
+    // says so. All seven migrations added in 2.4.0 were shipped this way
+    // before being moved; this pins the count so the next one cannot be.
+    //
+    // Existing stubs still receive in-place fixes. Only *adding* trips this.
+    $stubs = (new Filesystem)->files(packageRoot().'/database/migrations');
+
+    expect(count($stubs))->toBe(
+        130,
+        'New migrations belong in database/updates as real .php files, not in the frozen stub set.'
+    );
+});
+
 test('each publish entry has a distinct order number', function () {
     // Two stubs sharing an order collide on the minted filename, so the second
     // silently overwrites the first on publish.

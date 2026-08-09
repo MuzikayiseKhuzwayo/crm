@@ -55,9 +55,7 @@ test('POST /quotes creates a quote with nested line items', function () {
             'title' => 'Initial proposal',
             'reference' => 'Q-REF-1',
             'currency' => 'USD',
-            'subtotal' => 250.00,
             'tax' => 25.00,
-            'total' => 275.00,
             'organization_id' => $organization->external_id,
             'user_owner_id' => $user->id,
             'line_items' => [
