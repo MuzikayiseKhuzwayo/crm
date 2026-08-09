@@ -547,7 +547,12 @@ class TestSchema
             $table->bigIncrements('id');
             $table->string('external_id')->nullable();
             $table->string('name');
-            $table->string('model');
+            // The shipped table has no `model` column — a group is bound to its
+            // models through crm_field_models. Kept nullable rather than dropped
+            // so nothing that happened to write it starts failing.
+            $table->string('model')->nullable();
+            $table->string('handle')->nullable();
+            $table->boolean('system')->default(false);
             $table->unsignedBigInteger('team_id')->nullable();
             $table->timestamps();
             $table->softDeletes();
@@ -766,6 +771,8 @@ class TestSchema
             $table->string('external_id')->nullable();
             $table->unsignedBigInteger('team_id')->nullable();
             $table->unsignedBigInteger('order_id')->nullable();
+            $table->unsignedBigInteger('pipeline_id')->nullable();
+            $table->unsignedBigInteger('pipeline_stage_id')->nullable();
             $table->string('delivery_id')->nullable();
             $table->string('prefix')->nullable();
             $table->integer('number')->nullable();
@@ -928,6 +935,8 @@ class TestSchema
             $table->unsignedBigInteger('order_id')->nullable();
             $table->unsignedBigInteger('person_id')->nullable();
             $table->unsignedBigInteger('organization_id')->nullable();
+            $table->unsignedBigInteger('pipeline_id')->nullable();
+            $table->unsignedBigInteger('pipeline_stage_id')->nullable();
             $table->string('reference')->nullable();
             $table->string('purchase_order_id')->nullable();
             $table->string('prefix')->nullable();
@@ -1051,15 +1060,22 @@ class TestSchema
         Schema::create($prefix.'email_campaign_recipients', function (Blueprint $table) {
             $table->bigIncrements('id');
             $table->string('external_id')->nullable();
+            $table->unsignedBigInteger('team_id')->nullable();
             $table->unsignedBigInteger('email_campaign_id');
-            $table->string('email');
+            $table->unsignedBigInteger('email_id')->nullable();
+            $table->unsignedBigInteger('person_id')->nullable();
+            $table->string('address')->nullable();
+            $table->string('tracking_token', 64)->nullable();
             $table->string('status')->default('pending');
             $table->timestamp('sent_at')->nullable();
-            $table->timestamp('opened_at')->nullable();
+            $table->timestamp('first_opened_at')->nullable();
+            $table->timestamp('last_opened_at')->nullable();
             $table->unsignedInteger('opens_count')->default(0);
+            $table->timestamp('first_clicked_at')->nullable();
+            $table->timestamp('last_clicked_at')->nullable();
             $table->unsignedInteger('clicks_count')->default(0);
-            $table->boolean('unsubscribed')->default(false);
             $table->timestamp('unsubscribed_at')->nullable();
+            $table->text('error')->nullable();
             $table->timestamps();
         });
 
@@ -1111,14 +1127,20 @@ class TestSchema
         Schema::create($prefix.'sms_campaign_recipients', function (Blueprint $table) {
             $table->bigIncrements('id');
             $table->string('external_id')->nullable();
+            $table->unsignedBigInteger('team_id')->nullable();
             $table->unsignedBigInteger('sms_campaign_id');
-            $table->string('phone');
+            $table->unsignedBigInteger('phone_id')->nullable();
+            $table->unsignedBigInteger('person_id')->nullable();
+            $table->string('tracking_token', 64)->nullable();
             $table->string('status')->default('pending');
             $table->timestamp('sent_at')->nullable();
-            $table->string('message_id')->nullable();
+            $table->timestamp('delivered_at')->nullable();
+            $table->timestamp('first_clicked_at')->nullable();
+            $table->timestamp('last_clicked_at')->nullable();
             $table->unsignedInteger('clicks_count')->default(0);
-            $table->boolean('unsubscribed')->default(false);
             $table->timestamp('unsubscribed_at')->nullable();
+            $table->string('clicksend_message_id')->nullable();
+            $table->text('error')->nullable();
             $table->timestamps();
         });
 

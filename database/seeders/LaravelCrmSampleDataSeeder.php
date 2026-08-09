@@ -67,6 +67,9 @@ use VentureDrake\LaravelCrm\Models\SmsTemplate;
 use VentureDrake\LaravelCrm\Models\Task;
 use VentureDrake\LaravelCrm\Models\TaxRate;
 use VentureDrake\LaravelCrm\Models\Team;
+use VentureDrake\LaravelCrm\Models\UserInvitation;
+use VentureDrake\LaravelCrm\Support\PdfTemplateRegistry;
+use VentureDrake\LaravelCrm\Support\Quantity;
 
 class LaravelCrmSampleDataSeeder extends Seeder
 {
@@ -177,6 +180,11 @@ class LaravelCrmSampleDataSeeder extends Seeder
     protected $sampleTeams;
 
     /**
+     * CRM roles a sample user or invitation may be given (excludes "Owner").
+     */
+    protected $assignableRoles;
+
+    /**
      * Volume scale factor applied to large data sets.
      * Defaults to 0.1 (~10% of the full dataset); set to 1.0 when --full is passed.
      */
@@ -251,7 +259,7 @@ class LaravelCrmSampleDataSeeder extends Seeder
         // Disable query log to prevent memory issues with large dataset
         DB::disableQueryLog();
 
-        $this->command->line('  <fg=yellow>── Phase 1/4: Foundation data ──────────────────</>');
+        $this->command->line('  <fg=yellow>── Phase 1/5: Foundation data ──────────────────</>');
         $this->command->line('');
 
         // Custom fields must be seeded FIRST so HasCrmFields::booted()
@@ -259,12 +267,13 @@ class LaravelCrmSampleDataSeeder extends Seeder
         $this->seedCustomFieldGroups();
 
         $this->seedUsersAndTeams();
+        $this->seedUserInvitations();
         $this->seedLeadSources();
         $this->seedDefaultTaxRate();
         $this->seedProductCategoriesAndProducts();
 
         $this->command->line('');
-        $this->command->line('  <fg=yellow>── Phase 2/4: Core CRM entities ────────────────</>');
+        $this->command->line('  <fg=yellow>── Phase 2/5: Core CRM entities ────────────────</>');
         $this->command->line('');
 
         $this->seedOrganizations();
@@ -274,7 +283,7 @@ class LaravelCrmSampleDataSeeder extends Seeder
         $this->seedQuotes();
 
         $this->command->line('');
-        $this->command->line('  <fg=yellow>── Phase 3/4: Transactions ─────────────────────</>');
+        $this->command->line('  <fg=yellow>── Phase 3/5: Transactions ─────────────────────</>');
         $this->command->line('');
 
         $this->seedOrders();
@@ -283,7 +292,7 @@ class LaravelCrmSampleDataSeeder extends Seeder
         $this->seedPurchaseOrders();
 
         $this->command->line('');
-        $this->command->line('  <fg=yellow>── Phase 4/4: Activities, labels & custom fields</>');
+        $this->command->line('  <fg=yellow>── Phase 4/5: Activities, labels & custom fields</>');
         $this->command->line('');
 
         $this->seedActivities();
@@ -367,8 +376,16 @@ class LaravelCrmSampleDataSeeder extends Seeder
     }
 
     /**
-     * Ensure the Deal pipeline has all intermediate stages (Qualified, Proposal Sent, Negotiation).
-     * Safe to run multiple times — uses firstOrCreate by name.
+     * Ensure the Deal pipeline carries its full stage set before any deal is
+     * placed in one. Safe to run repeatedly — each stage is matched by name.
+     *
+     * The closed stages are in here alongside the intermediate ones because a
+     * fresh install can be missing them too: LaravelCrmPipelineTablesSeeder
+     * inserts the Deal stages via firstOrCreate(['id' => n], ...) and `id` is
+     * guarded on the model, so the rows it means to write at 35/36/37 are
+     * created at 10/11/12 instead — the very ids Pending, Closed Won and
+     * Closed Lost are keyed on, which then match and are skipped. Without
+     * this, roughly two thirds of the sample deals would end up with no stage.
      */
     protected function ensureDealPipelineStages(): void
     {
@@ -381,13 +398,16 @@ class LaravelCrmSampleDataSeeder extends Seeder
             ->pluck('name')
             ->toArray();
 
-        $intermediateStages = [
+        $requiredStages = [
             ['name' => 'Qualified',     'order' => 2, 'pipeline_stage_probability_id' => 3],
             ['name' => 'Proposal Sent', 'order' => 3, 'pipeline_stage_probability_id' => 5],
             ['name' => 'Negotiation',   'order' => 4, 'pipeline_stage_probability_id' => 7],
+            ['name' => 'Pending',       'order' => 5, 'pipeline_stage_probability_id' => 9],
+            ['name' => 'Closed Won',    'order' => 6, 'pipeline_stage_probability_id' => 11],
+            ['name' => 'Closed Lost',   'order' => 7, 'pipeline_stage_probability_id' => 12],
         ];
 
-        foreach ($intermediateStages as $stageData) {
+        foreach ($requiredStages as $stageData) {
             if (! in_array($stageData['name'], $existingNames)) {
                 PipelineStage::create([
                     'name' => $stageData['name'],
@@ -563,6 +583,19 @@ class LaravelCrmSampleDataSeeder extends Seeder
     }
 
     /**
+     * A PDF template for a seeded document. ~60% return null, which is the
+     * picker's "follow the Settings default" state — the majority case in a
+     * real install, and the path PdfTemplateRegistry::viewForModel() resolves
+     * through the Settings key rather than the record.
+     */
+    protected function randomPdfTemplate(): ?string
+    {
+        return mt_rand(1, 100) <= 60
+            ? null
+            : PdfTemplateRegistry::SLUGS[array_rand(PdfTemplateRegistry::SLUGS)];
+    }
+
+    /**
      * Create a styled progress bar bound to the current Artisan output.
      */
     protected function createProgressBar(int $total): ProgressBar
@@ -625,6 +658,8 @@ class LaravelCrmSampleDataSeeder extends Seeder
             'feature_comments', 'feature_votes', 'feature_views', 'features', 'feature_statuses',
             // Custom fields seeded by seedCustomFieldGroups()
             'field_values', 'field_models', 'field_options', 'fields', 'field_groups',
+            // Invitations — cleared before the sample users they reference are deleted
+            'user_invitations',
         ];
 
         // Also truncate the labelables pivot table
@@ -685,7 +720,7 @@ class LaravelCrmSampleDataSeeder extends Seeder
         $createdUserIds = [$this->userId];
 
         // CRM roles available for sample users (excludes "Owner")
-        $assignableRoles = Role::crmNotOwner()->get();
+        $assignableRoles = $this->assignableRoles = Role::crmNotOwner()->get();
 
         foreach ($sampleUsers as $data) {
             // firstOrCreate ensures we never overwrite or duplicate an existing user
@@ -734,6 +769,76 @@ class LaravelCrmSampleDataSeeder extends Seeder
         }
 
         $this->command->info('  → Created/found 5 sample users and 3 teams');
+    }
+
+    /**
+     * Seed pending, expired and accepted invitations so the Users → Invitations
+     * screen has one of every state to render.
+     */
+    protected function seedUserInvitations(): void
+    {
+        // The table arrived in 2.4.0 — a host mid-upgrade may not have it yet.
+        if (! Schema::hasTable(config('laravel-crm.db_table_prefix').'user_invitations')) {
+            return;
+        }
+
+        $this->command->info('Seeding user invitations...');
+
+        $now = Carbon::now('UTC');
+        $teamId = $this->sampleTeams->first()->id ?? null;
+
+        $invitations = [
+            // Pending — invited a few days ago, never re-sent
+            [
+                'email' => 'priya.raman@example.com',
+                'expires_at' => $now->copy()->addDays(4),
+                'accepted_at' => null,
+                'last_sent_at' => null,
+                'created_at' => $now->copy()->subDays(3),
+            ],
+            // Pending — chased once since the original invite
+            [
+                'email' => 'tomas.eriksen@example.com',
+                'expires_at' => $now->copy()->addDays(6),
+                'accepted_at' => null,
+                'last_sent_at' => $now->copy()->subDay(),
+                'created_at' => $now->copy()->subDays(8),
+            ],
+            // Expired — never actioned
+            [
+                'email' => 'nadia.fournier@example.com',
+                'expires_at' => $now->copy()->subDays(5),
+                'accepted_at' => null,
+                'last_sent_at' => $now->copy()->subDays(9),
+                'created_at' => $now->copy()->subDays(12),
+            ],
+            // Accepted
+            [
+                'email' => 'gareth.lloyd@example.com',
+                'expires_at' => $now->copy()->subDays(10),
+                'accepted_at' => $now->copy()->subDays(15),
+                'last_sent_at' => null,
+                'created_at' => $now->copy()->subDays(17),
+            ],
+        ];
+
+        foreach ($invitations as $data) {
+            $createdAt = $data['created_at'];
+            unset($data['created_at']);
+
+            // external_id and code are set by UserInvitationObserver::creating
+            $invitation = UserInvitation::create(array_merge($data, [
+                'team_id' => $teamId,
+                'role_id' => ($this->assignableRoles && $this->assignableRoles->isNotEmpty())
+                    ? $this->assignableRoles->random()->id
+                    : null,
+                'invited_by' => $this->userId,
+            ]));
+
+            $this->backdateModel($invitation, $createdAt);
+        }
+
+        $this->command->info('  → Seeded '.count($invitations).' user invitations (2 pending, 1 expired, 1 accepted)');
     }
 
     /**
@@ -1683,6 +1788,7 @@ class LaravelCrmSampleDataSeeder extends Seeder
                 'title' => 'Quote for '.($deal->organization->name ?? $deal->person->first_name ?? 'Client'),
                 'description' => 'Quote related to deal: '.$deal->title,
                 'reference' => 'REF-'.strtoupper(substr(md5($deal->id.time().$quoteCount), 0, 8)),
+                'pdf_template' => $this->randomPdfTemplate(),
                 'deal_id' => $deal->id,
                 'lead_id' => $deal->lead_id,
                 'person_id' => $deal->person_id,
@@ -1752,6 +1858,7 @@ class LaravelCrmSampleDataSeeder extends Seeder
                 'title' => 'Quote for '.($deal->organization->name ?? $deal->person->first_name ?? 'Client'),
                 'description' => 'Quote for '.($deal->title ?? 'pending deal'),
                 'reference' => 'REF-'.strtoupper(substr(md5($deal->id.mt_rand()), 0, 8)),
+                'pdf_template' => $this->randomPdfTemplate(),
                 'deal_id' => $deal->id,
                 'lead_id' => $deal->lead_id,
                 'person_id' => $deal->person_id,
@@ -1879,6 +1986,7 @@ class LaravelCrmSampleDataSeeder extends Seeder
                 'title' => $title,
                 'description' => 'Standalone quotation for '.$orgName.'. Contact: '.($person->first_name ?? '').' '.($person->last_name ?? ''),
                 'reference' => 'REF-'.strtoupper(substr(md5(mt_rand().$i.time()), 0, 8)),
+                'pdf_template' => $this->randomPdfTemplate(),
                 'person_id' => $person->id,
                 'organization_id' => $org->id ?? null,
                 'currency' => $this->currency,
@@ -1973,6 +2081,7 @@ class LaravelCrmSampleDataSeeder extends Seeder
 
             $order = Order::create([
                 'reference' => 'ORD-'.strtoupper(substr(md5($quote->id.time().$orderCount), 0, 8)),
+                'pdf_template' => $this->randomPdfTemplate(),
                 'deal_id' => $quote->deal_id,
                 'quote_id' => $quote->id,
                 'lead_id' => $quote->lead_id ?? null,
@@ -2005,7 +2114,7 @@ class LaravelCrmSampleDataSeeder extends Seeder
                     'amount' => $opAmount,
                     'currency' => $this->currency,
                     'tax_rate' => $opTaxRate,
-                    'tax_amount' => round($opAmount * $opTaxRate, 2), // cents (no mutator on OrderProduct)
+                    'tax_amount' => round($opAmount * $opTaxRate), // whole cents (no mutator on OrderProduct)
                     'created_at' => $date,
                     'updated_at' => $date,
                 ]);
@@ -2069,6 +2178,7 @@ class LaravelCrmSampleDataSeeder extends Seeder
 
             $order = Order::create([
                 'reference' => 'ORD-'.strtoupper(substr(md5(mt_rand().$i.time()), 0, 8)),
+                'pdf_template' => $this->randomPdfTemplate(),
                 'person_id' => $person->id,
                 'organization_id' => $org->id ?? null,
                 'currency' => $this->currency,
@@ -2175,6 +2285,7 @@ class LaravelCrmSampleDataSeeder extends Seeder
 
             $invoice = Invoice::create([
                 'reference' => 'INV-'.strtoupper(substr(md5($order->id.time().$invoiceCount), 0, 8)),
+                'pdf_template' => $this->randomPdfTemplate(),
                 'order_id' => $order->id,
                 'person_id' => $order->person_id,
                 'organization_id' => $order->organization_id,
@@ -2274,6 +2385,7 @@ class LaravelCrmSampleDataSeeder extends Seeder
 
             $invoice = Invoice::create([
                 'reference' => 'INV-'.strtoupper(substr(md5(mt_rand().$i.time()), 0, 8)),
+                'pdf_template' => $this->randomPdfTemplate(),
                 'person_id' => $person->id,
                 'organization_id' => $org->id ?? null,
                 'currency' => $this->currency,
@@ -2381,6 +2493,7 @@ class LaravelCrmSampleDataSeeder extends Seeder
 
             $delivery = Delivery::create([
                 'reference' => 'DEL-'.strtoupper(substr(md5($order->id.mt_rand()), 0, 8)),
+                'pdf_template' => $this->randomPdfTemplate(),
                 'order_id' => $order->id,
                 'delivery_expected' => $deliveryExpected,
                 'delivered_on' => $deliveredOn,
@@ -2474,6 +2587,7 @@ class LaravelCrmSampleDataSeeder extends Seeder
 
             $po = PurchaseOrder::create([
                 'reference' => 'PO-'.strtoupper(substr(md5($order->id.mt_rand()), 0, 8)),
+                'pdf_template' => $this->randomPdfTemplate(),
                 'order_id' => $order->id,
                 'person_id' => $supplier->people->first()->id ?? $order->person_id,
                 'organization_id' => $supplier->id,
@@ -2555,6 +2669,7 @@ class LaravelCrmSampleDataSeeder extends Seeder
 
             $po = PurchaseOrder::create([
                 'reference' => 'PO-'.strtoupper(substr(md5(mt_rand().$i.time()), 0, 8)),
+                'pdf_template' => $this->randomPdfTemplate(),
                 'person_id' => $contact->id,
                 'organization_id' => $supplier->id,
                 'currency' => $this->currency,
@@ -2689,6 +2804,12 @@ class LaravelCrmSampleDataSeeder extends Seeder
                 $task = Task::create([
                     'name' => $taskNames[array_rand($taskNames)],
                     'description' => $taskDescriptions[array_rand($taskDescriptions)],
+                    // ~40% of tasks are scheduled to start before they are due.
+                    // Always at least a day earlier — $taskDate carries the
+                    // entity's time of day, so a same-day start could land after it.
+                    'start_at' => mt_rand(1, 100) <= 40
+                        ? $taskDate->copy()->subDays(mt_rand(1, 5))->setTime($this->randomBiasedInt(8, 16), mt_rand(0, 59))
+                        : null,
                     'due_at' => $taskDate,
                     'completed_at' => $completedAt,
                     'taskable_type' => $entity['type'],
@@ -4270,7 +4391,11 @@ class LaravelCrmSampleDataSeeder extends Seeder
 
             $price = $product->productPrices->first();
             $unitPrice = $price ? $price->unit_price / 100 : $this->randomAmount(100, 5000); // Convert from stored cents
-            $quantity = mt_rand(1, 5);
+            // ~30% of lines are sold by weight or volume (0.25 L, 3.5 Kg), exercising
+            // the decimal(15,3) quantity column added in 2.4.0.
+            $quantity = mt_rand(1, 100) <= 30
+                ? Quantity::round(mt_rand(250, 8000) / 1000)
+                : mt_rand(1, 5);
 
             // Occasionally give a small quantity discount
             $adjustedPrice = $unitPrice;
@@ -4278,10 +4403,19 @@ class LaravelCrmSampleDataSeeder extends Seeder
                 $adjustedPrice = round($unitPrice * 0.9, 2); // 10% volume discount
             }
 
-            $lineAmount = round($adjustedPrice * $quantity, 2);
+            // Round the line to the cent the way CheckAmount does, then work
+            // back to dollars for the mutators. Rounding the dollar product to
+            // 2dp instead leaves fractional quantities a cent adrift on the
+            // half-cent boundaries (0.375 x $999.00), and the document renders
+            // with a "broken" badge on the index.
+            $lineAmount = (int) round($quantity * (int) round($adjustedPrice * 100)) / 100;
             $itemTaxRate = $product->taxRate->rate ?? ($this->defaultTaxRate->rate ?? 10);
-            // tax_amount stored as cents (no mutator on QuoteProduct/OrderProduct)
-            $taxAmount = round($lineAmount * $itemTaxRate, 2);
+            // tax_amount stored as cents (no mutator on QuoteProduct/OrderProduct);
+            // dollars x percent already *is* cents, so round to a whole one — the
+            // column is an integer, and a fractional cent here survives into the
+            // document tax and puts its total half a cent out of agreement with
+            // the sum of its lines.
+            $taxAmount = round($lineAmount * $itemTaxRate);
 
             $items[] = [
                 'product_id' => $product->id,
