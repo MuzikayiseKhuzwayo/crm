@@ -25,6 +25,12 @@ class UpdateOrderRequest extends FormRequest
             'discount' => ['nullable', 'numeric', 'min:0'],
             'tax' => ['nullable', 'numeric', 'min:0'],
             'adjustments' => ['nullable', 'numeric'],
+            // Removed at 2.4.0: both are computed from `line_items`. Rejected
+            // rather than silently dropped, so a client still sending its own
+            // authoritative totals gets a 422 naming the cause instead of
+            // different numbers back with no error.
+            'subtotal' => ['prohibited'],
+            'total' => ['prohibited'],
             'person_id' => ['nullable', 'string', 'uuid', ScopedExists::for($prefix.'people', 'external_id')],
             'organization_id' => ['nullable', 'string', 'uuid', ScopedExists::for($prefix.'organizations', 'external_id')],
             'user_owner_id' => ['nullable', 'integer', 'exists:users,id', new OwnerInCurrentTeam],
@@ -37,6 +43,14 @@ class UpdateOrderRequest extends FormRequest
             'line_items.*.unit_price' => ['required', 'numeric', 'min:0'],
             'line_items.*.amount' => ['required', 'numeric', 'min:0'],
             'line_items.*.comments' => ['nullable', 'string'],
+        ];
+    }
+
+    public function messages(): array
+    {
+        return [
+            'subtotal.prohibited' => 'The subtotal is calculated from line_items and can no longer be set on the request. Remove it from the payload.',
+            'total.prohibited' => 'The total is calculated from line_items and can no longer be set on the request. Remove it from the payload.',
         ];
     }
 }

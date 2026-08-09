@@ -57,6 +57,18 @@ Route::prefix('features')->group(function () {
     Route::get('', 'VentureDrake\LaravelCrm\Http\Controllers\Portal\PublicFeatureController@index')
         ->name('laravel-crm.portal.features.index');
 
+    /* Team-addressable board. Registered before the {feature:external_id}
+       wildcard below so the literal `team` segment wins the match.
+
+       This is what gives every team its own shareable portal on a teams
+       install: the visitors a roadmap exists for are the team's customers,
+       who are anonymous and have no currentTeam to infer the board from.
+       Opening this URL also remembers the board for the rest of the session,
+       so the un-prefixed submit / vote / comment routes stay on it. */
+    Route::get('team/{portalTeam}', 'VentureDrake\LaravelCrm\Http\Controllers\Portal\PublicFeatureController@index')
+        ->whereNumber('portalTeam')
+        ->name('laravel-crm.portal.features.team');
+
     Route::get('submit', 'VentureDrake\LaravelCrm\Http\Controllers\Portal\PublicFeatureController@create')
         ->name('laravel-crm.portal.features.create');
     Route::post('submit', 'VentureDrake\LaravelCrm\Http\Controllers\Portal\PublicFeatureController@store')

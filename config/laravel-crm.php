@@ -230,14 +230,19 @@ return [
     |--------------------------------------------------------------------------
     |
     | Settings for the public-facing portal (feature board, signed quote /
-    | invoice / purchase-order links). When multi-tenant `teams` mode is
-    | enabled the portal is single-tenant by default — set `portal.team_id`
-    | to the id of the team whose public content should be exposed. When
-    | teams mode is off this value is ignored. `allow_registration` opts
-    | the host application into letting anonymous visitors create user
-    | accounts via /p/register. Off by default: enabling it writes rows
-    | to the host app's users table and dispatches Laravel's Registered
-    | event for each signup.
+    | invoice / purchase-order links).
+    |
+    | `team_id` is optional. Under multi-tenant `teams` mode every team has
+    | its own public board at /p/features/team/{id}, and the bare /p/features
+    | resolves the board from the URL, the session, the signed-in user's
+    | current team, or — on an install where only one team has a board — that
+    | team. Set `team_id` only to pin the portal to a single team and 404
+    | everything outside it. When teams mode is off it is ignored.
+    |
+    | `allow_registration` opts the host application into letting anonymous
+    | visitors create user accounts via /p/register. Off by default: enabling
+    | it writes rows to the host app's users table and dispatches Laravel's
+    | Registered event for each signup.
     |
     */
 

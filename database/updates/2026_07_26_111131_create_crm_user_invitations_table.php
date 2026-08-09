@@ -13,6 +13,10 @@ return new class extends Migration
      */
     public function up()
     {
+        if (Schema::hasTable(config('laravel-crm.db_table_prefix').'user_invitations')) {
+            return;
+        }
+
         Schema::create(config('laravel-crm.db_table_prefix').'user_invitations', function (Blueprint $table) {
             $table->bigIncrements('id');
             $table->string('external_id');

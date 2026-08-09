@@ -93,11 +93,35 @@ class TemplateSettings extends Component
         );
     }
 
+    /**
+     * Doc types whose PDFs are currently rendering through a legacy view the
+     * host has published and edited, rather than through any of the templates
+     * on this page.
+     *
+     * Surfaced because saving this form writes a slug for every doc type at
+     * once, which retires that customisation — an admin who only came to look
+     * should not discover that by comparing invoices afterwards.
+     *
+     * @return array<string, bool>
+     */
+    public function overriddenDocTypes(): array
+    {
+        $overridden = [];
+
+        foreach (PdfTemplateRegistry::DOC_TYPES as $docType) {
+            $overridden[$docType] = PdfTemplateRegistry::publishedOverrideView($docType) !== null
+                && app('laravel-crm.settings')->get($this->settingKey($docType)) === null;
+        }
+
+        return $overridden;
+    }
+
     public function render()
     {
         return view('laravel-crm::livewire.settings.template-settings', [
             'docTypes' => PdfTemplateRegistry::DOC_TYPES,
             'templates' => PdfTemplateRegistry::all(),
+            'overridden' => $this->overriddenDocTypes(),
         ]);
     }
 

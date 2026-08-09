@@ -398,7 +398,9 @@ class LaravelCrmUpdate extends Command
             // team (e.g. a Jetstream personal team created before the CRM was
             // installed). Without this, `/leads/create` on a teams-enabled host
             // renders against an empty per-team pipeline and trips the null-pipeline
-            // bug. Idempotent — safe to re-run. Skipped entirely when teams are off,
+            // bug. Idempotent — every block upserts on team_id + the row's natural
+            // key, so a team that already holds this data is refreshed rather than
+            // given a second copy. Skipped entirely when teams are off,
             // but the marker still flips so subsequent runs don't re-check.
             if (config('permission.teams')) {
                 $this->info('Back-filling per-team CRM data for existing teams');

@@ -11,6 +11,7 @@ use Illuminate\Support\Facades\URL;
 use Livewire\Component;
 use VentureDrake\LaravelCrm\Services\SettingService;
 use VentureDrake\LaravelCrm\Support\PdfLogo;
+use VentureDrake\LaravelCrm\Support\PdfTemplateRegistry;
 use VentureDrake\LaravelCrm\Traits\NotifyToast;
 
 class SendQuote extends Component
@@ -90,7 +91,7 @@ class SendQuote extends Component
         Pdf::setOption([
             'fontDir' => public_path('vendor/laravel-crm/fonts'),
         ])
-            ->loadView('laravel-crm::quotes.pdf', [
+            ->loadView(PdfTemplateRegistry::viewForModel('quote', $this->quote), [
                 'quote' => $this->quote,
                 'dateFormat' => app('laravel-crm.settings')->get('date_format', config('laravel-crm.date_format')),
                 'email' => $email ?? null,

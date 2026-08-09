@@ -103,109 +103,86 @@ class TeamObserver
      * invoke it directly for a specific team without re-checking the
      * `laravel-crm.teams` config guard.
      *
-     * Pipelines + pipeline stages are copied via `updateOrInsert` keyed on
-     * `team_id + model` (pipelines) and `team_id + pipeline_id + name`
-     * (stages) so the block is safe to re-run against a team that already
-     * has per-team pipelines — no duplicates, no exceptions.
-     * `PipelineStageProbability` rows are shared globally and are NOT
-     * copied per team.
+     * Every block is idempotent. The six lookup tables are copied via
+     * `updateOrInsert` keyed on `team_id + name`; pipelines and pipeline
+     * stages via `team_id + model` and `team_id + pipeline_id + name`. So the
+     * helper is safe to re-run against a team that already holds this data —
+     * no duplicates, no exceptions. `PipelineStageProbability` rows are shared
+     * globally and are NOT copied per team.
      */
     public static function seedCrmDataForTeam(int $teamId): void
     {
-        foreach (DB::table(config('laravel-crm.db_table_prefix').'labels')
+        $prefix = config('laravel-crm.db_table_prefix');
+
+        foreach (DB::table($prefix.'labels')
             ->whereNull('team_id')
             ->get() as $label) {
-            DB::table(config('laravel-crm.db_table_prefix').'labels')->insert([
-                'external_id' => Uuid::uuid4()->toString(),
-                'name' => $label->name,
+            static::upsertTeamRow($prefix.'labels', ['team_id' => $teamId, 'name' => $label->name], [
                 'hex' => $label->hex,
                 'description' => $label->description,
-                'team_id' => $teamId,
-                'created_at' => Carbon::now(),
-                'updated_at' => Carbon::now(),
+            ], [
+                'external_id' => Uuid::uuid4()->toString(),
             ]);
         }
 
-        foreach (DB::table(config('laravel-crm.db_table_prefix').'organization_types')
+        foreach (DB::table($prefix.'organization_types')
             ->whereNull('team_id')
             ->get() as $organizationType) {
-            DB::table(config('laravel-crm.db_table_prefix').'organization_types')->insert([
-                'name' => $organizationType->name,
+            static::upsertTeamRow($prefix.'organization_types', ['team_id' => $teamId, 'name' => $organizationType->name], [
                 'description' => $organizationType->description,
-                'team_id' => $teamId,
-                'created_at' => Carbon::now(),
-                'updated_at' => Carbon::now(),
             ]);
         }
 
-        foreach (DB::table(config('laravel-crm.db_table_prefix').'address_types')
+        foreach (DB::table($prefix.'address_types')
             ->whereNull('team_id')
             ->get() as $addressType) {
-            DB::table(config('laravel-crm.db_table_prefix').'address_types')->insert([
-                'name' => $addressType->name,
+            static::upsertTeamRow($prefix.'address_types', ['team_id' => $teamId, 'name' => $addressType->name], [
                 'description' => $addressType->description,
-                'team_id' => $teamId,
-                'created_at' => Carbon::now(),
-                'updated_at' => Carbon::now(),
             ]);
         }
 
-        foreach (DB::table(config('laravel-crm.db_table_prefix').'contact_types')
+        foreach (DB::table($prefix.'contact_types')
             ->whereNull('team_id')
             ->get() as $contactType) {
-            DB::table(config('laravel-crm.db_table_prefix').'contact_types')->insert([
-                'name' => $contactType->name,
+            static::upsertTeamRow($prefix.'contact_types', ['team_id' => $teamId, 'name' => $contactType->name], [
                 'description' => $contactType->description,
-                'team_id' => $teamId,
-                'created_at' => Carbon::now(),
-                'updated_at' => Carbon::now(),
             ]);
         }
 
-        foreach (DB::table(config('laravel-crm.db_table_prefix').'industries')
+        foreach (DB::table($prefix.'industries')
             ->whereNull('team_id')
             ->get() as $industry) {
-            DB::table(config('laravel-crm.db_table_prefix').'industries')->insert([
-                'name' => $industry->name,
+            static::upsertTeamRow($prefix.'industries', ['team_id' => $teamId, 'name' => $industry->name], [
                 'description' => $industry->description,
-                'team_id' => $teamId,
-                'created_at' => Carbon::now(),
-                'updated_at' => Carbon::now(),
             ]);
         }
 
-        foreach (DB::table(config('laravel-crm.db_table_prefix').'tax_rates')
+        foreach (DB::table($prefix.'tax_rates')
             ->whereNull('team_id')
             ->get() as $taxRate) {
-            DB::table(config('laravel-crm.db_table_prefix').'tax_rates')->insert([
-                'name' => $taxRate->name,
+            static::upsertTeamRow($prefix.'tax_rates', ['team_id' => $teamId, 'name' => $taxRate->name], [
                 'description' => $taxRate->description,
                 'rate' => $taxRate->rate,
                 'default' => $taxRate->default,
-                'team_id' => $teamId,
-                'created_at' => Carbon::now(),
-                'updated_at' => Carbon::now(),
             ]);
         }
 
-        // Pipelines + pipeline stages. `updateOrInsert` keeps this block
-        // idempotent so re-running against a team that already has per-team
-        // pipelines produces no duplicates. `PipelineStageProbability` rows
-        // are shared globally and are NOT copied per team.
-        foreach (DB::table(config('laravel-crm.db_table_prefix').'pipelines')
+        // Pipelines + pipeline stages, keyed on `team_id + model` and
+        // `team_id + pipeline_id + name`. `PipelineStageProbability` rows are
+        // shared globally and are NOT copied per team.
+        foreach (DB::table($prefix.'pipelines')
             ->whereNull('team_id')
             ->get() as $pipeline) {
-            DB::table(config('laravel-crm.db_table_prefix').'pipelines')->updateOrInsert([
+            static::upsertTeamRow($prefix.'pipelines', [
                 'team_id' => $teamId,
                 'model' => $pipeline->model,
             ], [
-                'external_id' => Uuid::uuid4()->toString(),
                 'name' => $pipeline->name,
-                'created_at' => Carbon::now(),
-                'updated_at' => Carbon::now(),
+            ], [
+                'external_id' => Uuid::uuid4()->toString(),
             ]);
 
-            $teamPipelineId = DB::table(config('laravel-crm.db_table_prefix').'pipelines')
+            $teamPipelineId = DB::table($prefix.'pipelines')
                 ->where('team_id', $teamId)
                 ->where('model', $pipeline->model)
                 ->value('id');
@@ -214,25 +191,44 @@ class TeamObserver
                 continue;
             }
 
-            foreach (DB::table(config('laravel-crm.db_table_prefix').'pipeline_stages')
+            foreach (DB::table($prefix.'pipeline_stages')
                 ->where('pipeline_id', $pipeline->id)
                 ->whereNull('team_id')
                 ->get() as $stage) {
-                DB::table(config('laravel-crm.db_table_prefix').'pipeline_stages')->updateOrInsert([
+                static::upsertTeamRow($prefix.'pipeline_stages', [
                     'team_id' => $teamId,
                     'pipeline_id' => $teamPipelineId,
                     'name' => $stage->name,
                 ], [
-                    'external_id' => Uuid::uuid4()->toString(),
                     'description' => $stage->description ?? null,
                     'pipeline_stage_probability_id' => $stage->pipeline_stage_probability_id ?? null,
                     'order' => $stage->order ?? 0,
                     'color' => $stage->color ?? null,
-                    'created_at' => Carbon::now(),
-                    'updated_at' => Carbon::now(),
+                ], [
+                    'external_id' => Uuid::uuid4()->toString(),
                 ]);
             }
         }
+    }
+
+    /**
+     * Copy one global row into a team, keyed on `$attributes`.
+     *
+     * `updateOrInsert` keeps the copy idempotent: re-running against a team
+     * that already holds the row refreshes it rather than inserting a second
+     * copy. `$insertOnly` values — an `external_id`, `created_at` — are
+     * written on first insert only, so a re-run never re-keys or re-stamps a
+     * row the host may already be linking to. A row the team soft-deleted
+     * stays deleted; it matches the key, so it is neither duplicated nor
+     * resurrected.
+     */
+    private static function upsertTeamRow(string $table, array $attributes, array $values, array $insertOnly = []): void
+    {
+        if (! DB::table($table)->where($attributes)->exists()) {
+            $values = array_merge($values, $insertOnly, ['created_at' => Carbon::now()]);
+        }
+
+        DB::table($table)->updateOrInsert($attributes, $values + ['updated_at' => Carbon::now()]);
     }
 
     /**

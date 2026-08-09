@@ -7,12 +7,28 @@ use Illuminate\Routing\Controller;
 use Illuminate\Support\Facades\Auth;
 use VentureDrake\LaravelCrm\Models\Feature;
 use VentureDrake\LaravelCrm\Services\FeatureService;
+use VentureDrake\LaravelCrm\Support\PortalTeam;
 
 class PublicFeatureController extends Controller
 {
-    public function index()
+    /**
+     * Serves both `/p/features` and `/p/features/team/{portalTeam}`.
+     *
+     * Resolving here rather than in the Livewire component means the team is
+     * settled — and remembered in the session — before the board renders, so
+     * the component and every link on the page agree on which board this is.
+     */
+    public function index(?int $portalTeam = null)
     {
-        return view('laravel-crm::portal.features.index');
+        $teamId = PortalTeam::resolve($portalTeam);
+
+        abort_if(PortalTeam::scoped() && $teamId === null, 404);
+
+        // Handed to the component rather than left for it to re-derive: the
+        // session is shared across tabs, so a visitor with two boards open
+        // would otherwise see one of them re-resolve onto the other's team on
+        // its next Livewire update.
+        return view('laravel-crm::portal.features.index', ['portalTeamId' => $teamId]);
     }
 
     public function show(Request $request, Feature $feature, FeatureService $featureService)
@@ -30,6 +46,10 @@ class PublicFeatureController extends Controller
         if ($redirect = $this->requireAuth(route('laravel-crm.portal.features.create'))) {
             return $redirect;
         }
+
+        // Fail here rather than on submit, so nobody types a request into a
+        // form that has no board to post it to.
+        abort_if(PortalTeam::scoped() && PortalTeam::resolve() === null, 404);
 
         return view('laravel-crm::portal.features.submit');
     }
@@ -51,14 +71,15 @@ class PublicFeatureController extends Controller
             'is_public' => true,
         ];
 
-        if (config('laravel-crm.teams')) {
-            $portalTeamId = $this->resolvePortalTeamId();
+        if (PortalTeam::scoped()) {
+            $portalTeamId = PortalTeam::resolve();
             abort_if($portalTeamId === null, 404);
 
-            $user = Auth::user();
-            $userTeamId = ($user && ($team = $user->currentTeam ?? null)) ? (int) $team->id : null;
-            abort_if($userTeamId !== $portalTeamId, 403);
-
+            // Stamped with the board's team, not the submitter's. The people a
+            // public roadmap is for are customers who registered through
+            // /p/register — they hold no host-app team, so requiring their
+            // currentTeam to match the board 403'd exactly the users the
+            // portal exists to serve.
             $payload['team_id'] = $portalTeamId;
         }
 
@@ -130,22 +151,24 @@ class PublicFeatureController extends Controller
         return redirect()->route('laravel-crm.portal.login', ['intended' => $intended]);
     }
 
+    /**
+     * A public feature is reachable by its own link whoever owns it — that is
+     * what makes a shared roadmap link work for someone with no account — and
+     * opening one moves the visitor onto that team's board for the rest of the
+     * session. An install that pinned the portal with `portal.team_id` keeps
+     * its old behaviour and still 404s everything outside that team.
+     */
     private function ensurePortalTeam(Feature $feature): void
     {
-        if (! config('laravel-crm.teams')) {
+        if (! PortalTeam::scoped()) {
             return;
         }
 
-        $portalTeamId = $this->resolvePortalTeamId();
+        // A teamless feature belongs to no board, so it is on none of them.
+        abort_if($feature->team_id === null, 404);
 
-        abort_if($portalTeamId === null, 404);
-        abort_if((int) $feature->team_id !== $portalTeamId, 404);
-    }
+        $featureTeamId = (int) $feature->team_id;
 
-    private function resolvePortalTeamId(): ?int
-    {
-        $configured = config('laravel-crm.portal.team_id');
-
-        return ($configured !== null && $configured !== '') ? (int) $configured : null;
+        abort_if(PortalTeam::adopt($featureTeamId) !== $featureTeamId, 404);
     }
 }

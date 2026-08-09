@@ -45,9 +45,7 @@ test('POST /invoices creates an invoice with nested line items', function () {
         ->postJson('/crm/api/v2/invoices', [
             'reference' => 'INV-REF-1',
             'currency' => 'USD',
-            'subtotal' => 300.00,
             'tax' => 30.00,
-            'total' => 330.00,
             'issue_date' => '2026-05-19T00:00:00Z',
             'due_date' => '2026-06-19T00:00:00Z',
             'organization_id' => $organization->external_id,

@@ -11,6 +11,7 @@ use Illuminate\Support\Facades\URL;
 use Livewire\Component;
 use VentureDrake\LaravelCrm\Services\SettingService;
 use VentureDrake\LaravelCrm\Support\PdfLogo;
+use VentureDrake\LaravelCrm\Support\PdfTemplateRegistry;
 use VentureDrake\LaravelCrm\Traits\NotifyToast;
 
 class SendPurchaseOrder extends Component
@@ -80,7 +81,7 @@ class SendPurchaseOrder extends Component
         Pdf::setOption([
             'fontDir' => public_path('vendor/laravel-crm/fonts'),
         ])
-            ->loadView('laravel-crm::purchase-orders.pdf', [
+            ->loadView(PdfTemplateRegistry::viewForModel('purchase-order', $this->purchaseOrder), [
                 'purchaseOrder' => $this->purchaseOrder,
                 'dateFormat' => app('laravel-crm.settings')->get('date_format', config('laravel-crm.date_format')),
                 'taxName' => app('laravel-crm.settings')->get('tax_name', 'Tax'),

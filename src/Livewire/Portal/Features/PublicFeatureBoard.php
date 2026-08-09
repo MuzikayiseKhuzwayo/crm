@@ -10,6 +10,7 @@ use Livewire\Component;
 use Livewire\WithPagination;
 use VentureDrake\LaravelCrm\Models\Feature;
 use VentureDrake\LaravelCrm\Models\FeatureStatus;
+use VentureDrake\LaravelCrm\Support\PortalTeam;
 
 class PublicFeatureBoard extends Component
 {
@@ -83,19 +84,24 @@ class PublicFeatureBoard extends Component
         return $query->paginate(10);
     }
 
+    /**
+     * The board this component was mounted on, carried across Livewire
+     * updates so a second tab on a different board cannot move it.
+     */
+    public ?int $portalTeamId = null;
+
+    /**
+     * The board being shown.
+     *
+     * `$portalTeamId` is a public property and so is whatever the client sends
+     * back — which is harmless, because every public board is public and
+     * reachable at its own URL anyway. The one case where it is not harmless
+     * is a `portal.team_id` lock, so that is re-applied here rather than
+     * trusted from the mount.
+     */
     protected function portalTeamId(): ?int
     {
-        $configured = config('laravel-crm.portal.team_id');
-
-        if ($configured !== null && $configured !== '') {
-            return (int) $configured;
-        }
-
-        if (($user = auth()->user()) && ($team = $user->currentTeam ?? null)) {
-            return (int) $team->id;
-        }
-
-        return null;
+        return PortalTeam::locked() ?? $this->portalTeamId ?? PortalTeam::resolve();
     }
 
     public function render()

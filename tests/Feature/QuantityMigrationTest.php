@@ -39,7 +39,7 @@ function seedLegacyQuantityTable(string $table): void
 
 function runQuantityMigration(): void
 {
-    $migration = require __DIR__.'/../../database/migrations/change_quantity_to_decimal_on_laravel_crm_tables.php.stub';
+    $migration = require __DIR__.'/../../database/updates/2026_08_08_203806_change_quantity_to_decimal_on_laravel_crm_tables.php';
 
     $migration->up();
 }

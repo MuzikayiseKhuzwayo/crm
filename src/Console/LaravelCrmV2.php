@@ -106,10 +106,11 @@ class LaravelCrmV2 extends Command
         // upgrade. Unconditionally back-fill per-team CRM lookup data + pipelines
         // for every pre-existing team so v2 upgraders end up in the same state as
         // update-command users. No db_update_1201 marker guard is used — both
-        // helpers are idempotent (seedCrmDataForTeam uses updateOrInsert for
-        // pipelines/stages, and repointCrmRecordsToTeamPipelines is a no-op once
-        // records already point at per-team stages), so re-running laravelcrm:v2
-        // does not duplicate rows or re-migrate already-migrated records.
+        // helpers are idempotent (seedCrmDataForTeam upserts every block on
+        // team_id + the row's natural key, and repointCrmRecordsToTeamPipelines
+        // is a no-op once records already point at per-team stages), so
+        // re-running laravelcrm:v2 does not duplicate rows or re-migrate
+        // already-migrated records.
         if (config('permission.teams')) {
             $teamClass = class_exists('App\Models\Team')
                 ? 'App\Models\Team'

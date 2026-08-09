@@ -46,9 +46,7 @@ test('POST /orders creates an order with nested line items', function () {
             'reference' => 'O-REF-1',
             'description' => 'First order',
             'currency' => 'USD',
-            'subtotal' => 200.00,
             'tax' => 20.00,
-            'total' => 220.00,
             'organization_id' => $organization->external_id,
             'user_owner_id' => $user->id,
             'line_items' => [
