@@ -514,7 +514,10 @@ class LaravelCrmServiceProvider extends ServiceProvider
     public function boot(Router $router, Filesystem $filesystem)
     {
         if (class_exists('Mary\MaryServiceProvider')) {
-            $this->app->register('Mary\MaryServiceProvider');
+            $provider = $this->app->register('Mary\MaryServiceProvider');
+            if (method_exists($provider, 'boot')) {
+                $this->app->call([$provider, 'boot']);
+            }
         }
 
         Paginator::useBootstrap();
