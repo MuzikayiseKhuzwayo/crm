@@ -18,11 +18,11 @@ class SettingsComposer
             now()->addHour(),
             function () {
                 $defaults = [
-                    'dateFormat' => 'Y-m-d',
-                    'timeFormat' => 'H:i',
-                    'timezone' => 'UTC',
-                    'taxName' => 'Tax',
-                    'dynamicProducts' => 'true',
+                    'crmDateFormat' => 'Y-m-d',
+                    'crmTimeFormat' => 'H:i',
+                    'crmTimezone' => 'UTC',
+                    'crmTaxName' => 'Tax',
+                    'crmDynamicProducts' => 'true',
                 ];
 
                 if (! Schema::hasTable(config('laravel-crm.db_table_prefix').'settings')) {
@@ -36,14 +36,14 @@ class SettingsComposer
                         $dynamicProducts = 'false';
                     }
                 } else {
-                    $dynamicProducts = $defaults['dynamicProducts'];
+                    $dynamicProducts = $defaults['crmDynamicProducts'];
                 }
 
                 return [
-                    'crmDateFormat' => Setting::where('name', 'date_format')->first()?->value ?? $defaults['dateFormat'],
-                    'crmTimeFormat' => Setting::where('name', 'time_format')->first()?->value ?? $defaults['timeFormat'],
-                    'crmTimezone' => Setting::where('name', 'timezone')->first()?->value ?? $defaults['timezone'],
-                    'crmTaxName' => Setting::where('name', 'tax_name')->first()?->value ?? $defaults['taxName'],
+                    'crmDateFormat' => Setting::where('name', 'date_format')->first()?->value ?? $defaults['crmDateFormat'],
+                    'crmTimeFormat' => Setting::where('name', 'time_format')->first()?->value ?? $defaults['crmTimeFormat'],
+                    'crmTimezone' => Setting::where('name', 'timezone')->first()?->value ?? $defaults['crmTimezone'],
+                    'crmTaxName' => Setting::where('name', 'tax_name')->first()?->value ?? $defaults['crmTaxName'],
                     'crmDynamicProducts' => $dynamicProducts,
                 ];
             }

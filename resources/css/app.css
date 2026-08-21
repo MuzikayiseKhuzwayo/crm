@@ -20,16 +20,24 @@
 /*@plugin '@tailwindcss/forms';*/
 @plugin '@tailwindcss/typography';
 
-@source '../../vendor/laravel/framework/src/Illuminate/Pagination/resources/views/*.blade.php';
-@source '../../vendor/robsontenorio/mary/src/View/Components/**/*.php';
-@source '../../src/View/Components/**/*.php';
-@source '../../resources/views/**/*.blade.php';
+@source "../../vendor/laravel/framework/src/Illuminate/Pagination/resources/views/*.blade.php";
+@source "../../vendor/robsontenorio/mary/src/**/*.php";
+@source "../../vendor/robsontenorio/mary/src/**/*.blade.php";
+@source "../../src/**/*.php";
+@source "../../resources/views/**/*.blade.php";
 
 /* Safelist specific classes */
 @source inline("bg-success");
 @source inline("bg-error");
 @source inline("bg-warning");
 @source inline("bg-white");
+@source inline("drawer");
+@source inline("drawer-open");
+@source inline("lg:drawer-open");
+@source inline("drawer-content");
+@source inline("drawer-side");
+@source inline("drawer-toggle");
+@source inline("drawer-overlay");
 
 @custom-variant dark (&:is(.dark *));
 

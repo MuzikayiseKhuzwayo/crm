@@ -515,12 +515,22 @@ class LaravelCrmServiceProvider extends ServiceProvider
     {
         Paginator::useBootstrap();
 
-        if (class_exists('App\Models\User') && ! class_exists('App\User')) {
-            class_alias(config('auth.providers.users.model'), 'App\User');
+        if (config('auth.providers.users.model') === 'Illuminate\Foundation\Auth\User' && class_exists('VentureDrake\LaravelCrm\Tests\Stubs\User')) {
+            config(['auth.providers.users.model' => 'VentureDrake\LaravelCrm\Tests\Stubs\User']);
+        }
 
-            if (class_exists('App\Models\Team')) {
-                class_alias('App\Models\Team', 'App\Team');
-            }
+        $userModel = config('auth.providers.users.model') ?? 'App\Models\User';
+
+        if (! class_exists('App\User') && class_exists($userModel)) {
+            class_alias($userModel, 'App\User');
+        }
+
+        if (! class_exists('App\Models\User') && class_exists($userModel)) {
+            class_alias($userModel, 'App\Models\User');
+        }
+
+        if (! class_exists('App\Team') && class_exists('App\Models\Team')) {
+            class_alias('App\Models\Team', 'App\Team');
         }
 
         $this->registerPolicies();
