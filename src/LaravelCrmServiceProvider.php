@@ -513,6 +513,10 @@ class LaravelCrmServiceProvider extends ServiceProvider
      */
     public function boot(Router $router, Filesystem $filesystem)
     {
+        if (class_exists('Mary\MaryServiceProvider')) {
+            $this->app->register('Mary\MaryServiceProvider');
+        }
+
         Paginator::useBootstrap();
 
         if (config('auth.providers.users.model') === 'Illuminate\Foundation\Auth\User' && class_exists('VentureDrake\LaravelCrm\Tests\Stubs\User')) {
