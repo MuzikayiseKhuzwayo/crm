@@ -1313,6 +1313,18 @@ class LaravelCrmServiceProvider extends ServiceProvider
         $this->mergeConfigFrom(__DIR__.'/../config/package.php', 'laravel-crm');
         $this->mergeConfigFrom(__DIR__.'/../config/laravel-crm.php', 'laravel-crm');
 
+        if (class_exists('Mary\MaryServiceProvider')) {
+            $this->app->register('Mary\MaryServiceProvider');
+        }
+
+        if (class_exists('Livewire\LivewireServiceProvider')) {
+            $this->app->register('Livewire\LivewireServiceProvider');
+        }
+
+        if (class_exists('Spatie\Permission\PermissionServiceProvider')) {
+            $this->app->register('Spatie\Permission\PermissionServiceProvider');
+        }
+
         // Register the main class to use with the facade
         $this->app->singleton('laravel-crm', function () {
             return new LaravelCrm;
