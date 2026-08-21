@@ -513,6 +513,8 @@ class LaravelCrmServiceProvider extends ServiceProvider
      */
     public function boot(Router $router, Filesystem $filesystem)
     {
+        config(['mary.prefix' => 'mary-']);
+
         if (class_exists('Mary\MaryServiceProvider')) {
             $provider = $this->app->register('Mary\MaryServiceProvider');
             if (method_exists($provider, 'boot')) {
@@ -1319,6 +1321,8 @@ class LaravelCrmServiceProvider extends ServiceProvider
         // Automatically apply the package configuration
         $this->mergeConfigFrom(__DIR__.'/../config/package.php', 'laravel-crm');
         $this->mergeConfigFrom(__DIR__.'/../config/laravel-crm.php', 'laravel-crm');
+
+        config(['mary.prefix' => 'mary-']);
 
         if (class_exists('Mary\MaryServiceProvider')) {
             $this->app->register('Mary\MaryServiceProvider');
