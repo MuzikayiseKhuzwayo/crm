@@ -1,0 +1,17 @@
+providers:
+  - VentureDrake\LaravelCrm\LaravelCrmServiceProvider
+  - Mary\MaryServiceProvider
+  - Livewire\LivewireServiceProvider
+  - Spatie\Permission\PermissionServiceProvider
+
+env:
+  - APP_URL=https://crm.techfusion-alchemy.xyz
+  - DB_CONNECTION=mysql
+  - DB_HOST=127.0.0.1
+  - DB_PORT=3306
+  - DB_DATABASE=laravel_crm
+  - DB_USERNAME=crm_user
+  - DB_PASSWORD=SecurePass123!
+  - LARAVEL_CRM_ROUTE_PREFIX=crm
+  - LARAVEL_CRM_TEAMS=false
+  - SESSION_DRIVER=database
