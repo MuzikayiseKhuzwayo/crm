@@ -9,9 +9,6 @@ use Laravel\Sanctum\HasApiTokens;
 use VentureDrake\LaravelCrm\Models\Role;
 use VentureDrake\LaravelCrm\Traits\HasCrmAccess;
 use VentureDrake\LaravelCrm\Traits\HasCrmActivities;
-use VentureDrake\LaravelCrm\Traits\HasCrmAddresses;
-use VentureDrake\LaravelCrm\Traits\HasCrmEmails;
-use VentureDrake\LaravelCrm\Traits\HasCrmPhones;
 use VentureDrake\LaravelCrm\Traits\HasCrmTeams;
 
 class User extends Authenticatable
@@ -19,9 +16,6 @@ class User extends Authenticatable
     use HasApiTokens;
     use HasCrmAccess;
     use HasCrmActivities;
-    use HasCrmAddresses;
-    use HasCrmEmails;
-    use HasCrmPhones;
     use HasCrmTeams;
     use HasFactory;
     use Notifiable;
