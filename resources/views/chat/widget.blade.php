@@ -70,7 +70,7 @@
     </form>
 
     <div class="lcrm-powered">
-        <a href="https://laravelcrm.com" target="_blank" rel="noopener noreferrer">⚡ Powered by Laravel CRM</a>
+        <span>© {{ date('Y') }} Techfusion Automata</span>
     </div>
 </div>
 

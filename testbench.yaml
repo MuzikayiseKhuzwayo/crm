@@ -1,0 +1,9 @@
+env:
+  - APP_ENV=local
+  - APP_KEY=base64:2fl+Ktvkfl+Fuz4Qp/A75G2RTiWVA/ZoKZvp6fiiM10=
+  - DB_CONNECTION=sqlite
+  - DB_DATABASE=C:/Users/muzik/Documents/GitHub/laravel-crm/database/database.sqlite
+  - CACHE_STORE=file
+  - SESSION_DRIVER=file
+  - LARAVEL_CRM_ROUTE_PREFIX=crm
+  - LARAVEL_CRM_TEAMS=false

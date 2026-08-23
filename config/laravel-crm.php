@@ -69,21 +69,21 @@ return [
     |
     */
 
-    'currency' => env('LARAVEL_CRM_CURRENCY', 'USD'),
+    'currency' => env('LARAVEL_CRM_CURRENCY', 'ZAR'),
 
-    'country' => env('LARAVEL_CRM_COUNTRY', 'United States'),
+    'country' => env('LARAVEL_CRM_COUNTRY', 'South Africa'),
 
     'language' => env('LARAVEL_CRM_LANGUAGE', 'english'),
 
-    'timezone' => env('LARAVEL_CRM_TIMEZONE', 'UTC'),
+    'timezone' => env('LARAVEL_CRM_TIMEZONE', 'Africa/Johannesburg'),
 
     'date_format' => env('LARAVEL_CRM_DATE_FORMAT', 'Y-m-d'),
 
     'time_format' => env('LARAVEL_CRM_TIME_FORMAT', 'g:i A'),
 
-    'tax_name' => env('LARAVEL_CRM_TAX_NAME', 'Tax'),
+    'tax_name' => env('LARAVEL_CRM_TAX_NAME', 'Techfusion Automata'),
 
-    'tax_rate' => env('LARAVEL_CRM_TAX_RATE', null),
+    'tax_rate' => env('LARAVEL_CRM_TAX_RATE', 14),
 
     /*
     |--------------------------------------------------------------------------
@@ -307,7 +307,7 @@ return [
     |
     */
 
-    'docs_url' => env('LARAVEL_CRM_DOCS_URL', 'https://github.com/venturedrake/laravel-crm'),
+    'docs_url' => env('LARAVEL_CRM_DOCS_URL', ''),
 
     /*
     |--------------------------------------------------------------------------
@@ -320,7 +320,7 @@ return [
     |
     */
 
-    'upgrade_guide_url' => env('LARAVEL_CRM_UPGRADE_GUIDE_URL', 'https://laravelcrm.com/docs/2.x/upgrading'),
+    'upgrade_guide_url' => env('LARAVEL_CRM_UPGRADE_GUIDE_URL', ''),
 
     /*
     |--------------------------------------------------------------------------

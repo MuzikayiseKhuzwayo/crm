@@ -5,6 +5,7 @@ providers:
   - Spatie\Permission\PermissionServiceProvider
 
 env:
+  - APP_NAME="Alchemy CRM"
   - APP_URL=https://crm.techfusion-alchemy.xyz
   - DB_CONNECTION=mysql
   - DB_HOST=127.0.0.1
@@ -15,3 +16,13 @@ env:
   - LARAVEL_CRM_ROUTE_PREFIX=crm
   - LARAVEL_CRM_TEAMS=false
   - SESSION_DRIVER=database
+  - MAIL_MAILER=smtp
+  - MAIL_HOST=mail.privateemail.com
+  - MAIL_PORT=465
+  - MAIL_USERNAME=muzikhuzwayo@techfusion-ventures.xyz
+  - MAIL_PASSWORD=:!ziyYFQ:GgD3MA
+  - MAIL_ENCRYPTION=ssl
+  - MAIL_FROM_ADDRESS=muzikhuzwayo@techfusion-ventures.xyz
+  - MAIL_FROM_NAME="Muzi Khuzwayo"
+  - LARAVEL_CRM_DOCS_URL=""
+  - LARAVEL_CRM_UPGRADE_GUIDE_URL=""

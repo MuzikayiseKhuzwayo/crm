@@ -56,7 +56,7 @@
                     </div>
 
                     <footer class="footer footer-center bg-base-100 text-base-content/60 py-4 mt-10">
-                        <span>© {{ \Carbon\Carbon::now()->year }} · Powered by <a href="https://laravelcrm.com" target="_blank" rel="noopener noreferrer" class="link link-hover">Laravel CRM</a></span>
+                        <span>© {{ \Carbon\Carbon::now()->year }} Techfusion Automata. All rights reserved.</span>
                     </footer>
                 </x-slot:content>
             </x-mary-main>

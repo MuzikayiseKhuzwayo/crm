@@ -34,7 +34,7 @@
             </div>
 
             <div class="mt-6 flex items-center gap-3 text-sm text-base-content/50">
-                <span>&copy; {{ date('Y') }} | Powered by <a href="https://laravelcrm.com" target="_blank" rel="noopener noreferrer">Laravel CRM</a></span>
+                <span>&copy; {{ date('Y') }} Techfusion Automata | Alchemy CRM</span>
                 <x-mary-theme-toggle class="btn btn-ghost btn-xs" />
             </div>
         </div>

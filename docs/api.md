@@ -116,7 +116,7 @@ DELETE /crm/api/v2/auth/token   → 204
 ## Headers
 
 | Header | Required | Purpose |
-|---|---|---|
+| --- | --- | --- |
 | `Authorization: Bearer <token>` | Yes (except `POST /auth/token`) | Sanctum personal access token. |
 | `Accept: application/json` | Recommended | The `laravel-crm.api.json` middleware forces JSON responses; this header is set automatically by Laravel when missing. |
 | `Content-Type: application/json` | Yes (for `POST`/`PUT`) | Request body is JSON. |
@@ -148,7 +148,7 @@ When the host app runs in teams mode (`config('laravel-crm.teams', true)`):
 All entity endpoints follow the same shape:
 
 | Verb | Path | Action |
-|---|---|---|
+| --- | --- | --- |
 | `GET` | `/{resource}` | List (paginated). |
 | `POST` | `/{resource}` | Create. |
 | `GET` | `/{resource}/{uuid}` | Show. |
@@ -160,7 +160,7 @@ The `{uuid}` in URIs is the entity's `external_id` (UUID), exposed as `id` in JS
 ### Auth
 
 | Method | Path | Notes |
-|---|---|---|
+| --- | --- | --- |
 | `POST` | `/crm/api/v2/auth/token` | Issue a token. Public (no auth required). |
 | `GET` | `/crm/api/v2/auth/me` | Return the authenticated user. |
 | `DELETE` | `/crm/api/v2/auth/token` | Revoke the current token. |
@@ -168,7 +168,7 @@ The `{uuid}` in URIs is the entity's `external_id` (UUID), exposed as `id` in JS
 ### Entities
 
 | Resource | Path | Notable fields |
-|---|---|---|
+| --- | --- | --- |
 | Lead | `/crm/api/v2/leads` | `title`, `description`, `amount`, `currency`, `expected_close`, `person_id`, `organization_id`, `lead_source_id`, `pipeline_stage_id`, `labels[]`, `user_owner_id` |
 | Product | `/crm/api/v2/products` | `name`, `code`, `description`, `unit_price`, `currency`, `tax_rate`, `tax_rate_id`, `product_category_id`, `active`, `user_owner_id` |
 | Organization | `/crm/api/v2/organizations` | `name`, `website`, `email`, `phone`, `annual_revenue`, `total_money_raised`, `number_of_employees`, `industry_id`, `organization_type_id`, `timezone_id`, `labels[]`, `user_owner_id` |
@@ -321,7 +321,7 @@ Returned when the rate limit is exceeded. Standard Laravel headers include
 The API enforces a single named rate limiter, `laravel-crm-api`:
 
 | Caller | Limit |
-|---|---|
+| --- | --- |
 | Authenticated (Sanctum) | **60 requests / minute / user** |
 | Unauthenticated | **30 requests / minute / IP** |
 
@@ -333,7 +333,7 @@ Exceeding the limit returns `429 Too Many Requests` with `Retry-After` in second
 `throttle:6,1` (6 attempts / minute / IP) and a **per-account** counter on failed attempts:
 
 | Setting | Default | Env |
-|---|---|---|
+| --- | --- | --- |
 | `laravel-crm.api.token_attempts_per_account` | 5 | `LARAVEL_CRM_API_TOKEN_ATTEMPTS_PER_ACCOUNT` |
 | `laravel-crm.api.token_attempts_decay_seconds` | 600 | `LARAVEL_CRM_API_TOKEN_ATTEMPTS_DECAY_SECONDS` |
 
@@ -391,3 +391,94 @@ curl -s -X DELETE https://example.test/crm/api/v2/auth/token \
   -H "Authorization: Bearer $TOKEN" \
   -i
 ```
+
+---
+
+Searched for files: *route*.php
+Viewed api-routes.php:1-67
+Viewed chat-embed-routes.php:1-48
+Viewed email-tracking-routes.php:1-45
+Viewed portal-routes.php:1-90
+Searched for files: *.php
+Viewed ApiController.php:1-59
+Viewed LeadController.php:1-146
+
+Here is the comprehensive breakdown of the API endpoints, triggers, and integration mechanisms available in **Laravel CRM** that are ready for automation, webhooks, and third-party integrations (n8n, Zapier, Make, custom scripts, web forms, etc.):
+
+---
+
+### 1. 🚀 REST API v2 (`/crm/api/v2/*`) — Full CRUD Automation
+
+All REST API endpoints are token-authenticated via **Laravel Sanctum**. Tokens can be generated programmatically via `POST /crm/api/v2/auth/token` or created for specific integration users. All entity references use UUID `external_id` parameters.
+
+#### 🔑 Authentication Endpoints
+
+* `POST /crm/api/v2/auth/token` — Exchange credentials for an API bearer token (Rate limited: 6 req/min).
+- `GET /crm/api/v2/auth/me` — Verify token & inspect active user context.
+- `DELETE /crm/api/v2/auth/token` — Revoke active integration token.
+
+#### 📥 Core CRM Entities (Full JSON API)
+
+| Entity | Route | Prime Automation Use Cases |
+| :--- | :--- | :--- |
+| **Leads** | `/crm/api/v2/leads` | Auto-capture leads from Web forms (Typeform, WordPress, JotForm), Facebook Lead Ads, or inbound emails. Auto-assign owners or pipeline stages. |
+| **People (Contacts)** | `/crm/api/v2/people` | Sync contact lists with Mailchimp, ActiveCampaign, Google Contacts, or custom CDPs. |
+| **Organizations** | `/crm/api/v2/organizations` | Auto-enrich company data via Clearbit/Apollo APIs or sync from ERP systems. |
+| **Deals** | `/crm/api/v2/deals` | Trigger deal creation when a demo is booked (Calendly/SavvyCal), update deal stages when contracts are signed (DocuSign/PandaDoc). |
+| **Quotes** | `/crm/api/v2/quotes` | Generate automated quotes from custom calculators or CPQ (Configure, Price, Quote) engines. |
+| **Orders** | `/crm/api/v2/orders` | Create sales orders automatically when e-commerce purchases complete (Shopify, WooCommerce, Stripe). |
+| **Invoices** | `/crm/api/v2/invoices` | Generate CRM invoices when subscriptions renew or billing software charges a customer. |
+| **Products** | `/crm/api/v2/products` | Sync product catalog pricing and inventory from external inventory management systems. |
+
+---
+
+### 2. 💬 Live Chat Embed API (`/p/chat/{publicKey}/*`)
+
+These public endpoints operate **outside the session/CSRF middleware group** using visitor tokens stored in local storage, allowing zero-friction third-party embedding.
+
+- **`POST /p/chat/{publicKey}/init`** — Programmatically initialize a chat session for a website visitor.
+- **`POST /p/chat/{publicKey}/identify`** — Automatically attach email/phone metadata to an active chat session (e.g., when a user logs into your main web application).
+- **`POST /p/chat/{publicKey}/messages/send`** — Send automated messages or AI agent replies directly into the visitor chat widget.
+- **`POST /p/chat/{publicKey}/track`** — Log custom visitor behavioral events (e.g. `viewed_pricing_page`, `started_checkout`).
+
+---
+
+### 3. 📄 Recipient Portal & Public Triggers (`/p/*`)
+
+Recipients interact with these endpoints without needing a CRM user account:
+
+- **Quotes (`/p/quotes/{external_id}`)**:
+  - `POST /p/quotes/{external_id}` — Accept/Decline proposal online (triggers conversion events).
+- **Invoices (`/p/invoices/{external_id}`)**:
+  - `POST /p/invoices/{external_id}` — Online payment processing trigger.
+- **Feature Portal (`/p/features/*`)**:
+  - `POST /p/features/submit` — Allow external users/customers to submit feature requests directly into the CRM backlog.
+  - `POST /p/features/{external_id}/vote` — Track customer votes on feature requests.
+
+---
+
+### 4. 📬 Email & SMS Tracking Webhooks (`/p/email/*` & `/p/sms/*`)
+
+Public tracking endpoints for outbound communications:
+- `GET /p/email/o/{token}.gif` — Email open tracking pixel (logs recipient engagement).
+- `GET /p/email/c/{token}` & `GET /p/sms/c/{token}` — Click tracking redirects.
+- `POST /p/email/u/{token}` & `POST /p/sms/u/{token}` — One-click unsubscription handling.
+
+---
+
+### 5. ⚡ Automated Background Tasks (Scheduled Commands)
+
+The package ships auto-registered scheduled tasks that execute background processes:
+
+- `laravelcrm:email-campaigns-dispatch` — Queues due marketing email campaign drips.
+- `laravelcrm:sms-campaigns-dispatch` — Sends pending SMS campaigns via **ClickSend API**.
+- `laravelcrm:reminders` — Evaluates activity/task deadlines and dispatches email/push notifications.
+- `laravelcrm:xero contacts` & `laravelcrm:xero products` — Automated 2-way sync with Xero accounting software.
+
+---
+
+### 🎯 Recommended Quick-Win Automations
+
+1. **Web Lead Capture**: Post lead form submissions directly to `POST /crm/api/v2/leads`.
+2. **Payment & Billing Sync**: Automate order/invoice creation via `POST /crm/api/v2/orders` and `POST /crm/api/v2/invoices` when Stripe webhooks fire.
+3. **AI Support Handoff**: Connect an AI assistant or chatbot to `/p/chat/{publicKey}/messages/send` for instant 24/7 automated customer responses.

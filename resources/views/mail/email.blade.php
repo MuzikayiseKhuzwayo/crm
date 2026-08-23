@@ -19,8 +19,7 @@
 {{-- Footer --}}
 @slot('footer')
 @component('mail::footer')
-<p>Powered by <a href="https://laravelcrm.com">Laravel CRM</a></p>
-© {{ date('Y') }} {{ config('app.name') }}. @lang('All rights reserved.')
+© {{ date('Y') }} Techfusion Automata. @lang('All rights reserved.')
 @endcomponent
 @endslot
 @endcomponent
