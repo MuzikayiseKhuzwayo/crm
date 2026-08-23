@@ -1,5 +1,7 @@
 <?php
 
+require __DIR__ . '/../vendor/autoload.php';
+
 // Set production DB env before bootstrapping Testbench
 $_ENV['DB_CONNECTION'] = 'mysql';
 $_ENV['DB_HOST'] = '127.0.0.1';
