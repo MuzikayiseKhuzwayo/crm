@@ -17,6 +17,8 @@ env:
   LARAVEL_CRM_ROUTE_PREFIX: "crm"
   LARAVEL_CRM_TEAMS: false
   SESSION_DRIVER: "database"
+  CACHE_STORE: "array"
+  CACHE_DRIVER: "array"
   MAIL_MAILER: "smtp"
   MAIL_HOST: "mail.privateemail.com"
   MAIL_PORT: 465
