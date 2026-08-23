@@ -21,7 +21,7 @@ $app = require_once __DIR__ . '/../vendor/orchestra/testbench-core/laravel/boots
 $kernel = $app->make(Illuminate\Contracts\Console\Kernel::class);
 $kernel->bootstrap();
 
-use VentureDrake\LaravelCrm\Models\Setting;
+use Illuminate\Support\Facades\DB;
 
 $settings = [
     'organization_name' => 'Techfusion Automata',
@@ -54,7 +54,7 @@ $settings = [
 ];
 
 foreach ($settings as $name => $value) {
-    Setting::updateOrCreate(
+    DB::table('crm_settings')->updateOrInsert(
         ['name' => $name],
         ['value' => $value]
     );
