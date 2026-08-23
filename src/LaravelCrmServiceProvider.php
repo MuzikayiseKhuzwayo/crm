@@ -1322,6 +1322,13 @@ class LaravelCrmServiceProvider extends ServiceProvider
         $this->mergeConfigFrom(__DIR__.'/../config/package.php', 'laravel-crm');
         $this->mergeConfigFrom(__DIR__.'/../config/laravel-crm.php', 'laravel-crm');
 
+        if ($dbConn = env('DB_CONNECTION')) {
+            config(['database.default' => $dbConn]);
+        }
+        if ($cacheStore = env('CACHE_STORE', env('CACHE_DRIVER'))) {
+            config(['cache.default' => $cacheStore]);
+        }
+
         config(['mary.prefix' => 'mary-']);
 
         if (class_exists('Mary\MaryServiceProvider')) {
