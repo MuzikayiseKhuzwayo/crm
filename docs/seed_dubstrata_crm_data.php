@@ -21,6 +21,9 @@ $app = require_once __DIR__ . '/../vendor/orchestra/testbench-core/laravel/boots
 $kernel = $app->make(Illuminate\Contracts\Console\Kernel::class);
 $kernel->bootstrap();
 
+// Ensure CRM table prefix config is set
+config(['laravel-crm.db_table_prefix' => 'crm_']);
+
 use Carbon\Carbon;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
