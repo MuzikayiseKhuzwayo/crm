@@ -2,7 +2,6 @@
 
 require __DIR__ . '/../vendor/autoload.php';
 
-// Set production DB env before bootstrapping Testbench
 $_ENV['DB_CONNECTION'] = 'mysql';
 $_ENV['DB_HOST'] = '127.0.0.1';
 $_ENV['DB_PORT'] = '3306';
@@ -23,6 +22,7 @@ $kernel = $app->make(Illuminate\Contracts\Http\Kernel::class);
 $kernel->bootstrap();
 
 config(['laravel-crm.db_table_prefix' => 'crm_']);
+config(['app.debug' => true]);
 
 $user = App\Models\User::first();
 auth()->login($user);
@@ -34,7 +34,13 @@ try {
     $request = Illuminate\Http\Request::create('https://crm.techfusion-alchemy.xyz' . $uri, 'GET');
     $response = $kernel->handle($request);
     echo "STATUS: " . $response->getStatusCode() . "\n";
-    echo "CONTENT SNIPPET:\n" . substr($response->getContent(), 0, 1000) . "\n";
+    if (isset($response->exception) && $response->exception) {
+        echo "EXCEPTION CLASS: " . get_class($response->exception) . "\n";
+        echo "EXCEPTION MESSAGE: " . $response->exception->getMessage() . "\n";
+        echo "TRACE:\n" . $response->exception->getTraceAsString() . "\n";
+    } else {
+        echo "CONTENT SNIPPET:\n" . substr($response->getContent(), 0, 2000) . "\n";
+    }
 } catch (\Throwable $e) {
-    echo "EXCEPTION: " . $e->getMessage() . "\n" . $e->getTraceAsString() . "\n";
+    echo "TOP EXCEPTION: " . $e->getMessage() . "\n" . $e->getTraceAsString() . "\n";
 }
