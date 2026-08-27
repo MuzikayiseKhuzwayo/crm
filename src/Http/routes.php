@@ -16,9 +16,9 @@ use VentureDrake\LaravelCrm\Livewire\Settings\Integrations\Xero\XeroConnect;
 /* Root Prefix Redirect */
 
 if (config('laravel-crm.route_prefix')) {
-    Route::get('/', function () {
-        return redirect()->route('laravel-crm.dashboard');
-    })->name('laravel-crm.root');
+    Route::get('/', 'VentureDrake\LaravelCrm\Http\Controllers\DashboardController@index')
+        ->middleware('auth.laravel-crm')
+        ->name('laravel-crm.root');
 }
 
 /* Dashboard */

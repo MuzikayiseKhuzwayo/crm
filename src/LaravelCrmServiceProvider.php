@@ -1415,6 +1415,19 @@ class LaravelCrmServiceProvider extends ServiceProvider
             }
         });
 
+        // Bare domain root fallback — if LARAVEL_CRM_ROUTE_PREFIX is configured (e.g. 'crm'),
+        // ensure visiting the site root '/' routes seamlessly to the CRM dashboard.
+        if (config('laravel-crm.route_prefix')) {
+            Route::group([
+                'domain' => null,
+                'prefix' => null,
+                'middleware' => array_unique(array_merge(['web', 'crm', 'crm-api'], config('laravel-crm.route_middleware') ?? [])),
+            ], function () {
+                Route::get('/', 'VentureDrake\LaravelCrm\Http\Controllers\DashboardController@index')
+                    ->middleware('auth.laravel-crm');
+            });
+        }
+
         // API routes (v2) — JSON-only with named rate limiter
         // Mounted under the CRM route prefix (defaults to `crm/api/v2`).
         Route::group([
