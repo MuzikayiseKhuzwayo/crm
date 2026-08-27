@@ -1131,7 +1131,7 @@ $tasksData = [
 foreach ($tasksData as $td) {
     Task::create([
         'external_id' => Str::uuid()->toString(),
-        'title' => $td['title'],
+        'name' => $td['title'],
         'description' => $td['desc'],
         'due_at' => $td['due'],
         'completed_at' => $td['done'] ? Carbon::now()->subDays(1) : null,
@@ -1159,7 +1159,7 @@ $callsData = [
 foreach ($callsData as $cd) {
     Call::create([
         'external_id' => Str::uuid()->toString(),
-        'title' => $cd['title'],
+        'name' => $cd['title'],
         'description' => $cd['desc'],
         'user_created_id' => $userId,
         'user_owner_id' => $userId,
@@ -1184,7 +1184,7 @@ $meetingsData = [
 foreach ($meetingsData as $md) {
     Meeting::create([
         'external_id' => Str::uuid()->toString(),
-        'title' => $md['title'],
+        'name' => $md['title'],
         'description' => $md['desc'],
         'start_at' => $md['start'],
         'finish_at' => $md['finish'],
@@ -1205,7 +1205,7 @@ $lunchesData = [
 foreach ($lunchesData as $ld) {
     Lunch::create([
         'external_id' => Str::uuid()->toString(),
-        'title' => $ld['title'],
+        'name' => $ld['title'],
         'description' => $ld['desc'],
         'start_at' => $ld['start'],
         'finish_at' => $ld['finish'],
