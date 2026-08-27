@@ -24,15 +24,13 @@ $kernel->bootstrap();
 config(['laravel-crm.db_table_prefix' => 'crm_']);
 config(['app.debug' => true]);
 
-// Test 1: Unauthenticated GET /crm
-$request1 = Illuminate\Http\Request::create('https://crm.techfusion-alchemy.xyz/crm', 'GET');
-$response1 = $kernel->handle($request1);
-echo "UNAUTH /crm -> STATUS: " . $response1->getStatusCode() . " LOCATION: " . $response1->headers->get('Location') . "\n";
-
-// Test 2: Authenticated GET /crm
-$user = App\Models\User::first();
-auth()->login($user);
-
-$request2 = Illuminate\Http\Request::create('https://crm.techfusion-alchemy.xyz/crm', 'GET');
-$response2 = $kernel->handle($request2);
-echo "AUTH /crm -> STATUS: " . $response2->getStatusCode() . " LOCATION: " . $response2->headers->get('Location') . "\n";
+// Test 3: Unauthenticated GET /crm/login
+$request3 = Illuminate\Http\Request::create('https://crm.techfusion-alchemy.xyz/crm/login', 'GET');
+$response3 = $kernel->handle($request3);
+echo "UNAUTH /crm/login -> STATUS: " . $response3->getStatusCode() . " LOCATION: " . $response3->headers->get('Location') . "\n";
+if (isset($response3->exception) && $response3->exception) {
+    echo "EX CLASS: " . get_class($response3->exception) . "\n";
+    echo "EX: " . $response3->exception->getMessage() . "\n";
+} else {
+    echo "CONTENT SNIPPET: " . substr($response3->getContent(), 0, 500) . "\n";
+}
