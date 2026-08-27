@@ -19,7 +19,7 @@ putenv('DB_PASSWORD=SecurePass123!');
 
 $app = require_once __DIR__ . '/../vendor/orchestra/testbench-core/laravel/bootstrap/app.php';
 $app->register(\VentureDrake\LaravelCrm\LaravelCrmServiceProvider::class);
-$kernel = $app->make(Illuminate\Contracts\Console\Kernel::class);
+$kernel = $app->make(Illuminate\Contracts\Http\Kernel::class);
 $kernel->bootstrap();
 
 config(['laravel-crm.db_table_prefix' => 'crm_']);
