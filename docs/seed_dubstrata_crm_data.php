@@ -135,7 +135,10 @@ $sources = [
 ];
 $leadSourceModels = [];
 foreach ($sources as $srcName) {
-    $leadSourceModels[$srcName] = LeadSource::create(['name' => $srcName]);
+    $leadSourceModels[$srcName] = LeadSource::create([
+        'name' => $srcName,
+        'external_id' => Str::uuid()->toString(),
+    ]);
 }
 
 // 5. Seed Dubstrata Labels
@@ -152,7 +155,11 @@ $labelsData = [
 ];
 $labelModels = [];
 foreach ($labelsData as $lbl => $hex) {
-    $labelModels[$lbl] = Label::create(['name' => $lbl, 'hex' => $hex]);
+    $labelModels[$lbl] = Label::create([
+        'name' => $lbl,
+        'hex' => $hex,
+        'external_id' => Str::uuid()->toString(),
+    ]);
 }
 
 // 6. Seed Dubstrata Products & Categories
@@ -241,7 +248,10 @@ $catData = [
 
 $productModels = [];
 foreach ($catData as $catName => $products) {
-    $category = ProductCategory::create(['name' => $catName]);
+    $category = ProductCategory::create([
+        'name' => $catName,
+        'external_id' => Str::uuid()->toString(),
+    ]);
 
     foreach ($products as $pData) {
         $prod = Product::create([
@@ -253,6 +263,7 @@ foreach ($catData as $catName => $products) {
             'active' => true,
             'user_created_id' => $userId,
             'user_owner_id' => $userId,
+            'external_id' => Str::uuid()->toString(),
         ]);
 
         ProductPrice::create([
@@ -1119,6 +1130,7 @@ $tasksData = [
 
 foreach ($tasksData as $td) {
     Task::create([
+        'external_id' => Str::uuid()->toString(),
         'title' => $td['title'],
         'description' => $td['desc'],
         'due_at' => $td['due'],
@@ -1146,6 +1158,7 @@ $callsData = [
 
 foreach ($callsData as $cd) {
     Call::create([
+        'external_id' => Str::uuid()->toString(),
         'title' => $cd['title'],
         'description' => $cd['desc'],
         'user_created_id' => $userId,
@@ -1170,6 +1183,7 @@ $meetingsData = [
 
 foreach ($meetingsData as $md) {
     Meeting::create([
+        'external_id' => Str::uuid()->toString(),
         'title' => $md['title'],
         'description' => $md['desc'],
         'start_at' => $md['start'],
@@ -1190,6 +1204,7 @@ $lunchesData = [
 
 foreach ($lunchesData as $ld) {
     Lunch::create([
+        'external_id' => Str::uuid()->toString(),
         'title' => $ld['title'],
         'description' => $ld['desc'],
         'start_at' => $ld['start'],
@@ -1218,6 +1233,7 @@ $notesData = [
 foreach ($notesData as $nd) {
     $org = $orgModels[$nd['org']];
     Note::create([
+        'external_id' => Str::uuid()->toString(),
         'content' => $nd['content'],
         'notable_type' => Organization::class,
         'notable_id' => $org->id,
