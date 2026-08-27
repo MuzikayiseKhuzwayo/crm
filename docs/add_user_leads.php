@@ -25,7 +25,6 @@ config(['laravel-crm.db_table_prefix' => 'crm_']);
 
 use Illuminate\Support\Str;
 use Carbon\Carbon;
-use VentureDrake\LaravelCrm\Models\User;
 use VentureDrake\LaravelCrm\Models\Organization;
 use VentureDrake\LaravelCrm\Models\Person;
 use VentureDrake\LaravelCrm\Models\Contact;
@@ -38,7 +37,8 @@ use VentureDrake\LaravelCrm\Models\Pipeline;
 use VentureDrake\LaravelCrm\Models\PipelineStage;
 use VentureDrake\LaravelCrm\Models\Note;
 
-$owner = User::first();
+$userModel = config('auth.providers.users.model') ?? \App\Models\User::class;
+$owner = $userModel::first();
 $userId = $owner ? $owner->id : 1;
 
 // Get or create Lead Source
