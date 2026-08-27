@@ -23,12 +23,15 @@ $kernel->bootstrap();
 
 config(['laravel-crm.db_table_prefix' => 'crm_']);
 
-// Simulate authenticated user visiting /crm/login
+// Test 1: GET / (root domain) unauthenticated
+$request1 = Illuminate\Http\Request::create('https://crm.techfusion-alchemy.xyz/', 'GET');
+$response1 = $kernel->handle($request1);
+echo "ROOT / (UNAUTH) -> STATUS: " . $response1->getStatusCode() . " LOCATION: " . $response1->headers->get('Location') . "\n";
+
+// Test 2: GET / (root domain) authenticated
 $user = App\Models\User::first();
 auth()->login($user);
 
-$request = Illuminate\Http\Request::create('https://crm.techfusion-alchemy.xyz/crm/login', 'GET');
-$response = $kernel->handle($request);
-
-echo "AUTH USER VISITING /crm/login -> STATUS: " . $response->getStatusCode() . "\n";
-echo "LOCATION HEADER: " . $response->headers->get('Location') . "\n";
+$request2 = Illuminate\Http\Request::create('https://crm.techfusion-alchemy.xyz/', 'GET');
+$response2 = $kernel->handle($request2);
+echo "ROOT / (AUTH) -> STATUS: " . $response2->getStatusCode() . " LOCATION: " . $response2->headers->get('Location') . "\n";
