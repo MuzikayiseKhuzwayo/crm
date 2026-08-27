@@ -24,8 +24,8 @@ $kernel->bootstrap();
 config(['laravel-crm.db_table_prefix' => 'crm_']);
 config(['app.debug' => true]);
 
-$user = App\Models\User::first();
-auth()->login($user);
+//$user = App\Models\User::first();
+//auth()->login($user);
 
 $uri = $argv[1] ?? '/crm/dashboard';
 echo "Testing URI: " . $uri . "\n";
