@@ -1276,8 +1276,8 @@ foreach ($notesData as $nd) {
     Note::create([
         'external_id' => Str::uuid()->toString(),
         'content' => $nd['content'],
-        'notable_type' => Organization::class,
-        'notable_id' => $org->id,
+        'noteable_type' => Organization::class,
+        'noteable_id' => $org->id,
         'user_created_id' => $userId,
         'user_owner_id' => $userId,
     ]);
