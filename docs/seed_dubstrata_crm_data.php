@@ -18,6 +18,7 @@ putenv('DB_USERNAME=crm_user');
 putenv('DB_PASSWORD=SecurePass123!');
 
 $app = require_once __DIR__ . '/../vendor/orchestra/testbench-core/laravel/bootstrap/app.php';
+$app->register(\VentureDrake\LaravelCrm\LaravelCrmServiceProvider::class);
 $kernel = $app->make(Illuminate\Contracts\Console\Kernel::class);
 $kernel->bootstrap();
 
@@ -584,12 +585,16 @@ $leadsData = [
 ];
 
 $leadModels = [];
+$leadIdx = 1001;
 foreach ($leadsData as $ld) {
     $org = $orgModels[$ld['org']];
     $person = $personModels[$ld['org']];
 
     $lead = Lead::create([
         'external_id' => Str::uuid()->toString(),
+        'lead_id' => 'TFA-L' . $leadIdx,
+        'prefix' => 'TFA-L',
+        'number' => $leadIdx++,
         'title' => $ld['title'],
         'description' => $ld['desc'],
         'amount' => $ld['amount'],
@@ -699,6 +704,7 @@ $dealsData = [
 ];
 
 $dealModels = [];
+$dealIdx = 1001;
 
 foreach ($dealsData as $dd) {
     $org = $orgModels[$dd['org']];
@@ -707,6 +713,9 @@ foreach ($dealsData as $dd) {
 
     $deal = Deal::create([
         'external_id' => Str::uuid()->toString(),
+        'deal_id' => 'TFA-D' . $dealIdx,
+        'prefix' => 'TFA-D',
+        'number' => $dealIdx++,
         'title' => $dd['title'],
         'description' => $dd['desc'],
         'amount' => $dd['amount'],
@@ -802,6 +811,7 @@ $quotesData = [
 ];
 
 $quoteModels = [];
+$quoteIdx = 1001;
 
 foreach ($quotesData as $qd) {
     $org = $orgModels[$qd['org']];
@@ -817,6 +827,9 @@ foreach ($quotesData as $qd) {
 
     $quote = Quote::create([
         'external_id' => Str::uuid()->toString(),
+        'quote_id' => 'TFA-Q' . $quoteIdx,
+        'prefix' => 'TFA-Q',
+        'number' => $quoteIdx++,
         'title' => $qd['title'],
         'description' => 'Dubstrata institutional proposal for ' . $org->name,
         'reference' => $qd['ref'],
@@ -880,6 +893,7 @@ $ordersData = [
 ];
 
 $orderModels = [];
+$orderIdx = 1001;
 
 foreach ($ordersData as $od) {
     $org = $orgModels[$od['org']];
@@ -889,6 +903,9 @@ foreach ($ordersData as $od) {
 
     $order = Order::create([
         'external_id' => Str::uuid()->toString(),
+        'order_id' => 'TFA-O' . $orderIdx,
+        'prefix' => 'TFA-O',
+        'number' => $orderIdx++,
         'reference' => $od['ref'],
         'deal_id' => $deal->id,
         'quote_id' => $quote->id,
@@ -952,6 +969,7 @@ $invoicesData = [
     ],
 ];
 
+$invIdx = 1001;
 foreach ($invoicesData as $invD) {
     $org = $orgModels[$invD['org']];
     $person = $personModels[$invD['org']];
@@ -969,6 +987,9 @@ foreach ($invoicesData as $invD) {
 
     $invoice = Invoice::create([
         'external_id' => Str::uuid()->toString(),
+        'invoice_id' => 'TFA-INV' . $invIdx,
+        'prefix' => 'TFA-INV',
+        'number' => $invIdx++,
         'title' => $invD['title'],
         'description' => 'Dubstrata institutional invoice for ' . $org->name,
         'order_id' => $order ? $order->id : null,
@@ -1034,6 +1055,7 @@ $deliveriesData = [
     ],
 ];
 
+$delIdx = 1001;
 foreach ($deliveriesData as $delD) {
     $org = $orgModels[$delD['org']];
     $person = $personModels[$delD['org']];
@@ -1041,6 +1063,9 @@ foreach ($deliveriesData as $delD) {
 
     $delivery = Delivery::create([
         'external_id' => Str::uuid()->toString(),
+        'delivery_id' => 'TFA-DEL' . $delIdx,
+        'prefix' => 'TFA-DEL',
+        'number' => $delIdx++,
         'order_id' => $order->id,
         'person_id' => $person->id,
         'organization_id' => $org->id,
@@ -1079,12 +1104,16 @@ $poData = [
     ],
 ];
 
+$poIdx = 1001;
 foreach ($poData as $pod) {
     $tax = round($pod['subtotal'] * 0.14, 2);
     $total = $pod['subtotal'] + $tax;
 
     $po = PurchaseOrder::create([
         'external_id' => Str::uuid()->toString(),
+        'purchase_order_id' => 'TFA-PO' . $poIdx,
+        'prefix' => 'TFA-PO',
+        'number' => $poIdx++,
         'subtotal' => $pod['subtotal'],
         'tax' => $tax,
         'total' => $total,
