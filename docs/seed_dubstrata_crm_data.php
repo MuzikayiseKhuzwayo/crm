@@ -122,7 +122,7 @@ echo "-> All old templated records successfully purged!\n\n";
 // 3. Ensure Default Tax Rate (14% VAT for Techfusion Automata / Dubstrata SA)
 $taxRate = TaxRate::firstOrCreate(
     ['name' => 'VAT 14%'],
-    ['description' => 'South African Standard Value-Added Tax (14%)', 'rate' => 14, 'default' => true]
+    ['external_id' => Str::uuid()->toString(), 'description' => 'South African Standard Value-Added Tax (14%)', 'rate' => 14, 'default' => true]
 );
 echo "-> Tax Rate: VAT 14% configured.\n";
 
@@ -415,6 +415,7 @@ $personModels = [];
 
 foreach ($orgsData as $oData) {
     $org = Organization::create([
+        'external_id' => Str::uuid()->toString(),
         'name' => $oData['name'],
         'description' => $oData['desc'],
         'user_created_id' => $userId,
@@ -457,6 +458,7 @@ foreach ($orgsData as $oData) {
     // Contact Person
     $c = $oData['contact'];
     $person = Person::create([
+        'external_id' => Str::uuid()->toString(),
         'title' => $c['title'],
         'first_name' => $c['first'],
         'last_name' => $c['last'],
@@ -587,6 +589,7 @@ foreach ($leadsData as $ld) {
     $person = $personModels[$ld['org']];
 
     $lead = Lead::create([
+        'external_id' => Str::uuid()->toString(),
         'title' => $ld['title'],
         'description' => $ld['desc'],
         'amount' => $ld['amount'],
@@ -703,6 +706,7 @@ foreach ($dealsData as $dd) {
     $lead = $leadModels[$dd['org']] ?? null;
 
     $deal = Deal::create([
+        'external_id' => Str::uuid()->toString(),
         'title' => $dd['title'],
         'description' => $dd['desc'],
         'amount' => $dd['amount'],
@@ -812,6 +816,7 @@ foreach ($quotesData as $qd) {
     $total = $subtotal + $tax;
 
     $quote = Quote::create([
+        'external_id' => Str::uuid()->toString(),
         'title' => $qd['title'],
         'description' => 'Dubstrata institutional proposal for ' . $org->name,
         'reference' => $qd['ref'],
@@ -883,6 +888,7 @@ foreach ($ordersData as $od) {
     $deal = $dealModels[$od['deal']];
 
     $order = Order::create([
+        'external_id' => Str::uuid()->toString(),
         'reference' => $od['ref'],
         'deal_id' => $deal->id,
         'quote_id' => $quote->id,
@@ -962,6 +968,7 @@ foreach ($invoicesData as $invD) {
     }
 
     $invoice = Invoice::create([
+        'external_id' => Str::uuid()->toString(),
         'title' => $invD['title'],
         'description' => 'Dubstrata institutional invoice for ' . $org->name,
         'order_id' => $order ? $order->id : null,
@@ -1033,6 +1040,7 @@ foreach ($deliveriesData as $delD) {
     $order = $orderModels[$delD['order']];
 
     $delivery = Delivery::create([
+        'external_id' => Str::uuid()->toString(),
         'order_id' => $order->id,
         'person_id' => $person->id,
         'organization_id' => $org->id,
@@ -1076,6 +1084,7 @@ foreach ($poData as $pod) {
     $total = $pod['subtotal'] + $tax;
 
     $po = PurchaseOrder::create([
+        'external_id' => Str::uuid()->toString(),
         'subtotal' => $pod['subtotal'],
         'tax' => $tax,
         'total' => $total,
