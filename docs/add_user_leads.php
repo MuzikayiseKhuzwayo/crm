@@ -139,13 +139,7 @@ foreach ($leadsPayload as $lp) {
         'user_owner_id' => $userId,
     ]);
 
-    // 3. Contact link
-    Contact::firstOrCreate([
-        'organization_id' => $org->id,
-        'person_id' => $person->id,
-    ]);
-
-    // 4. Address
+    // 3. Address
     if ($addressType) {
         Address::create([
             'external_id' => Str::uuid()->toString(),
