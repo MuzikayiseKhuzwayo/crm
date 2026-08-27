@@ -39,7 +39,7 @@ $userModel = config('auth.providers.users.model') ?? \App\Models\User::class;
 $owner = $userModel::first();
 $userId = $owner ? $owner->id : 1;
 
-$jsonFile = __DIR__ . '/../dataset_linkedin-profile-search_2026-08-27_23-44-53-095.json';
+$jsonFile = __DIR__ . '/dataset.json';
 if (!file_exists($jsonFile)) {
     die("JSON dataset file not found: $jsonFile\n");
 }
