@@ -26,12 +26,5 @@ config(['laravel-crm.db_table_prefix' => 'crm_']);
 // Test 1: GET / (root domain) unauthenticated
 $request1 = Illuminate\Http\Request::create('https://crm.techfusion-alchemy.xyz/', 'GET');
 $response1 = $kernel->handle($request1);
-echo "ROOT / (UNAUTH) -> STATUS: " . $response1->getStatusCode() . " LOCATION: " . $response1->headers->get('Location') . "\n";
-
-// Test 2: GET / (root domain) authenticated
-$user = App\Models\User::first();
-auth()->login($user);
-
-$request2 = Illuminate\Http\Request::create('https://crm.techfusion-alchemy.xyz/', 'GET');
-$response2 = $kernel->handle($request2);
-echo "ROOT / (AUTH) -> STATUS: " . $response2->getStatusCode() . " LOCATION: " . $response2->headers->get('Location') . "\n";
+echo "ROOT / (UNAUTH) -> STATUS: " . $response1->getStatusCode() . "\n";
+echo "ROOT / CONTENT:\n" . substr($response1->getContent(), 0, 1500) . "\n";
