@@ -132,23 +132,23 @@
             @scope('cell_lead_title', $task)
                 @if($task->taskable)
                     @if($task->taskable_type === 'VentureDrake\LaravelCrm\Models\Lead')
-                        <a href="{{ route('laravel-crm.leads.show', $task->taskable) }}" class="inline-flex items-center gap-1 text-xs font-medium text-primary hover:underline">
-                            <x-mary-icon name="o-funnel" class="w-3.5 h-3.5" />
+                        <a href="{{ route('laravel-crm.leads.show', $task->taskable) }}" class="inline-flex items-center gap-1.5 text-xs font-medium text-primary hover:underline">
+                            <x-mary-icon name="o-funnel" class="w-4 h-4 shrink-0" style="width: 1rem; height: 1rem; min-width: 1rem; min-height: 1rem;" />
                             <span>{{ $task->taskable->title }}</span>
                         </a>
                     @elseif($task->taskable_type === 'VentureDrake\LaravelCrm\Models\Deal')
-                        <a href="{{ route('laravel-crm.deals.show', $task->taskable) }}" class="inline-flex items-center gap-1 text-xs font-medium text-secondary hover:underline">
-                            <x-mary-icon name="o-briefcase" class="w-3.5 h-3.5" />
+                        <a href="{{ route('laravel-crm.deals.show', $task->taskable) }}" class="inline-flex items-center gap-1.5 text-xs font-medium text-secondary hover:underline">
+                            <x-mary-icon name="o-briefcase" class="w-4 h-4 shrink-0" style="width: 1rem; height: 1rem; min-width: 1rem; min-height: 1rem;" />
                             <span>{{ $task->taskable->title }}</span>
                         </a>
                     @elseif($task->taskable_type === 'VentureDrake\LaravelCrm\Models\Person')
-                        <a href="{{ route('laravel-crm.people.show', $task->taskable) }}" class="inline-flex items-center gap-1 text-xs font-medium text-info hover:underline">
-                            <x-mary-icon name="o-user" class="w-3.5 h-3.5" />
+                        <a href="{{ route('laravel-crm.people.show', $task->taskable) }}" class="inline-flex items-center gap-1.5 text-xs font-medium text-info hover:underline">
+                            <x-mary-icon name="o-user" class="w-4 h-4 shrink-0" style="width: 1rem; height: 1rem; min-width: 1rem; min-height: 1rem;" />
                             <span>{{ $task->taskable->name }}</span>
                         </a>
                     @elseif($task->taskable_type === 'VentureDrake\LaravelCrm\Models\Organization')
-                        <a href="{{ route('laravel-crm.organizations.show', $task->taskable) }}" class="inline-flex items-center gap-1 text-xs font-medium text-accent hover:underline">
-                            <x-mary-icon name="o-building-office" class="w-3.5 h-3.5" />
+                        <a href="{{ route('laravel-crm.organizations.show', $task->taskable) }}" class="inline-flex items-center gap-1.5 text-xs font-medium text-accent hover:underline">
+                            <x-mary-icon name="o-building-office" class="w-4 h-4 shrink-0" style="width: 1rem; height: 1rem; min-width: 1rem; min-height: 1rem;" />
                             <span>{{ $task->taskable->name }}</span>
                         </a>
                     @else
