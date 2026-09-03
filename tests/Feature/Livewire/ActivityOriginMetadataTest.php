@@ -23,6 +23,8 @@ it('resolves origin entity, author user, and assigned user on TimelineItem', fun
     $note = Note::create([
         'external_id' => Uuid::uuid4()->toString(),
         'content' => 'Discussed initial risk parameters and order routing.',
+        'noteable_type' => Lead::class,
+        'noteable_id' => $lead->id,
         'user_created_id' => $user->id,
     ]);
 
@@ -64,6 +66,8 @@ it('filters activity feed by origin entity type and user', function () {
     $note = Note::create([
         'external_id' => Uuid::uuid4()->toString(),
         'content' => 'Note 1 content',
+        'noteable_type' => Lead::class,
+        'noteable_id' => $lead->id,
         'user_created_id' => $user1->id,
     ]);
 
