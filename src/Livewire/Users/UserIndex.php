@@ -213,6 +213,29 @@ class UserIndex extends Component
 
         abort_unless(TeamMembership::inCurrentTeam($user), 403);
 
+        // Detach team relationships to avoid FK integrity constraint violations
+        if (Schema::hasTable('crm_team_user')) {
+            DB::table('crm_team_user')->where('user_id', $user->id)->delete();
+        }
+
+        if (Schema::hasTable('team_user')) {
+            DB::table('team_user')->where('user_id', $user->id)->delete();
+        }
+
+        if (method_exists($user, 'roles')) {
+            $user->roles()->detach();
+        }
+
+        if (method_exists($user, 'permissions')) {
+            $user->permissions()->detach();
+        }
+
+        if (Schema::hasTable(config('laravel-crm.db_table_prefix').'user_invitations')) {
+            DB::table(config('laravel-crm.db_table_prefix').'user_invitations')
+                ->where('invited_by_id', $user->id)
+                ->delete();
+        }
+
         $user->delete();
 
         $this->success(ucfirst(trans('laravel-crm::lang.user_deleted')));
