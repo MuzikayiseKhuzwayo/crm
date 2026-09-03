@@ -11,9 +11,9 @@ it('filters tasks by due date preset and date ranges', function () {
     $user = User::create(['name' => 'Test User 1', 'email' => 'test1@example.com']);
     $this->actingAs($user);
 
-    $overdueTask = Task::create(['name' => 'Overdue Task', 'due_at' => now()->subDays(3), 'external_id' => Str::uuid()->toString()]);
-    $todayTask = Task::create(['name' => 'Today Task', 'due_at' => now(), 'external_id' => Str::uuid()->toString()]);
-    $futureTask = Task::create(['name' => 'Future Task', 'due_at' => now()->addDays(10), 'external_id' => Str::uuid()->toString()]);
+    $overdueTask = Task::create(['name' => 'Overdue Task', 'due_at' => now()->subDays(3)->startOfDay(), 'external_id' => Str::uuid()->toString()]);
+    $todayTask = Task::create(['name' => 'Today Task', 'due_at' => today()->addHours(10), 'external_id' => Str::uuid()->toString()]);
+    $futureTask = Task::create(['name' => 'Future Task', 'due_at' => now()->addDays(10)->startOfDay(), 'external_id' => Str::uuid()->toString()]);
 
     $test = Livewire::test(TaskIndex::class)->set('due_preset', 'overdue');
     $tasks = $test->instance()->tasks();
