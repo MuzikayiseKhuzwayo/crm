@@ -31,7 +31,7 @@ class TimelineItem extends Component
         $this->uuid = 'crm-timeline-item'.md5(serialize($this)).$id;
     }
 
-    public function getOriginEntity()
+    public function originEntity()
     {
         if (! $this->activity) {
             return null;
@@ -52,7 +52,7 @@ class TimelineItem extends Component
         return $origin;
     }
 
-    public function getAssignedUser()
+    public function assignedUser()
     {
         if (! $this->activity || ! $this->activity->recordable) {
             return null;
@@ -71,7 +71,7 @@ class TimelineItem extends Component
         return null;
     }
 
-    public function getAuthorUser()
+    public function authorUser()
     {
         if (! $this->activity) {
             return null;
@@ -88,17 +88,27 @@ class TimelineItem extends Component
         return null;
     }
 
+    public function getOriginEntity()
+    {
+        return $this->originEntity();
+    }
+
+    public function getAuthorUser()
+    {
+        return $this->authorUser();
+    }
+
+    public function getAssignedUser()
+    {
+        return $this->assignedUser();
+    }
+
     /**
      * Get the view / contents that represent the component.
      */
     public function render(): View|Closure|string
     {
         return <<<'HTML'
-            @php
-                $originEntity = $component->getOriginEntity();
-                $authorUser = $component->getAuthorUser();
-                $assignedUser = $component->getAssignedUser();
-            @endphp
             <div>
                 <!-- Last item `border cut` -->
                 <div @class(["border-s-2 $connectorPendingClass h-5 -mb-5" => $last, $connectorActiveClass => !$pending])>
