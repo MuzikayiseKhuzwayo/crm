@@ -68,10 +68,10 @@ class UserIndex extends Component
         return [
             ['key' => 'name', 'label' => ucfirst(__('laravel-crm::lang.name'))],
             ['key' => 'email', 'label' => ucfirst(__('laravel-crm::lang.email'))],
-            ['key' => 'email_verified_at', 'label' => ucwords(__('laravel-crm::lang.email_verified')), 'format' => fn ($row, $field) => ($field) ? $field->format($this->dateFormat) : null],
+            ['key' => 'email_verified_at', 'label' => ucwords(__('laravel-crm::lang.email_verified')), 'format' => fn ($row, $field) => ($field) ? Carbon::parse($field)->format($this->dateFormat) : null],
             ['key' => 'crm_access', 'label' => ucfirst(__('laravel-crm::lang.CRM_Access')), 'format' => fn ($row, $field) => $field ? ucfirst(__('laravel-crm::lang.yes')) : ucfirst(__('laravel-crm::lang.no'))],
             ['key' => 'role', 'label' => ucfirst(__('laravel-crm::lang.role')), 'sortable' => false],
-            ['key' => 'created_at', 'label' => ucfirst(__('laravel-crm::lang.created')), 'format' => fn ($row, $field) => $field->diffForHumans()],
+            ['key' => 'created_at', 'label' => ucfirst(__('laravel-crm::lang.created')), 'format' => fn ($row, $field) => ($field) ? Carbon::parse($field)->diffForHumans() : '-'],
             ['key' => 'last_online_at', 'label' => ucwords(__('laravel-crm::lang.last_online')), 'format' => fn ($row, $field) => ($field) ? Carbon::parse($field)->diffForHumans() : ucfirst(__('laravel-crm::lang.never'))],
 
         ];
