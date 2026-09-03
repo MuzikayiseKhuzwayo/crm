@@ -116,6 +116,9 @@ class TestSchema
             $table->date('birthday')->nullable();
             $table->string('gender')->nullable();
             $table->text('description')->nullable();
+            $table->string('linkedin')->nullable();
+            $table->string('twitter')->nullable();
+            $table->string('website')->nullable();
             $table->unsignedBigInteger('organization_id')->nullable();
             $table->unsignedBigInteger('user_created_id')->nullable();
             $table->unsignedBigInteger('user_updated_id')->nullable();
@@ -247,6 +250,9 @@ class TestSchema
             $table->text('description')->nullable();
             $table->bigInteger('amount')->nullable();
             $table->string('currency', 3)->default('USD');
+            $table->string('linkedin')->nullable();
+            $table->string('twitter')->nullable();
+            $table->string('website')->nullable();
             $table->unsignedSmallInteger('lead_status_id')->nullable();
             $table->unsignedBigInteger('lead_source_id')->nullable();
             $table->unsignedBigInteger('pipeline_id')->nullable();
