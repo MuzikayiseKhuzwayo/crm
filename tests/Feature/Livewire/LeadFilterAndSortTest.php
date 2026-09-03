@@ -13,7 +13,7 @@ it('filters leads by status, pipeline stage, source, amount, and date ranges', f
     $user = User::create(['name' => 'Lead Manager', 'email' => 'manager@example.com']);
     $this->actingAs($user);
 
-    $pipeline = Pipeline::create(['name' => 'Sales Pipeline']);
+    $pipeline = Pipeline::create(['name' => 'Sales Pipeline', 'model' => 'lead']);
     $source = LeadSource::create(['name' => 'LinkedIn Search']);
     $stage = PipelineStage::create([
         'pipeline_id' => $pipeline->id,
