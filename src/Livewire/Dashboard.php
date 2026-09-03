@@ -245,14 +245,26 @@ class Dashboard extends Component
         return PurchaseOrder::whereBetween('created_at', [$start, $end])->count();
     }
 
+    public function getPeriodLabelProperty(): string
+    {
+        [$start, $end] = $this->getDateRange();
+        if ($this->period === 'all_time') {
+            return 'All Time';
+        }
+        if ($start->isSameDay($end)) {
+            return $start->format('M j, Y');
+        }
+
+        return $start->format('M j, Y').' — '.$end->format('M j, Y');
+    }
+
     // --- Upcoming Tasks ---
 
     public function getUpcomingTasksProperty()
     {
         return Task::whereNull('completed_at')
-            ->where('due_at', '>=', now())
-            ->orderBy('due_at')
-            ->limit(5)
+            ->orderBy('due_at', 'asc')
+            ->limit(6)
             ->get();
     }
 
@@ -267,8 +279,41 @@ class Dashboard extends Component
 
     public function getRecentActivitiesProperty()
     {
-        return Activity::latest()
+        [$start, $end] = $this->getDateRange();
+
+        return Activity::whereBetween('created_at', [$start, $end])
+            ->latest()
             ->limit(8)
+            ->get();
+    }
+
+    // --- Attention Needed Lists ---
+
+    public function getAttentionInvoicesProperty()
+    {
+        return Invoice::whereNull('fully_paid_at')
+            ->where('amount_due', '>', 0)
+            ->latest()
+            ->limit(5)
+            ->get();
+    }
+
+    public function getAttentionLeadsProperty()
+    {
+        [$start, $end] = $this->getDateRange();
+
+        return Lead::whereNull('converted_at')
+            ->whereBetween('created_at', [$start, $end])
+            ->latest()
+            ->limit(5)
+            ->get();
+    }
+
+    public function getAttentionDealsProperty()
+    {
+        return Deal::whereNull('closed_status')
+            ->latest()
+            ->limit(5)
             ->get();
     }
 

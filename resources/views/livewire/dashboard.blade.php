@@ -1,12 +1,20 @@
 <div class="crm-content">
     {{-- HEADER --}}
     <x-mary-header title="{{ ucfirst(__('laravel-crm::lang.dashboard')) }}" progress-indicator>
+        <x-slot:middle class="justify-end gap-2 items-center">
+            <span class="badge badge-neutral badge-sm font-mono px-3 py-2.5 hidden sm:inline-flex gap-1.5 items-center">
+                <x-mary-icon name="o-calendar" class="w-3.5 h-3.5 text-primary" />
+                <span>{{ $this->periodLabel }}</span>
+            </span>
+        </x-slot:middle>
+
         <x-slot:actions>
-            <div>
-                <select wire:model.live="period" class="select select-primary select-sm font-normal">
+            <div class="flex items-center gap-2">
+                <select wire:model.live="period" class="select select-primary select-sm font-semibold">
                     <option value="today">{{ ucfirst(__('laravel-crm::lang.today')) }}</option>
                     <option value="yesterday">{{ ucfirst(__('laravel-crm::lang.yesterday')) }}</option>
                     <option value="last_7_days">{{ __('laravel-crm::lang.last_x_days', ['days' => 7]) }}</option>
+                    <option value="last_30_days">Last 30 Days</option>
                     <option value="this_month">{{ ucfirst(__('laravel-crm::lang.this_month')) }}</option>
                     <option value="last_month">{{ ucfirst(__('laravel-crm::lang.last_month')) }}</option>
                     <option value="this_quarter">{{ ucfirst(__('laravel-crm::lang.this_quarter')) }}</option>
@@ -149,38 +157,65 @@
         @endhasdealsenabled
     </div>
 
-    {{-- BOTTOM ROW: Tasks + Activity --}}
-    <div class="grid lg:grid-cols-2 gap-6">
-        {{-- Upcoming Tasks --}}
+    {{-- BOTTOM ROW: Actionable Attention Cards with Clickable Instance Links --}}
+    <div class="grid lg:grid-cols-2 gap-6 mb-6">
+        {{-- Upcoming & Overdue Tasks --}}
         <x-mary-card title="{{ ucfirst(__('laravel-crm::lang.upcoming')) }} {{ ucfirst(__('laravel-crm::lang.tasks')) }}" shadow separator>
             @if($this->overdueTasksCount > 0)
-                <x-mary-alert icon="o-exclamation-triangle" class="alert-warning mb-4">
-                    {{ $this->overdueTasksCount }} {{ strtolower(__('laravel-crm::lang.overdue')) }} {{ strtolower(__('laravel-crm::lang.tasks')) }}
+                <x-mary-alert icon="o-exclamation-triangle" class="alert-warning mb-4 shadow-xs">
+                    <span class="font-bold">{{ $this->overdueTasksCount }} {{ strtolower(__('laravel-crm::lang.overdue')) }} {{ strtolower(__('laravel-crm::lang.tasks')) }}</span> requiring immediate action.
                 </x-mary-alert>
             @endif
 
-            @forelse($this->upcomingTasks as $task)
-                <div class="flex items-center justify-between py-3 {{ !$loop->last ? 'border-b border-base-200' : '' }}">
-                    <div class="flex items-center gap-3">
-                        <x-mary-icon name="o-clipboard-document-check" class="w-5 h-5 text-primary" />
-                        <div>
-                            <div class="font-medium text-sm">{{ $task->name }}</div>
-                            @if($task->taskable)
-                                <div class="text-xs text-base-content/50">
-                                    {{ class_basename($task->taskable_type) }}
-                                </div>
+            <div class="divide-y divide-base-200">
+                @forelse($this->upcomingTasks as $task)
+                    <div class="flex items-center justify-between py-3">
+                        <div class="flex items-center gap-3">
+                            <x-mary-icon name="o-clipboard-document-check" class="w-5 h-5 text-primary shrink-0" />
+                            <div>
+                                {{-- Clickable Task Link --}}
+                                <a href="{{ route('laravel-crm.tasks.show', $task) }}" class="font-bold text-sm link link-hover link-primary">
+                                    {{ $task->name }}
+                                </a>
+                                @if($task->taskable)
+                                    @php
+                                        $type = class_basename($task->taskable_type);
+                                        $taskableRoute = match($type) {
+                                            'Lead' => route('laravel-crm.leads.show', $task->taskable),
+                                            'Deal' => route('laravel-crm.deals.show', $task->taskable),
+                                            'Person' => route('laravel-crm.people.show', $task->taskable),
+                                            'Organization' => route('laravel-crm.organizations.show', $task->taskable),
+                                            'Quote' => route('laravel-crm.quotes.show', $task->taskable),
+                                            default => null
+                                        };
+                                    @endphp
+                                    <div class="text-xs text-base-content/60">
+                                        @if($taskableRoute)
+                                            <a href="{{ $taskableRoute }}" class="link link-hover text-base-content/70">
+                                                {{ $type }}: {{ $task->taskable->title ?? $task->taskable->name }}
+                                            </a>
+                                        @else
+                                            <span>{{ $type }}</span>
+                                        @endif
+                                    </div>
+                                @endif
+                            </div>
+                        </div>
+                        <div class="flex items-center gap-2">
+                            @if($task->due_at)
+                                <span class="badge badge-sm {{ $task->due_at->isPast() ? 'badge-error text-white font-bold' : 'badge-neutral' }}">
+                                    {{ $task->due_at->diffForHumans() }}
+                                </span>
                             @endif
+                            <x-mary-button link="{{ route('laravel-crm.tasks.show', $task) }}" icon="o-arrow-right" class="btn-ghost btn-xs btn-square" />
                         </div>
                     </div>
-                    <div class="text-xs text-base-content/60">
-                        {{ $task->due_at ? $task->due_at->diffForHumans() : '' }}
+                @empty
+                    <div class="text-base-content/50 text-sm py-4 text-center">
+                        {{ ucfirst(__('laravel-crm::lang.no')) }} {{ strtolower(__('laravel-crm::lang.upcoming')) }} {{ strtolower(__('laravel-crm::lang.tasks')) }}
                     </div>
-                </div>
-            @empty
-                <div class="text-base-content/50 text-sm py-4 text-center">
-                    {{ ucfirst(__('laravel-crm::lang.no')) }} {{ strtolower(__('laravel-crm::lang.upcoming')) }} {{ strtolower(__('laravel-crm::lang.tasks')) }}
-                </div>
-            @endforelse
+                @endforelse
+            </div>
 
             @if(count($this->upcomingTasks) > 0)
                 <x-slot:actions>
@@ -189,55 +224,176 @@
             @endif
         </x-mary-card>
 
-        {{-- Recent Activity --}}
-        <x-mary-card title="{{ ucfirst(__('laravel-crm::lang.recent')) }} {{ ucfirst(__('laravel-crm::lang.activity')) }}" shadow separator>
-            @forelse($this->recentActivities as $activity)
-                <div class="flex items-start gap-3 py-3 {{ !$loop->last ? 'border-b border-base-200' : '' }}">
-                    @php
-                        $iconMap = [
-                            'created' => 'o-plus-circle',
-                            'updated' => 'o-pencil',
-                            'deleted' => 'o-trash',
-                        ];
-                        $activityIcon = $iconMap[$activity->description ?? ''] ?? 'o-information-circle';
-                    @endphp
-                    <x-mary-icon name="{{ $activityIcon }}" class="w-5 h-5 text-base-content/40 mt-0.5 shrink-0" />
-                    <div class="min-w-0 flex-1">
-                        <div class="text-sm">
-                            <span class="font-medium">
-                                @if($activity->causeable)
-                                    {{ $activity->causeable->name ?? 'User' }}
-                                @else
-                                    {{ ucfirst(__('laravel-crm::lang.system')) }}
+        {{-- Unpaid / Outstanding Invoices --}}
+        @hasinvoicesenabled
+            <x-mary-card title="Invoices Needing Payment" shadow separator>
+                <div class="divide-y divide-base-200">
+                    @forelse($this->attentionInvoices as $invoice)
+                        <div class="flex items-center justify-between py-3">
+                            <div class="flex items-center gap-3">
+                                <x-mary-icon name="o-banknotes" class="w-5 h-5 text-warning shrink-0" />
+                                <div>
+                                    {{-- Clickable Invoice Link --}}
+                                    <a href="{{ route('laravel-crm.invoices.show', $invoice) }}" class="font-bold text-sm link link-hover link-primary">
+                                        Invoice {{ $invoice->invoice_id ?: '#'.$invoice->id }}
+                                    </a>
+                                    <div class="text-xs text-base-content/60">
+                                        @if($invoice->person)
+                                            <a href="{{ route('laravel-crm.people.show', $invoice->person) }}" class="link link-hover">
+                                                {{ $invoice->person->name }}
+                                            </a>
+                                        @elseif($invoice->organization)
+                                            <a href="{{ route('laravel-crm.organizations.show', $invoice->organization) }}" class="link link-hover">
+                                                {{ $invoice->organization->name }}
+                                            </a>
+                                        @endif
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="text-right">
+                                <div class="font-bold text-sm text-warning">
+                                    {{ money($invoice->amount_due, $invoice->currency) }}
+                                </div>
+                                <div class="text-[11px] text-base-content/50">
+                                    {{ $invoice->due_date ? 'Due '.$invoice->due_date->format('M j') : 'Unpaid' }}
+                                </div>
+                            </div>
+                        </div>
+                    @empty
+                        <div class="text-base-content/50 text-sm py-4 text-center">
+                            All invoices are fully paid! 🎉
+                        </div>
+                    @endforelse
+                </div>
+
+                @if(count($this->attentionInvoices) > 0)
+                    <x-slot:actions>
+                        <x-mary-button label="{{ ucfirst(__('laravel-crm::lang.view_all')) }}" link="{{ route('laravel-crm.invoices.index') }}" icon="o-arrow-right" class="btn-ghost btn-sm" />
+                    </x-slot:actions>
+                @endif
+            </x-mary-card>
+        @endhasinvoicesenabled
+    </div>
+
+    {{-- ATTENTION ROW 2: Open Leads + Recent Activity --}}
+    <div class="grid lg:grid-cols-2 gap-6">
+        {{-- Open Leads Needing Action --}}
+        @hasleadsenabled
+            <x-mary-card title="Leads Needing Action" shadow separator>
+                <div class="divide-y divide-base-200">
+                    @forelse($this->attentionLeads as $lead)
+                        <div class="flex items-center justify-between py-3">
+                            <div class="flex items-center gap-3">
+                                <x-mary-icon name="o-funnel" class="w-5 h-5 text-primary shrink-0" />
+                                <div>
+                                    {{-- Clickable Lead Link --}}
+                                    <a href="{{ route('laravel-crm.leads.show', $lead) }}" class="font-bold text-sm link link-hover link-primary">
+                                        {{ $lead->title }}
+                                    </a>
+                                    <div class="flex items-center gap-2 text-xs text-base-content/60 mt-0.5">
+                                        @if($lead->lead_id)
+                                            <span class="badge badge-xs badge-neutral">{{ $lead->lead_id }}</span>
+                                        @endif
+                                        @if($lead->person)
+                                            <a href="{{ route('laravel-crm.people.show', $lead->person) }}" class="link link-hover">
+                                                {{ $lead->person->name }}
+                                            </a>
+                                        @endif
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="text-right">
+                                @if($lead->amount)
+                                    <div class="font-bold text-sm">
+                                        {{ money($lead->amount, $lead->currency) }}
+                                    </div>
                                 @endif
-                            </span>
-                            <span class="text-base-content/60">
-                                {{ $activity->description ?? '' }}
-                            </span>
-                            <span class="font-medium">
+                                <div class="text-[11px] text-base-content/50">
+                                    {{ $lead->created_at->diffForHumans() }}
+                                </div>
+                            </div>
+                        </div>
+                    @empty
+                        <div class="text-base-content/50 text-sm py-4 text-center">
+                            No open leads created during this period.
+                        </div>
+                    @endforelse
+                </div>
+
+                @if(count($this->attentionLeads) > 0)
+                    <x-slot:actions>
+                        <x-mary-button label="{{ ucfirst(__('laravel-crm::lang.view_all')) }}" link="{{ route('laravel-crm.leads.index') }}" icon="o-arrow-right" class="btn-ghost btn-sm" />
+                    </x-slot:actions>
+                @endif
+            </x-mary-card>
+        @endhasleadsenabled
+
+        {{-- Recent Activity Feed with Clickable Record Links --}}
+        <x-mary-card title="{{ ucfirst(__('laravel-crm::lang.recent')) }} {{ ucfirst(__('laravel-crm::lang.activity')) }}" shadow separator>
+            <div class="divide-y divide-base-200">
+                @forelse($this->recentActivities as $activity)
+                    <div class="flex items-start gap-3 py-3">
+                        @php
+                            $iconMap = [
+                                'created' => 'o-plus-circle',
+                                'updated' => 'o-pencil',
+                                'deleted' => 'o-trash',
+                            ];
+                            $activityIcon = $iconMap[$activity->description ?? ''] ?? 'o-information-circle';
+                        @endphp
+                        <x-mary-icon name="{{ $activityIcon }}" class="w-5 h-5 text-primary mt-0.5 shrink-0" />
+                        <div class="min-w-0 flex-1">
+                            <div class="text-sm space-x-1">
+                                {{-- User Link --}}
+                                @if($activity->causeable)
+                                    <a href="{{ route('laravel-crm.users.show', $activity->causeable) }}" class="font-bold link link-hover link-primary">
+                                        {{ $activity->causeable->name }}
+                                    </a>
+                                @else
+                                    <span class="font-semibold">{{ ucfirst(__('laravel-crm::lang.system')) }}</span>
+                                @endif
+
+                                <span class="text-base-content/60">
+                                    {{ $activity->description ?? 'action' }}
+                                </span>
+
+                                {{-- Clickable Target Record Link --}}
                                 @if($activity->recordable)
-                                    {{ class_basename($activity->recordable_type) }}
-                                    @if(method_exists($activity->recordable, 'getTitle'))
-                                        — {{ Str::limit($activity->recordable->getTitle(), 30) }}
-                                    @elseif(isset($activity->recordable->title))
-                                        — {{ Str::limit($activity->recordable->title, 30) }}
-                                    @elseif(isset($activity->recordable->name))
-                                        — {{ Str::limit($activity->recordable->name, 30) }}
+                                    @php
+                                        $type = class_basename($activity->recordable_type);
+                                        $recordRoute = match($type) {
+                                            'Lead' => route('laravel-crm.leads.show', $activity->recordable),
+                                            'Deal' => route('laravel-crm.deals.show', $activity->recordable),
+                                            'Person' => route('laravel-crm.people.show', $activity->recordable),
+                                            'Organization' => route('laravel-crm.organizations.show', $activity->recordable),
+                                            'Quote' => route('laravel-crm.quotes.show', $activity->recordable),
+                                            'Invoice' => route('laravel-crm.invoices.show', $activity->recordable),
+                                            'Order' => route('laravel-crm.orders.show', $activity->recordable),
+                                            'Task' => route('laravel-crm.tasks.show', $activity->recordable),
+                                            default => null
+                                        };
+                                        $title = $activity->recordable->title ?? $activity->recordable->name ?? ($activity->recordable->lead_id ?? $activity->recordable->id);
+                                    @endphp
+                                    @if($recordRoute)
+                                        <a href="{{ $recordRoute }}" class="font-bold link link-hover link-primary">
+                                            {{ $type }} — {{ Str::limit($title, 35) }}
+                                        </a>
+                                    @else
+                                        <span class="font-semibold">{{ $type }}</span>
                                     @endif
                                 @endif
-                            </span>
-                        </div>
-                        <div class="text-xs text-base-content/40 mt-0.5">
-                            {{ $activity->created_at->diffForHumans() }}
+                            </div>
+                            <div class="text-xs text-base-content/40 mt-0.5">
+                                {{ $activity->created_at->diffForHumans() }}
+                            </div>
                         </div>
                     </div>
-                </div>
-            @empty
-                <div class="text-base-content/50 text-sm py-4 text-center">
-                    {{ ucfirst(__('laravel-crm::lang.no')) }} {{ strtolower(__('laravel-crm::lang.recent')) }} {{ strtolower(__('laravel-crm::lang.activity')) }}
-                </div>
-            @endforelse
+                @empty
+                    <div class="text-base-content/50 text-sm py-4 text-center">
+                        {{ ucfirst(__('laravel-crm::lang.no')) }} {{ strtolower(__('laravel-crm::lang.recent')) }} {{ strtolower(__('laravel-crm::lang.activity')) }}
+                    </div>
+                @endforelse
+            </div>
         </x-mary-card>
     </div>
 </div>
-
