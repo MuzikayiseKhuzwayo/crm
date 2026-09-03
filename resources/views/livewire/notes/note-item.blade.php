@@ -2,7 +2,7 @@
     <div class="grid gap-3">
         <div class="flex justify-between items-start">
             <div class="font-bold text-lg">
-                {{ $note->created_at->diffForHumans() }} - {{ $note->createdByUser->name }}<br />
+                {{ $note->created_at->diffForHumans() }} - {{ $note->createdByUser->name ?? 'System' }}<br />
                 @if($related)
                     <div class="flex flex-row items-center gap-2 mt-1">
                         @if(class_basename($note->noteable->getMorphClass()) == 'Person')
