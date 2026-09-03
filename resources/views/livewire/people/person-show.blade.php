@@ -92,6 +92,31 @@
                         @if( $person->ownerUser)<a href="{{ route('laravel-crm.users.show', $person->ownerUser) }}" class="link link-hover link-primary">{{ $person->ownerUser->name ?? null }}</a> @else  {{ ucfirst(__('laravel-crm::lang.unallocated')) }} @endif
                         </span>
                     </div>
+                    @if($person->linkedin || $person->twitter || $person->website)
+                        <div class="pt-3 border-t border-base-200">
+                            <span class="text-xs font-bold text-base-content/70 block mb-2">Social & Web Links:</span>
+                            <div class="flex flex-wrap gap-2">
+                                @if($person->linkedin)
+                                    <a href="{{ str_starts_with($person->linkedin, 'http') ? $person->linkedin : 'https://'.$person->linkedin }}" target="_blank" class="btn btn-xs btn-outline btn-primary gap-1">
+                                        <x-mary-icon name="o-link" class="w-3.5 h-3.5 shrink-0" style="width:14px;height:14px;" />
+                                        <span>LinkedIn Profile</span>
+                                    </a>
+                                @endif
+                                @if($person->twitter)
+                                    <a href="{{ str_starts_with($person->twitter, 'http') ? $person->twitter : 'https://x.com/'.ltrim($person->twitter, '@') }}" target="_blank" class="btn btn-xs btn-outline btn-info gap-1">
+                                        <x-mary-icon name="o-hashtag" class="w-3.5 h-3.5 shrink-0" style="width:14px;height:14px;" />
+                                        <span>Twitter / X</span>
+                                    </a>
+                                @endif
+                                @if($person->website)
+                                    <a href="{{ str_starts_with($person->website, 'http') ? $person->website : 'https://'.$person->website }}" target="_blank" class="btn btn-xs btn-outline btn-neutral gap-1">
+                                        <x-mary-icon name="o-globe-alt" class="w-3.5 h-3.5 shrink-0" style="width:14px;height:14px;" />
+                                        <span>Website</span>
+                                    </a>
+                                @endif
+                            </div>
+                        </div>
+                    @endif
                     <x-crm-custom-field-values :model="$person" />
                 </div>
             </x-mary-card>

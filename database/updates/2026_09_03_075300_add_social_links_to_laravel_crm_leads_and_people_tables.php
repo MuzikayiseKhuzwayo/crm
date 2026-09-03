@@ -1,0 +1,58 @@
+<?php
+
+use Illuminate\Database\Migrations\Migration;
+use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Facades\Schema;
+
+return new class extends Migration
+{
+    public function up(): void
+    {
+        $prefix = config('laravel-crm.db_table_prefix', 'crm_');
+
+        if (Schema::hasTable($prefix.'leads')) {
+            Schema::table($prefix.'leads', function (Blueprint $table) {
+                if (! Schema::hasColumn($table->getTable(), 'linkedin')) {
+                    $table->string('linkedin')->nullable();
+                }
+                if (! Schema::hasColumn($table->getTable(), 'twitter')) {
+                    $table->string('twitter')->nullable();
+                }
+                if (! Schema::hasColumn($table->getTable(), 'website')) {
+                    $table->string('website')->nullable();
+                }
+            });
+        }
+
+        if (Schema::hasTable($prefix.'people')) {
+            Schema::table($prefix.'people', function (Blueprint $table) {
+                if (! Schema::hasColumn($table->getTable(), 'linkedin')) {
+                    $table->string('linkedin')->nullable();
+                }
+                if (! Schema::hasColumn($table->getTable(), 'twitter')) {
+                    $table->string('twitter')->nullable();
+                }
+                if (! Schema::hasColumn($table->getTable(), 'website')) {
+                    $table->string('website')->nullable();
+                }
+            });
+        }
+    }
+
+    public function down(): void
+    {
+        $prefix = config('laravel-crm.db_table_prefix', 'crm_');
+
+        if (Schema::hasTable($prefix.'leads')) {
+            Schema::table($prefix.'leads', function (Blueprint $table) {
+                $table->dropColumn(['linkedin', 'twitter', 'website']);
+            });
+        }
+
+        if (Schema::hasTable($prefix.'people')) {
+            Schema::table($prefix.'people', function (Blueprint $table) {
+                $table->dropColumn(['linkedin', 'twitter', 'website']);
+            });
+        }
+    }
+};

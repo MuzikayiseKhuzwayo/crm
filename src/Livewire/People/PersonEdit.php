@@ -26,6 +26,9 @@ class PersonEdit extends Component
         $this->description = $this->person->description;
         $this->labels = $this->person->labels()->pluck('id')->toArray();
         $this->user_owner_id = $this->person->user_owner_id;
+        $this->linkedin = $this->person->linkedin;
+        $this->twitter = $this->person->twitter;
+        $this->website = $this->person->website;
 
         if ($this->person->phones->count() == 0) {
             $this->addPhone();

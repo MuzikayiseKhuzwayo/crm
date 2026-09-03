@@ -68,6 +68,12 @@ trait HasLeadCommon
 
     public $lead_source_id;
 
+    public $linkedin;
+
+    public $twitter;
+
+    public $website;
+
     protected function customFieldsModel(): string
     {
         return Lead::class;

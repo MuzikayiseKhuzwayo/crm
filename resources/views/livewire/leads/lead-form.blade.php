@@ -30,6 +30,11 @@
                     <x-mary-select wire:model="email_type" :options="\VentureDrake\LaravelCrm\Http\Helpers\SelectOptions\emailTypes(false)" class="join-item bg-base-200" />
                 </x-slot:append>
             </x-mary-input>
+            <div class="grid lg:grid-cols-3 gap-3 pt-2 border-t border-base-200">
+                <x-mary-input wire:model="linkedin" label="LinkedIn Profile" icon="o-link" placeholder="https://linkedin.com/in/..." />
+                <x-mary-input wire:model="twitter" label="Twitter / X Profile" icon="o-hashtag" placeholder="https://x.com/..." />
+                <x-mary-input wire:model="website" label="Website URL" icon="o-globe-alt" placeholder="https://..." />
+            </div>
         </div>
     </x-mary-card>
     <x-mary-card title="{{ ucfirst(__('laravel-crm::lang.organization')) }}" separator>

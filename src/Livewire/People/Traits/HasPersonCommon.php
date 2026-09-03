@@ -49,6 +49,12 @@ trait HasPersonCommon
 
     public $user_owner_id;
 
+    public $linkedin;
+
+    public $twitter;
+
+    public $website;
+
     public array $phoneTypes = [];
 
     public array $phones = [];

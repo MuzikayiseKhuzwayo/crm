@@ -102,6 +102,36 @@
                         @endif
                         </span>
                     </div>
+                    @if($lead->linkedin || $lead->twitter || $lead->website || ($lead->person && ($lead->person->linkedin || $lead->person->twitter || $lead->person->website)))
+                        @php
+                            $linkedin = $lead->linkedin ?: $lead->person?->linkedin;
+                            $twitter = $lead->twitter ?: $lead->person?->twitter;
+                            $website = $lead->website ?: $lead->person?->website;
+                        @endphp
+                        <div class="pt-3 border-t border-base-200">
+                            <span class="text-xs font-bold text-base-content/70 block mb-2">Social & Web Links:</span>
+                            <div class="flex flex-wrap gap-2">
+                                @if($linkedin)
+                                    <a href="{{ str_starts_with($linkedin, 'http') ? $linkedin : 'https://'.$linkedin }}" target="_blank" class="btn btn-xs btn-outline btn-primary gap-1">
+                                        <x-mary-icon name="o-link" class="w-3.5 h-3.5 shrink-0" style="width:14px;height:14px;" />
+                                        <span>LinkedIn Profile</span>
+                                    </a>
+                                @endif
+                                @if($twitter)
+                                    <a href="{{ str_starts_with($twitter, 'http') ? $twitter : 'https://x.com/'.ltrim($twitter, '@') }}" target="_blank" class="btn btn-xs btn-outline btn-info gap-1">
+                                        <x-mary-icon name="o-hashtag" class="w-3.5 h-3.5 shrink-0" style="width:14px;height:14px;" />
+                                        <span>Twitter / X</span>
+                                    </a>
+                                @endif
+                                @if($website)
+                                    <a href="{{ str_starts_with($website, 'http') ? $website : 'https://'.$website }}" target="_blank" class="btn btn-xs btn-outline btn-neutral gap-1">
+                                        <x-mary-icon name="o-globe-alt" class="w-3.5 h-3.5 shrink-0" style="width:14px;height:14px;" />
+                                        <span>Website</span>
+                                    </a>
+                                @endif
+                            </div>
+                        </div>
+                    @endif
                 </div>
             </x-mary-card>
             <x-mary-card title="{{ ucfirst(__('laravel-crm::lang.organization')) }}" shadow separator>

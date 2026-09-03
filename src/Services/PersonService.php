@@ -36,6 +36,9 @@ class PersonService
             'birthday' => $request->birthday,
             'description' => $request->description,
             'user_owner_id' => $request->user_owner_id,
+            'linkedin' => $request->linkedin ?? null,
+            'twitter' => $request->twitter ?? null,
+            'website' => $request->website ?? null,
         ]);
 
         $this->updatePersonPhones($person, $request->phones);
@@ -88,6 +91,9 @@ class PersonService
             'birthday' => $request->birthday,
             'description' => $request->description,
             'user_owner_id' => $request->user_owner_id,
+            'linkedin' => $request->linkedin ?? null,
+            'twitter' => $request->twitter ?? null,
+            'website' => $request->website ?? null,
         ]);
 
         $this->updatePersonPhones($person, $request->phones);

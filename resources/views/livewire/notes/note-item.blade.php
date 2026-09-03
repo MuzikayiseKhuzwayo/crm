@@ -53,8 +53,8 @@
                 </x-slot:actions>
             </x-mary-form>
         @else
-            <div>
-                {!! $note->content !!}
+            <div class="prose prose-sm max-w-none text-base-content whitespace-pre-line leading-relaxed bg-base-200/40 p-3.5 rounded-xl border border-base-200 my-2">
+                {!! nl2br(e($note->content)) !!}
             </div>
 
             @if($note->noted_at)

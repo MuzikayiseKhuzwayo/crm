@@ -57,6 +57,9 @@ class LeadEdit extends Component
         $this->labels = $lead->labels->pluck('id')->toArray();
         $this->user_owner_id = $lead->ownerUser->id ?? null;
         $this->lead_source_id = $lead->lead_source_id;
+        $this->linkedin = $lead->linkedin;
+        $this->twitter = $lead->twitter;
+        $this->website = $lead->website;
 
         $this->loadCustomFields($lead);
     }

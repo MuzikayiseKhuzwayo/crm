@@ -36,6 +36,9 @@ class LeadService
             'lead_status_id' => 1,
             'lead_source_id' => $request->lead_source_id ?? null,
             'user_owner_id' => $request->user_owner_id,
+            'linkedin' => $request->linkedin ?? null,
+            'twitter' => $request->twitter ?? null,
+            'website' => $request->website ?? null,
             'pipeline_id' => optional(PipelineStage::find($request->pipeline_stage_id))->pipeline?->id,
             'pipeline_stage_id' => $request->pipeline_stage_id ?? null,
         ]);
@@ -57,6 +60,9 @@ class LeadService
             'currency' => $request->currency,
             'lead_source_id' => $request->lead_source_id ?? null,
             'user_owner_id' => $request->user_owner_id,
+            'linkedin' => $request->linkedin ?? null,
+            'twitter' => $request->twitter ?? null,
+            'website' => $request->website ?? null,
             'pipeline_id' => optional(PipelineStage::find($request->pipeline_stage_id))->pipeline?->id,
             'pipeline_stage_id' => $request->pipeline_stage_id ?? null,
         ]);
