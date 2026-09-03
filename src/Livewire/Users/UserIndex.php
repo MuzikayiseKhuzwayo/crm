@@ -226,11 +226,11 @@ class UserIndex extends Component
             DB::table('team_user')->where('user_id', $user->id)->delete();
         }
 
-        if (method_exists($user, 'roles')) {
+        if (method_exists($user, 'roles') && Schema::hasTable(config('permission.table_names.model_has_roles', 'model_has_roles'))) {
             $user->roles()->detach();
         }
 
-        if (method_exists($user, 'permissions')) {
+        if (method_exists($user, 'permissions') && Schema::hasTable(config('permission.table_names.model_has_permissions', 'model_has_permissions'))) {
             $user->permissions()->detach();
         }
 
