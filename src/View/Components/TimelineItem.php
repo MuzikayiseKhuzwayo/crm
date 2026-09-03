@@ -10,6 +10,12 @@ class TimelineItem extends Component
 {
     public string $uuid;
 
+    public $originEntity = null;
+
+    public $authorUser = null;
+
+    public $assignedUser = null;
+
     public function __construct(
         public string $title,
         public ?string $id = null,
@@ -29,9 +35,15 @@ class TimelineItem extends Component
         public $activityType = null
     ) {
         $this->uuid = 'crm-timeline-item'.md5(serialize($this)).$id;
+
+        if ($this->activity) {
+            $this->originEntity = $this->resolveOriginEntity();
+            $this->authorUser = $this->resolveAuthorUser();
+            $this->assignedUser = $this->resolveAssignedUser();
+        }
     }
 
-    public function originEntity()
+    public function resolveOriginEntity()
     {
         if (! $this->activity) {
             return null;
@@ -52,7 +64,7 @@ class TimelineItem extends Component
         return $origin;
     }
 
-    public function assignedUser()
+    public function resolveAssignedUser()
     {
         if (! $this->activity || ! $this->activity->recordable) {
             return null;
@@ -71,7 +83,7 @@ class TimelineItem extends Component
         return null;
     }
 
-    public function authorUser()
+    public function resolveAuthorUser()
     {
         if (! $this->activity) {
             return null;
@@ -81,7 +93,7 @@ class TimelineItem extends Component
             return $this->activity->causeable;
         }
 
-        if ($this->activity->recordable && isset($this->activity->recordable->createdByUser)) {
+        if ($this->activity->recordable && isset($this->activity->recordable->createdByUser) && $this->activity->recordable->createdByUser) {
             return $this->activity->recordable->createdByUser;
         }
 
@@ -90,17 +102,17 @@ class TimelineItem extends Component
 
     public function getOriginEntity()
     {
-        return $this->originEntity();
+        return $this->originEntity;
     }
 
     public function getAuthorUser()
     {
-        return $this->authorUser();
+        return $this->authorUser;
     }
 
     public function getAssignedUser()
     {
-        return $this->assignedUser();
+        return $this->assignedUser;
     }
 
     /**
@@ -175,14 +187,14 @@ class TimelineItem extends Component
 
                         <!-- METADATA: AUTHOR, ASSIGNED USER & TIMESTAMP -->
                         <div class="flex items-center gap-3 text-xs text-base-content/70">
-                            @if($authorUser)
+                            @if($authorUser && isset($authorUser->name))
                                 <div class="flex items-center gap-1.5" title="Author / Performer">
                                     <x-mary-avatar :title="$authorUser->name" class="w-5 h-5 text-[10px] bg-primary/10 text-primary font-bold shrink-0" />
                                     <span class="font-medium text-xs">{{ $authorUser->name }}</span>
                                 </div>
                             @endif
 
-                            @if($assignedUser)
+                            @if($assignedUser && isset($assignedUser->name))
                                 <div class="flex items-center gap-1.5" title="Assigned User">
                                     <span class="text-[10px] text-neutral-content/60">Assigned:</span>
                                     <x-mary-avatar :title="$assignedUser->name" class="w-5 h-5 text-[10px] bg-secondary/10 text-secondary font-bold shrink-0" />
