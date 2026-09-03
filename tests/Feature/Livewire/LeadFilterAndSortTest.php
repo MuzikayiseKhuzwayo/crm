@@ -5,6 +5,7 @@ use Ramsey\Uuid\Uuid;
 use VentureDrake\LaravelCrm\Livewire\Leads\LeadIndex;
 use VentureDrake\LaravelCrm\Models\Lead;
 use VentureDrake\LaravelCrm\Models\LeadSource;
+use VentureDrake\LaravelCrm\Models\Pipeline;
 use VentureDrake\LaravelCrm\Models\PipelineStage;
 use VentureDrake\LaravelCrm\Tests\Stubs\User;
 
@@ -12,8 +13,13 @@ it('filters leads by status, pipeline stage, source, amount, and date ranges', f
     $user = User::create(['name' => 'Lead Manager', 'email' => 'manager@example.com']);
     $this->actingAs($user);
 
+    $pipeline = Pipeline::create(['name' => 'Sales Pipeline']);
     $source = LeadSource::create(['name' => 'LinkedIn Search']);
-    $stage = PipelineStage::create(['name' => 'Qualified Lead', 'order' => 1]);
+    $stage = PipelineStage::create([
+        'pipeline_id' => $pipeline->id,
+        'name' => 'Qualified Lead',
+        'order' => 1,
+    ]);
 
     $lead1 = Lead::create([
         'external_id' => Uuid::uuid4()->toString(),
