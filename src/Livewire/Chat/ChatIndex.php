@@ -3,6 +3,7 @@
 namespace VentureDrake\LaravelCrm\Livewire\Chat;
 
 use Carbon\Carbon;
+use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
 use Illuminate\Pagination\LengthAwarePaginator;
 use Illuminate\Support\Str;
@@ -13,6 +14,7 @@ use Mary\Traits\Toast;
 use Ramsey\Uuid\Uuid;
 use VentureDrake\LaravelCrm\Models\ChatConversation;
 use VentureDrake\LaravelCrm\Models\ChatVisitor;
+use VentureDrake\LaravelCrm\Models\ChatWidget;
 use VentureDrake\LaravelCrm\Models\Lead;
 use VentureDrake\LaravelCrm\Models\Person;
 use VentureDrake\LaravelCrm\Services\ChatService;
@@ -33,6 +35,10 @@ class ChatIndex extends Component
 
     #[Url]
     public array $sortBy = ['column' => 'visitor_last_seen_at', 'direction' => 'desc'];
+
+    public bool $showEmbedModal = false;
+
+    public ?int $selectedWidgetId = null;
 
     public function headers(): array
     {
@@ -72,6 +78,20 @@ class ChatIndex extends Component
 
                 return $c;
             });
+    }
+
+    public function chatWidgets(): Collection
+    {
+        return ChatWidget::latest()->get();
+    }
+
+    public function getActiveWidgetProperty(): ?ChatWidget
+    {
+        if ($this->selectedWidgetId) {
+            return ChatWidget::find($this->selectedWidgetId);
+        }
+
+        return ChatWidget::where('is_active', true)->first() ?? ChatWidget::first();
     }
 
     public function delete($id): void
@@ -163,6 +183,8 @@ class ChatIndex extends Component
         return view('laravel-crm::livewire.chat.chat-index', [
             'headers' => $this->headers(),
             'conversations' => $this->conversations(),
+            'chatWidgets' => $this->chatWidgets(),
+            'activeWidget' => $this->activeWidget,
         ]);
     }
 }
