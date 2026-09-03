@@ -11,11 +11,48 @@
         </x-slot:actions>
     </x-mary-header>
 
+    {{-- EXECUTIVE MONITORING STATS --}}
+    <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+        <div class="bg-base-100 p-4 shadow border border-base-200 rounded-xl flex items-center justify-between">
+            <div>
+                <p class="text-xs font-semibold text-base-content/60">System Status</p>
+                <x-mary-badge :value="$metrics['system_status']" class="{{ $metrics['system_color'] }} text-white font-bold mt-1" />
+            </div>
+            <x-mary-icon name="o-signal" class="w-7 h-7 text-primary opacity-80" />
+        </div>
+
+        <x-mary-stat title="Monitored Endpoints"
+                    :value="$metrics['total']"
+                    icon="o-globe-alt"
+                    class="bg-base-100 shadow border border-base-200 rounded-xl" />
+
+        <x-mary-stat title="Avg Response Time"
+                    :value="$metrics['avg_response'].' ms'"
+                    icon="o-bolt"
+                    class="bg-base-100 shadow border border-base-200 rounded-xl" />
+
+        <x-mary-stat title="SSL Expiry Alerts"
+                    :value="$metrics['ssl_warning']"
+                    icon="o-shield-check"
+                    class="bg-base-100 shadow border border-base-200 rounded-xl" />
+    </div>
+
+    {{-- TABLE --}}
     <x-mary-card shadow>
-        <x-mary-table :headers="$headers" :rows="$monitors" with-pagination :sort-by="$sortBy" class="whitespace-nowrap">
-            @scope('cell_name', $monitor)
-                {{ $monitor->displayName() }}
+        <x-mary-table :headers="$headers" :rows="$monitors" :link="route('laravel-crm.monitors.show', ['monitor' => '[id]'])" with-pagination :sort-by="$sortBy" class="whitespace-nowrap">
+            @scope('cell_monitor_id', $monitor)
+                <span class="font-mono text-xs font-bold text-primary">{{ $monitor->monitor_id }}</span>
             @endscope
+
+            @scope('cell_name', $monitor)
+                <div>
+                    <a href="{{ route('laravel-crm.monitors.show', $monitor) }}" class="font-bold text-xs text-base-content hover:text-primary hover:underline">
+                        {{ $monitor->displayName() }}
+                    </a>
+                    <div class="text-[11px] font-mono text-neutral-content/60">{{ $monitor->url }}</div>
+                </div>
+            @endscope
+
             @scope('cell_performance', $monitor)
                 @php
                     $bars = (array) ($monitor->performance_bars ?? array_fill(0, 7, 0));
@@ -36,6 +73,7 @@
                     @endforeach
                 </svg>
             @endscope
+
             @scope('cell_last_status', $monitor)
                 @php
                     $statusClass = match($monitor->last_status) {
@@ -45,16 +83,29 @@
                         default => 'badge-neutral',
                     };
                 @endphp
-                <x-mary-badge :value="ucfirst($monitor->last_status ?? '—')" class="{{ $statusClass }} text-white" />
+                <x-mary-badge :value="ucfirst($monitor->last_status ?? '—')" class="{{ $statusClass }} text-white font-bold" />
             @endscope
+
             @scope('cell_last_response_time', $monitor)
-                {{ $monitor->last_response_time !== null ? $monitor->last_response_time.' ms' : '—' }}
+                <span class="font-mono text-xs font-semibold">
+                    {{ $monitor->last_response_time !== null ? $monitor->last_response_time.' ms' : '—' }}
+                </span>
             @endscope
+
             @scope('cell_last_checked_at', $monitor)
-                {{ $monitor->last_checked_at?->format('Y-m-d H:i') ?? '—' }}
+                <span class="text-xs text-base-content/70">
+                    {{ $monitor->last_checked_at?->diffForHumans() ?? '—' }}
+                </span>
             @endscope
+
             @scope('actions', $monitor)
                 <div class="flex gap-1 justify-end">
+                    <x-mary-button icon="o-arrow-path"
+                                   wire:click="checkNow({{ $monitor->id }})"
+                                   spinner
+                                   title="Check endpoint now"
+                                   class="btn-sm btn-square btn-outline btn-primary" />
+
                     @can('view crm monitors')
                         <x-mary-button icon="o-eye" link="{{ route('laravel-crm.monitors.show', $monitor) }}" class="btn-sm btn-square btn-outline" />
                     @endcan

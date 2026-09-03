@@ -13,15 +13,12 @@
                            @click="$wire.showFilters = true"
                            responsive />
 
-            <x-mary-button label="Board" link="{{ url(route('laravel-crm.features.board')) }}" icon="o-view-columns" class="btn" responsive />
+            <x-mary-button label="Roadmap Board" link="{{ url(route('laravel-crm.features.board')) }}" icon="o-view-columns" class="btn btn-outline" responsive />
 
-            {{-- The shareable public board. Team-scoped on a teams install so an
-                 admin copies a link that works for someone with no account and no
-                 session. --}}
             <x-mary-button label="{{ ucfirst(__('laravel-crm::lang.public_board')) }}"
                            link="{{ $this->publicBoardUrl() }}"
                            icon="o-globe-alt"
-                           class="btn"
+                           class="btn btn-outline"
                            external
                            responsive />
 
@@ -31,14 +28,64 @@
         </x-slot:actions>
     </x-mary-header>
 
+    {{-- EXECUTIVE STATS CARDS --}}
+    <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+        <x-mary-stat title="Total Requests"
+                    :value="$metrics['total']"
+                    icon="o-light-bulb"
+                    class="bg-base-100 shadow border border-base-200 rounded-xl" />
+
+        <x-mary-stat title="User Votes"
+                    :value="$metrics['votes']"
+                    icon="o-hand-thumb-up"
+                    class="bg-base-100 shadow border border-base-200 rounded-xl" />
+
+        <x-mary-stat title="In Roadmap"
+                    :value="$metrics['in_progress']"
+                    icon="o-clock"
+                    class="bg-base-100 shadow border border-base-200 rounded-xl" />
+
+        <x-mary-stat title="Completed"
+                    :value="$metrics['completed']"
+                    icon="o-check-circle"
+                    class="bg-base-100 shadow border border-base-200 rounded-xl" />
+    </div>
+
     {{-- TABLE --}}
     <x-mary-card shadow>
         <x-mary-table :headers="$headers" :rows="$features" :link="route('laravel-crm.features.show', ['feature' => '[id]'])" with-pagination :sort-by="$sortBy" class="whitespace-nowrap">
+            @scope('cell_feature_id', $feature)
+                <span class="font-mono text-xs font-bold text-primary">{{ $feature->feature_id }}</span>
+            @endscope
+
+            @scope('cell_title', $feature)
+                <a href="{{ route('laravel-crm.features.show', $feature) }}" class="font-bold text-xs text-base-content hover:text-primary hover:underline">
+                    {{ $feature->title }}
+                </a>
+            @endscope
+
             @scope('cell_status.name', $feature)
                 @if($feature->status)
-                    <x-mary-badge :value="$feature->status->name" class="text-white" :style="'background-color: '.($feature->status->color ?? '#6c757d')" />
+                    <x-mary-badge :value="$feature->status->name" class="text-white text-xs font-semibold" :style="'background-color: '.($feature->status->color ?? '#6c757d')" />
+                @else
+                    <span class="text-xs text-neutral-content/40">-</span>
                 @endif
             @endscope
+
+            @scope('cell_votes_count', $feature)
+                <span class="inline-flex items-center gap-1 font-bold text-xs text-primary">
+                    <x-mary-icon name="o-hand-thumb-up" class="w-3.5 h-3.5" style="width:14px;height:14px;" />
+                    {{ $feature->votes_count ?? 0 }}
+                </span>
+            @endscope
+
+            @scope('cell_comments_count', $feature)
+                <span class="inline-flex items-center gap-1 text-xs text-base-content/70">
+                    <x-mary-icon name="o-chat-bubble-left-right" class="w-3.5 h-3.5" style="width:14px;height:14px;" />
+                    {{ $feature->comments_count ?? 0 }}
+                </span>
+            @endscope
+
             @scope('actions', $feature)
                 <div class="flex gap-1 justify-end">
                     @if($feature->is_public)

@@ -102,6 +102,21 @@ class FeatureIndex extends Component
         return route('laravel-crm.portal.features.index');
     }
 
+    public function metrics(): array
+    {
+        $total = Feature::count();
+        $totalVotes = (int) Feature::sum('votes_count');
+        $inProgress = Feature::whereHas('status', fn ($q) => $q->where('name', 'like', '%progress%')->orWhere('name', 'like', '%planned%'))->count();
+        $completed = Feature::whereHas('status', fn ($q) => $q->where('name', 'like', '%complete%')->orWhere('name', 'like', '%done%')->orWhere('name', 'like', '%released%'))->count();
+
+        return [
+            'total' => $total,
+            'votes' => $totalVotes,
+            'in_progress' => $inProgress,
+            'completed' => $completed,
+        ];
+    }
+
     public function render()
     {
         return view('laravel-crm::livewire.features.feature-index', [
@@ -109,6 +124,7 @@ class FeatureIndex extends Component
             'features' => $this->features(),
             'statuses' => $this->statuses(),
             'filterCount' => $this->filterCount(),
+            'metrics' => $this->metrics(),
         ]);
     }
 }

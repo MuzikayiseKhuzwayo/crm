@@ -118,6 +118,60 @@ class MonitorIndex extends Component
         return $result;
     }
 
+    public function checkNow($id): void
+    {
+        if ($monitor = Monitor::find($id)) {
+            $this->authorize('view', $monitor);
+
+            $service = app(\VentureDrake\LaravelCrm\Services\MonitorCheckService::class);
+            $result = $service->checkUptime($monitor);
+
+            $monitor->update([
+                'last_status' => $result['status'],
+                'last_status_code' => $result['status_code'],
+                'last_response_time' => $result['response_time_ms'],
+                'last_checked_at' => now(),
+            ]);
+
+            $this->success("Checked {$monitor->displayName()}: Status {$result['status']} (".($result['response_time_ms'] ?? 0)."ms)");
+        }
+    }
+
+    public function metrics(): array
+    {
+        $total = Monitor::count();
+        $up = Monitor::where('last_status', 'up')->count();
+        $down = Monitor::where('last_status', 'down')->count();
+        $slow = Monitor::where('last_status', 'slow')->count();
+        $avgResponse = (int) round(Monitor::whereNotNull('last_response_time')->avg('last_response_time') ?? 0);
+        $sslWarning = Monitor::where('ssl_enabled', true)
+            ->whereNotNull('ssl_expires_at')
+            ->where('ssl_expires_at', '<=', now()->addDays(30))
+            ->count();
+
+        $systemStatus = '100% Operational';
+        $systemColor = 'badge-success';
+
+        if ($down > 0) {
+            $systemStatus = "{$down} Outage".($down > 1 ? 's' : '');
+            $systemColor = 'badge-error';
+        } elseif ($slow > 0) {
+            $systemStatus = "{$slow} Degraded";
+            $systemColor = 'badge-warning';
+        }
+
+        return [
+            'total' => $total,
+            'up' => $up,
+            'down' => $down,
+            'slow' => $slow,
+            'avg_response' => $avgResponse,
+            'ssl_warning' => $sslWarning,
+            'system_status' => $systemStatus,
+            'system_color' => $systemColor,
+        ];
+    }
+
     public function delete($id): void
     {
         if ($monitor = Monitor::find($id)) {
@@ -140,6 +194,7 @@ class MonitorIndex extends Component
             'headers' => $this->headers(),
             'monitors' => $monitors,
             'statuses' => $this->statuses(),
+            'metrics' => $this->metrics(),
         ]);
     }
 }
