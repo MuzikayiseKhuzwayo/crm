@@ -206,7 +206,7 @@
                     ['id' => 'overdue', 'name' => 'Overdue'],
                 ]" icon="o-check-circle" />
 
-                <x-mary-select label="Related Entity Type" wire:model.live="taskable_type" :options="$entityTypeOptions" icon="o-shapes" />
+                <x-mary-select label="Related Entity Type" wire:model.live="taskable_type" :options="$entityTypeOptions" icon="o-rectangle-stack" />
             </div>
 
             {{-- ASSIGNMENT & CREATOR --}}
