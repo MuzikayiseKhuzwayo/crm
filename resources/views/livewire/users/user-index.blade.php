@@ -37,7 +37,7 @@
         <div role="tabpanel" class="tab-content bg-base-100 border-base-300 p-6">
             <x-mary-table :headers="$headers" :rows="$users" :link="route('laravel-crm.users.show', ['user' => '[id]'])" with-pagination :sort-by="$sortBy" class="whitespace-nowrap">
                 @scope('cell_role', $user)
-                    {{ $user->roles()->first()->name ?? null }}
+                    {{ method_exists($user, 'roles') && \Illuminate\Support\Facades\Schema::hasTable('roles') ? ($user->roles->first()->name ?? null) : null }}
                 @endscope
                 @scope('actions', $user)
                 @can('view crm users')
