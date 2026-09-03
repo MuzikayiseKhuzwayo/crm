@@ -5,6 +5,7 @@ namespace VentureDrake\LaravelCrm\Models;
 use App\User;
 use Illuminate\Database\Eloquent\SoftDeletes;
 use VentureDrake\LaravelCrm\Traits\BelongsToTeams;
+use VentureDrake\LaravelCrm\Traits\HasCrmActivities;
 use VentureDrake\LaravelCrm\Traits\HasCrmFields;
 use VentureDrake\LaravelCrm\Traits\HasGlobalSettings;
 use VentureDrake\LaravelCrm\Traits\SearchFilters;
@@ -12,6 +13,7 @@ use VentureDrake\LaravelCrm\Traits\SearchFilters;
 class Task extends Model
 {
     use BelongsToTeams;
+    use HasCrmActivities;
     use HasCrmFields;
     use HasGlobalSettings;
     use SearchFilters;
