@@ -234,10 +234,13 @@ class UserIndex extends Component
             $user->permissions()->detach();
         }
 
-        if (Schema::hasTable(config('laravel-crm.db_table_prefix').'user_invitations')) {
-            DB::table(config('laravel-crm.db_table_prefix').'user_invitations')
-                ->where('invited_by_id', $user->id)
-                ->delete();
+        $invitationTable = config('laravel-crm.db_table_prefix').'user_invitations';
+        if (Schema::hasTable($invitationTable)) {
+            if (Schema::hasColumn($invitationTable, 'invited_by')) {
+                DB::table($invitationTable)->where('invited_by', $user->id)->delete();
+            } elseif (Schema::hasColumn($invitationTable, 'invited_by_id')) {
+                DB::table($invitationTable)->where('invited_by_id', $user->id)->delete();
+            }
         }
 
         $user->delete();
