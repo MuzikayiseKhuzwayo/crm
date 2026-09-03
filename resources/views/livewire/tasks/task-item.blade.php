@@ -2,12 +2,18 @@
     <div class="grid gap-3">
         <div class="flex justify-between items-start">
             <div class="font-bold text-lg">
-                {{ $task->name }}
+                <a href="{{ route('laravel-crm.tasks.show', $task) }}" class="link link-hover link-primary">
+                    {{ $task->name }}
+                </a>
                 <div class="flex flex-row gap-1 mt-1">
                     @if($task->completed_at)
                         <x-mary-badge value="{{ ucfirst(__('laravel-crm::lang.complete')) }}" class="badge-sm badge-success" />
                     @else
-                        <x-mary-badge value="{{ ucfirst(__('laravel-crm::lang.pending')) }}" class="badge-sm badge-primary" />
+                        @if($task->due_at && $task->due_at->isPast())
+                            <x-mary-badge value="Overdue" class="badge-sm badge-error text-white font-bold" />
+                        @else
+                            <x-mary-badge value="{{ ucfirst(__('laravel-crm::lang.pending')) }}" class="badge-sm badge-primary" />
+                        @endif
                     @endif
                     @if($task->start_at)
                         <x-mary-badge value="{{ ucfirst(__('laravel-crm::lang.start_at')) }} {{ $task->start_at->format('h:i A') }} {{ __('laravel-crm::lang.on') }} {{ $task->start_at->toFormattedDateString() }}" class="badge-soft badge-sm" />
@@ -33,19 +39,21 @@
                 @endif
             </div>
             <div class="flex items-center gap-2">
+                <x-mary-button link="{{ route('laravel-crm.tasks.show', $task) }}" icon="o-eye" class="btn-xs btn-outline btn-primary" label="{{ ucfirst(__('laravel-crm::lang.view')) }}" responsive />
                 @canany(['edit crm tasks', 'delete crm tasks'])
                     <x-mary-dropdown right>
                         <x-slot:trigger>
                             <x-mary-icon name="o-ellipsis-horizontal" />
                         </x-slot:trigger>
+                        <x-mary-menu-item link="{{ route('laravel-crm.tasks.show', $task) }}" title="{{ ucfirst(__('laravel-crm::lang.view')) }}" icon="o-eye" />
                         @can('edit crm tasks')
-                            <x-mary-menu-item wire:click="edit" title="{{ ucfirst(__('laravel-crm::lang.edit')) }}" />
+                            <x-mary-menu-item wire:click="edit" title="{{ ucfirst(__('laravel-crm::lang.edit')) }}" icon="o-pencil-square" />
                             @if(! $completed_at)
-                                <x-mary-menu-item wire:click="complete" title="{{ ucfirst(__('laravel-crm::lang.complete')) }}" />
+                                <x-mary-menu-item wire:click="complete" title="{{ ucfirst(__('laravel-crm::lang.complete')) }}" icon="o-check" />
                             @endif
                         @endcan
                         @can('delete crm tasks')
-                            <x-mary-menu-item onclick="modalDeleteTaskItem{{ $task->id }}.showModal()" title="{{ ucfirst(__('laravel-crm::lang.delete')) }}" />
+                            <x-mary-menu-item onclick="modalDeleteTaskItem{{ $task->id }}.showModal()" title="{{ ucfirst(__('laravel-crm::lang.delete')) }}" icon="o-trash" />
                         @endcan
                     </x-mary-dropdown>
                 @endcanany

@@ -3,7 +3,10 @@
         <div class="card-body">
             {{--<img src="..." class="mr-3" alt="...">--}}
             <div class="media-body">
-                <h5 class="mt-0 mb-1">{{ $task->name }} @include('laravel-crm::livewire.components.partials.task.actions', ['task' => $task])</h5>
+                <h5 class="mt-0 mb-1">
+                    <a href="{{ route('laravel-crm.tasks.show', $task) }}" class="link link-hover link-primary font-bold">{{ $task->name }}</a>
+                    @include('laravel-crm::livewire.components.partials.task.actions', ['task' => $task])
+                </h5>
                 @if($showRelated)
                     <p class="pb-0 mb-2">
                         @if($task->taskable instanceof \VentureDrake\LaravelCrm\Models\Person)
