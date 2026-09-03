@@ -107,6 +107,9 @@ abstract class TestCase extends OrchestraTestCase
         // Livewire component tests can render views that reference <x-mary-form>/<x-mary-badge>.
         $app['config']->set('mary.prefix', 'mary-');
 
+        // Point testbench compiled views to system temp dir to prevent permission conflicts with web server
+        $app['config']->set('view.compiled', sys_get_temp_dir().'/testbench_compiled_views');
+
         // cknow/laravel-money is not auto-discovered under testbench, so views that call
         // `money($amount, $currency)` can't locate the moneyphp ISO currency table. Point
         // the config at the vendor file directly so currency-formatting renders in tests.
