@@ -7,14 +7,6 @@ use VentureDrake\LaravelCrm\Models\Lead;
 use VentureDrake\LaravelCrm\Models\Task;
 use VentureDrake\LaravelCrm\Tests\Stubs\User;
 
-class FilterTaskIndexStub extends TaskIndex
-{
-    public function render()
-    {
-        return '<div></div>';
-    }
-}
-
 it('filters tasks by due date preset and date ranges', function () {
     $user = User::create(['name' => 'Test User 1', 'email' => 'test1@example.com']);
     $this->actingAs($user);
@@ -23,17 +15,15 @@ it('filters tasks by due date preset and date ranges', function () {
     $todayTask = Task::create(['name' => 'Today Task', 'due_at' => now(), 'external_id' => Str::uuid()->toString()]);
     $futureTask = Task::create(['name' => 'Future Task', 'due_at' => now()->addDays(10), 'external_id' => Str::uuid()->toString()]);
 
-    Livewire::test(FilterTaskIndexStub::class)
-        ->set('due_preset', 'overdue')
-        ->assertViewHas('tasks', function ($tasks) use ($overdueTask) {
-            return $tasks->pluck('id')->contains($overdueTask->id) && $tasks->count() === 1;
-        });
+    $test = Livewire::test(TaskIndex::class)->set('due_preset', 'overdue');
+    $tasks = $test->instance()->tasks();
+    expect($tasks->pluck('id'))->toContain($overdueTask->id)
+        ->and($tasks->count())->toBe(1);
 
-    Livewire::test(FilterTaskIndexStub::class)
-        ->set('due_preset', 'today')
-        ->assertViewHas('tasks', function ($tasks) use ($todayTask) {
-            return $tasks->pluck('id')->contains($todayTask->id) && $tasks->count() === 1;
-        });
+    $testToday = Livewire::test(TaskIndex::class)->set('due_preset', 'today');
+    $tasksToday = $testToday->instance()->tasks();
+    expect($tasksToday->pluck('id'))->toContain($todayTask->id)
+        ->and($tasksToday->count())->toBe(1);
 });
 
 it('filters tasks by assigned user', function () {
@@ -45,17 +35,15 @@ it('filters tasks by assigned user', function () {
     $task2 = Task::create(['name' => 'Task for Bob', 'user_assigned_id' => $user2->id, 'external_id' => Str::uuid()->toString()]);
     $task3 = Task::create(['name' => 'Unassigned Task', 'user_assigned_id' => null, 'external_id' => Str::uuid()->toString()]);
 
-    Livewire::test(FilterTaskIndexStub::class)
-        ->set('user_id', [(string) $user1->id])
-        ->assertViewHas('tasks', function ($tasks) use ($task1) {
-            return $tasks->pluck('id')->contains($task1->id) && $tasks->count() === 1;
-        });
+    $testUser = Livewire::test(TaskIndex::class)->set('user_id', [(string) $user1->id]);
+    $tasksUser = $testUser->instance()->tasks();
+    expect($tasksUser->pluck('id'))->toContain($task1->id)
+        ->and($tasksUser->count())->toBe(1);
 
-    Livewire::test(FilterTaskIndexStub::class)
-        ->set('user_id', ['unassigned'])
-        ->assertViewHas('tasks', function ($tasks) use ($task3) {
-            return $tasks->pluck('id')->contains($task3->id) && $tasks->count() === 1;
-        });
+    $testUnassigned = Livewire::test(TaskIndex::class)->set('user_id', ['unassigned']);
+    $tasksUnassigned = $testUnassigned->instance()->tasks();
+    expect($tasksUnassigned->pluck('id'))->toContain($task3->id)
+        ->and($tasksUnassigned->count())->toBe(1);
 });
 
 it('filters tasks by lead', function () {
@@ -66,11 +54,10 @@ it('filters tasks by lead', function () {
     $leadTask = Task::create(['name' => 'Lead Task', 'taskable_type' => Lead::class, 'taskable_id' => $lead->id, 'external_id' => Str::uuid()->toString()]);
     $otherTask = Task::create(['name' => 'Other Task', 'external_id' => Str::uuid()->toString()]);
 
-    Livewire::test(FilterTaskIndexStub::class)
-        ->set('lead_id', [(string) $lead->id])
-        ->assertViewHas('tasks', function ($tasks) use ($leadTask) {
-            return $tasks->pluck('id')->contains($leadTask->id) && $tasks->count() === 1;
-        });
+    $testLead = Livewire::test(TaskIndex::class)->set('lead_id', [(string) $lead->id]);
+    $tasksLead = $testLead->instance()->tasks();
+    expect($tasksLead->pluck('id'))->toContain($leadTask->id)
+        ->and($tasksLead->count())->toBe(1);
 });
 
 it('orders tasks by due_at, assigned_user_name, and lead_title', function () {
@@ -81,15 +68,9 @@ it('orders tasks by due_at, assigned_user_name, and lead_title', function () {
     $task1 = Task::create(['name' => 'Task 1', 'due_at' => now()->addDays(1), 'user_assigned_id' => $user2->id, 'external_id' => Str::uuid()->toString()]);
     $task2 = Task::create(['name' => 'Task 2', 'due_at' => now()->addDays(5), 'user_assigned_id' => $user1->id, 'external_id' => Str::uuid()->toString()]);
 
-    Livewire::test(FilterTaskIndexStub::class)
-        ->set('sortBy', ['column' => 'due_at', 'direction' => 'asc'])
-        ->assertViewHas('tasks', function ($tasks) use ($task1) {
-            return $tasks->first()->id === $task1->id;
-        });
+    $testDue = Livewire::test(TaskIndex::class)->set('sortBy', ['column' => 'due_at', 'direction' => 'asc']);
+    expect($testDue->instance()->tasks()->first()->id)->toBe($task1->id);
 
-    Livewire::test(FilterTaskIndexStub::class)
-        ->set('sortBy', ['column' => 'assigned_user_name', 'direction' => 'asc'])
-        ->assertViewHas('tasks', function ($tasks) use ($task2) {
-            return $tasks->first()->id === $task2->id;
-        });
+    $testAssigned = Livewire::test(TaskIndex::class)->set('sortBy', ['column' => 'assigned_user_name', 'direction' => 'asc']);
+    expect($testAssigned->instance()->tasks()->first()->id)->toBe($task2->id);
 });
