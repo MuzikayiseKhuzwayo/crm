@@ -95,9 +95,9 @@ class TimelineItem extends Component
     {
         return <<<'HTML'
             @php
-                $originEntity = $this->getOriginEntity();
-                $authorUser = $this->getAuthorUser();
-                $assignedUser = $this->getAssignedUser();
+                $originEntity = $component->getOriginEntity();
+                $authorUser = $component->getAuthorUser();
+                $assignedUser = $component->getAssignedUser();
             @endphp
             <div>
                 <!-- Last item `border cut` -->
