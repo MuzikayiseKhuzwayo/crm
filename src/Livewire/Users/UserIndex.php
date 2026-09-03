@@ -60,6 +60,10 @@ class UserIndex extends Component
 
     public function roles(): Collection
     {
+        if (! Schema::hasTable(config('permission.table_names.roles', 'roles'))) {
+            return collect();
+        }
+
         return Role::crm()->orderBy('name')->get();
     }
 
