@@ -26,6 +26,47 @@
             @endcan
         </x-slot:actions>
     </x-crm-header>
+
+    {{-- PIPELINE STAGE PROGRESSION & QUICK TASK AUTOMATION BAR --}}
+    <x-mary-card shadow class="mb-5 border border-base-300">
+        <div class="space-y-4">
+            <div class="flex flex-wrap items-center justify-between gap-3">
+                <div class="flex items-center gap-2">
+                    <x-mary-icon name="o-funnel" class="w-5 h-5 text-primary shrink-0" />
+                    <span class="font-bold text-sm uppercase tracking-wider text-base-content/80">Pipeline Stage:</span>
+                </div>
+                <div class="flex flex-wrap items-center gap-1.5">
+                    @foreach($this->pipelineStages as $stage)
+                        @php
+                            $isCurrent = $lead->pipeline_stage_id == $stage->id;
+                        @endphp
+                        <button wire:click="updateStage({{ $stage->id }})" 
+                                class="btn btn-xs rounded-full font-semibold transition-all {{ $isCurrent ? 'btn-primary text-white shadow-xs' : 'btn-outline border-base-300 text-base-content/70 hover:btn-neutral' }}">
+                            @if($isCurrent)
+                                <x-mary-icon name="o-check-circle" class="w-3.5 h-3.5 mr-0.5 shrink-0" style="width:14px;height:14px;" />
+                            @endif
+                            <span>{{ $stage->name }}</span>
+                        </button>
+                    @endforeach
+                </div>
+            </div>
+
+            <div class="pt-3 border-t border-base-200 flex flex-wrap items-center justify-between gap-3">
+                <div class="flex items-center gap-2">
+                    <x-mary-icon name="o-bolt" class="w-4 h-4 text-warning shrink-0" />
+                    <span class="text-xs font-bold text-base-content/70 uppercase">Quick Stage Automation Tasks:</span>
+                </div>
+                <div class="flex flex-wrap items-center gap-2">
+                    <x-mary-button label="+ Task: Connection Request" wire:click="createStageTask('connection_request')" icon="o-plus" class="btn-xs btn-outline btn-primary" spinner="createStageTask" />
+                    <x-mary-button label="+ Task: Send Intro DM" wire:click="createStageTask('intro_dm')" icon="o-plus" class="btn-xs btn-outline btn-info" spinner="createStageTask" />
+                    <x-mary-button label="+ Task: Schedule Call" wire:click="createStageTask('schedule_call')" icon="o-plus" class="btn-xs btn-outline btn-warning" spinner="createStageTask" />
+                    <x-mary-button label="+ Task: Send Proposal" wire:click="createStageTask('send_proposal')" icon="o-plus" class="btn-xs btn-outline btn-secondary" spinner="createStageTask" />
+                    <x-mary-button label="+ Task: Follow Up" wire:click="createStageTask('follow_up')" icon="o-plus" class="btn-xs btn-outline btn-neutral" spinner="createStageTask" />
+                </div>
+            </div>
+        </div>
+    </x-mary-card>
+
     <div class="grid lg:grid-cols-2 gap-5 items-start">
         <div class="grid gap-y-5">
             <x-mary-card title="{{ ucfirst(__('laravel-crm::lang.details')) }}" shadow separator>

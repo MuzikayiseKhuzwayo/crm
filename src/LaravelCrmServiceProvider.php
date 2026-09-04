@@ -38,6 +38,7 @@ use VentureDrake\LaravelCrm\Console\LaravelCrmPermissions;
 use VentureDrake\LaravelCrm\Console\LaravelCrmReminders;
 use VentureDrake\LaravelCrm\Console\LaravelCrmSampleData;
 use VentureDrake\LaravelCrm\Console\LaravelCrmSeedLinkedinTasks;
+use VentureDrake\LaravelCrm\Console\LaravelCrmSetupLeadPipeline;
 use VentureDrake\LaravelCrm\Console\LaravelCrmSmsCampaignsDispatch;
 use VentureDrake\LaravelCrm\Console\LaravelCrmUpdate;
 use VentureDrake\LaravelCrm\Console\LaravelCrmUpgrade;
@@ -899,6 +900,7 @@ class LaravelCrmServiceProvider extends ServiceProvider
                 LaravelCrmSmsCampaignsDispatch::class,
                 LaravelCrmMonitorCheck::class,
                 LaravelCrmSeedLinkedinTasks::class,
+                LaravelCrmSetupLeadPipeline::class,
                 IssueApiToken::class,
             ]);
 
