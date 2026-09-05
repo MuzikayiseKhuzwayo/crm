@@ -49,6 +49,10 @@ class TimelineItem extends Component
             return null;
         }
 
+        if ($this->activity->recordable && method_exists($this->activity->recordable, 'noteable') && $this->activity->recordable->noteable instanceof \VentureDrake\LaravelCrm\Models\Task) {
+            return $this->activity->recordable->noteable;
+        }
+
         $origin = $this->activity->timelineable;
 
         if (! $origin && $this->activity->recordable) {
@@ -180,6 +184,11 @@ class TimelineItem extends Component
                                     <a href="{{ route('laravel-crm.organizations.show', $originEntity) }}" class="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-accent/10 text-accent hover:bg-accent/20 transition-colors">
                                         <x-mary-icon name="o-building-office" class="w-3.5 h-3.5 shrink-0" style="width:14px;height:14px;" />
                                         <span>Organization: {{ $originEntity->name }}</span>
+                                    </a>
+                                @elseif(is_a($originEntity, 'VentureDrake\LaravelCrm\Models\Task'))
+                                    <a href="{{ route('laravel-crm.tasks.show', $originEntity) }}" class="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-warning/10 text-warning hover:bg-warning/20 transition-colors">
+                                        <x-mary-icon name="fas.tasks" class="w-3.5 h-3.5 shrink-0" style="width:14px;height:14px;" />
+                                        <span>Task: {{ $originEntity->name }}</span>
                                     </a>
                                 @endif
                             @endif

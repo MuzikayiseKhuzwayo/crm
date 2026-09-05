@@ -97,6 +97,7 @@ class ActivityFeed extends Component
             ['id' => Deal::class, 'name' => 'Deals'],
             ['id' => Person::class, 'name' => 'People'],
             ['id' => Organization::class, 'name' => 'Organizations'],
+            ['id' => Task::class, 'name' => 'Tasks'],
         ];
     }
 

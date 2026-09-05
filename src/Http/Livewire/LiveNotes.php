@@ -84,26 +84,42 @@ class LiveNotes extends Component
 
     public function getNotes()
     {
-        if ($this->pinned) {
-            $this->notes = $this->model->notes()->where('pinned', 1)->latest()->get();
-        } else {
-            $noteIds = [];
+        $noteIds = [];
 
-            foreach ($this->model->notes()->latest()->get() as $note) {
-                $noteIds[] = $note->id;
-            }
+        foreach ($this->model->notes()->latest()->get() as $note) {
+            $noteIds[] = $note->id;
+        }
 
-            if ($this->settingService->get('show_related_activity')->value == 1 && method_exists($this->model, 'contacts')) {
-                foreach ($this->model->contacts as $contact) {
-                    foreach ($contact->entityable->notes()->latest()->get() as $note) {
-                        $noteIds[] = $note->id;
-                    }
+        if (method_exists($this->model, 'tasks') && ! ($this->model instanceof \VentureDrake\LaravelCrm\Models\Task)) {
+            $taskIds = $this->model->tasks()->pluck('id')->toArray();
+            if (count($taskIds) > 0) {
+                $taskNotes = Note::where(function ($q) {
+                    $q->where('noteable_type', \VentureDrake\LaravelCrm\Models\Task::class)
+                        ->orWhere('noteable_type', (new \VentureDrake\LaravelCrm\Models\Task)->getMorphClass());
+                })->whereIn('noteable_id', $taskIds)->get(['id']);
+
+                foreach ($taskNotes as $taskNote) {
+                    $noteIds[] = $taskNote->id;
                 }
             }
+        }
 
-            if (count($noteIds) > 0) {
-                $this->notes = Note::whereIn('id', $noteIds)->latest()->get();
+        if ($this->settingService->get('show_related_activity')->value == 1 && method_exists($this->model, 'contacts')) {
+            foreach ($this->model->contacts as $contact) {
+                foreach ($contact->entityable->notes()->latest()->get() as $note) {
+                    $noteIds[] = $note->id;
+                }
             }
+        }
+
+        if ($this->pinned) {
+            $this->notes = count($noteIds) > 0
+                ? Note::whereIn('id', $noteIds)->where('pinned', 1)->latest()->get()
+                : [];
+        } else {
+            $this->notes = count($noteIds) > 0
+                ? Note::whereIn('id', $noteIds)->latest()->get()
+                : [];
         }
 
         $this->emit('refreshActivities');

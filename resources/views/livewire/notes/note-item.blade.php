@@ -15,6 +15,11 @@
                             <span class="text-sm">
                                 <a href="{{ route('laravel-crm.organizations.show', $note->noteable) }}" class="link link-hover link-primary">{{ $note->noteable->name }}</a>
                             </span>
+                        @elseif(class_basename($note->noteable->getMorphClass()) == 'Task')
+                            <x-mary-icon name="fas.tasks" class="text-sm text-warning" />
+                            <span class="text-sm">
+                                <a href="{{ route('laravel-crm.tasks.show', $note->noteable) }}" class="link link-hover link-warning font-semibold">Task: {{ $note->noteable->name }}</a>
+                            </span>
                         @endif
                     </div>
                 @endif

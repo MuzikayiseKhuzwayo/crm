@@ -8,6 +8,7 @@ use Livewire\Component;
 use Mary\Traits\Toast;
 use Ramsey\Uuid\Uuid;
 use VentureDrake\LaravelCrm\Models\Note;
+use VentureDrake\LaravelCrm\Models\Task;
 
 class NoteRelated extends Component
 {
@@ -66,44 +67,60 @@ class NoteRelated extends Component
     public function getNotes()
     {
         $relatedIds = [];
+        $noteIds = [];
+
+        foreach ($this->model->notes()->latest()->get() as $note) {
+            $noteIds[] = $note->id;
+        }
+
+        if (method_exists($this->model, 'tasks') && ! ($this->model instanceof Task)) {
+            $taskIds = $this->model->tasks()->pluck('id')->toArray();
+            if (count($taskIds) > 0) {
+                $taskNotes = Note::where(function ($q) {
+                    $q->where('noteable_type', Task::class)
+                        ->orWhere('noteable_type', (new Task)->getMorphClass());
+                })->whereIn('noteable_id', $taskIds)->get(['id']);
+
+                foreach ($taskNotes as $taskNote) {
+                    $noteIds[] = $taskNote->id;
+                    $relatedIds[] = $taskNote->id;
+                }
+            }
+        }
+
+        if (app('laravel-crm.settings')->get('show_related_activity') == 1) {
+            if (method_exists($this->model, 'contacts')) {
+                foreach ($this->model->contacts as $contact) {
+                    foreach ($contact->entityable->notes()->latest()->get() as $note) {
+                        $noteIds[] = $note->id;
+                        $relatedIds[] = $note->id;
+                    }
+                }
+            }
+
+            if (method_exists($this->model, 'organization') && $this->model->organization) {
+                foreach ($this->model->organization->notes()->latest()->get() as $note) {
+                    $noteIds[] = $note->id;
+                    $relatedIds[] = $note->id;
+                }
+            }
+
+            if (method_exists($this->model, 'person') && $this->model->person) {
+                foreach ($this->model->person->notes()->latest()->get() as $note) {
+                    $noteIds[] = $note->id;
+                    $relatedIds[] = $note->id;
+                }
+            }
+        }
 
         if ($this->pinned) {
-            $this->notes = $this->model->notes()->where('pinned', 1)->latest()->get();
+            $this->notes = count($noteIds) > 0
+                ? Note::whereIn('id', $noteIds)->where('pinned', 1)->latest()->get()
+                : [];
         } else {
-            $noteIds = [];
-
-            foreach ($this->model->notes()->latest()->get() as $note) {
-                $noteIds[] = $note->id;
-            }
-
-            if (app('laravel-crm.settings')->get('show_related_activity') == 1) {
-                if (method_exists($this->model, 'contacts')) {
-                    foreach ($this->model->contacts as $contact) {
-                        foreach ($contact->entityable->notes()->latest()->get() as $note) {
-                            $noteIds[] = $note->id;
-                            $relatedIds[] = $note->id;
-                        }
-                    }
-                }
-
-                if (method_exists($this->model, 'organization') && $this->model->organization) {
-                    foreach ($this->model->organization->notes()->latest()->get() as $note) {
-                        $noteIds[] = $note->id;
-                        $relatedIds[] = $note->id;
-                    }
-                }
-
-                if (method_exists($this->model, 'person') && $this->model->person) {
-                    foreach ($this->model->person->notes()->latest()->get() as $note) {
-                        $noteIds[] = $note->id;
-                        $relatedIds[] = $note->id;
-                    }
-                }
-            }
-
-            if (count($noteIds) > 0) {
-                $this->notes = Note::whereIn('id', $noteIds)->latest()->get();
-            }
+            $this->notes = count($noteIds) > 0
+                ? Note::whereIn('id', $noteIds)->latest()->get()
+                : [];
         }
 
         foreach ($this->notes as $note) {
