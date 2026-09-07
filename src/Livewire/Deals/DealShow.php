@@ -43,15 +43,19 @@ class DealShow extends Component
         if ($deal = Deal::find($id)) {
             $this->authorize('update', $deal);
 
-            $pipeline = $deal->pipeline;
-            $deal->update([
-                'closed_status' => 'won',
-                'closed_at' => Carbon::now(),
-                'pipeline_stage_id' => $pipeline?->pipelineStages()->where('name', 'Closed Won')->first()->id ?? null,
-            ]);
+            try {
+                $pipeline = $deal->pipeline;
+                $deal->update([
+                    'closed_status' => 'won',
+                    'closed_at' => Carbon::now(),
+                    'pipeline_stage_id' => $pipeline?->pipelineStages()->where('name', 'Closed Won')->first()->id ?? null,
+                ]);
 
-            $this->success(ucfirst(trans('laravel-crm::lang.deal_won')));
-            $this->dispatch('refreshDeal');
+                $this->success(ucfirst(trans('laravel-crm::lang.deal_won')));
+                $this->dispatch('refreshDeal');
+            } catch (\VentureDrake\LaravelCrm\Exceptions\HandoffGateIncompleteException $e) {
+                $this->error($e->getMessage());
+            }
         }
     }
 

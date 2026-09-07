@@ -289,6 +289,7 @@ class TestSchema
             $table->string('currency', 3)->default('USD');
             $table->unsignedBigInteger('pipeline_id')->nullable();
             $table->unsignedBigInteger('pipeline_stage_id')->nullable();
+            $table->unsignedBigInteger('partner_id')->nullable();
             $table->integer('pipeline_order')->nullable();
             $table->boolean('qualified')->default(false);
             $table->datetime('expected_close')->nullable();
@@ -1373,5 +1374,126 @@ class TestSchema
             $table->timestamp('visitor_read_at')->nullable();
             $table->timestamps();
         });
+
+        // Business Development & Commercial Telemetry Tables
+        if (! Schema::hasTable($prefix.'contracts')) {
+            Schema::create($prefix.'contracts', function (Blueprint $table) {
+                $table->bigIncrements('id');
+                $table->string('external_id')->index();
+                $table->unsignedBigInteger('team_id')->index()->nullable();
+                $table->unsignedBigInteger('deal_id')->index();
+                $table->unsignedBigInteger('organization_id')->index()->nullable();
+                $table->string('contract_type')->default('direct');
+                $table->integer('term_months')->default(12);
+                $table->string('payment_terms')->nullable();
+                $table->string('sla_commitment_level')->default('standard');
+                $table->boolean('sla_penalty_clause')->default(false);
+                $table->decimal('partner_rev_share_percent', 5, 2)->default(0.00);
+                $table->decimal('annual_price_escalation_percent', 5, 2)->default(0.00);
+                $table->bigInteger('minimum_commitment_amount')->default(0);
+                $table->decimal('bespoke_work_ratio', 5, 2)->default(0.00);
+                $table->boolean('is_referenceable')->default(false);
+                $table->boolean('is_design_partner')->default(false);
+                $table->timestamp('kickoff_at')->nullable();
+                $table->timestamp('signed_at')->nullable();
+                $table->timestamp('renewed_at')->nullable();
+                $table->string('renewal_status')->default('pending');
+                $table->unsignedBigInteger('user_created_id')->nullable();
+                $table->unsignedBigInteger('user_updated_id')->nullable();
+                $table->unsignedBigInteger('user_deleted_id')->nullable();
+                $table->timestamps();
+                $table->softDeletes();
+            });
+        }
+
+        if (! Schema::hasTable($prefix.'handoff_gates')) {
+            Schema::create($prefix.'handoff_gates', function (Blueprint $table) {
+                $table->bigIncrements('id');
+                $table->string('external_id')->index();
+                $table->unsignedBigInteger('team_id')->index()->nullable();
+                $table->unsignedBigInteger('deal_id')->index();
+                $table->string('gate_type');
+                $table->string('status')->default('pending');
+                $table->unsignedBigInteger('cleared_by_user_id')->nullable();
+                $table->timestamp('cleared_at')->nullable();
+                $table->text('rejection_reason')->nullable();
+                $table->json('metadata')->nullable();
+                $table->unsignedBigInteger('user_created_id')->nullable();
+                $table->unsignedBigInteger('user_updated_id')->nullable();
+                $table->timestamps();
+            });
+        }
+
+        if (! Schema::hasTable($prefix.'partner_profiles')) {
+            Schema::create($prefix.'partner_profiles', function (Blueprint $table) {
+                $table->bigIncrements('id');
+                $table->string('external_id')->index();
+                $table->unsignedBigInteger('team_id')->index()->nullable();
+                $table->unsignedBigInteger('organization_id')->index();
+                $table->string('partner_tier')->default('referral');
+                $table->string('status')->default('prospect');
+                $table->string('region_code')->nullable();
+                $table->timestamp('recruited_at')->nullable();
+                $table->timestamp('first_sale_at')->nullable();
+                $table->timestamp('last_deal_at')->nullable();
+                $table->bigInteger('total_sourced_pipeline_amount')->default(0);
+                $table->unsignedBigInteger('user_created_id')->nullable();
+                $table->unsignedBigInteger('user_updated_id')->nullable();
+                $table->unsignedBigInteger('user_deleted_id')->nullable();
+                $table->timestamps();
+                $table->softDeletes();
+            });
+        }
+
+        if (! Schema::hasTable($prefix.'deal_derisking')) {
+            Schema::create($prefix.'deal_derisking', function (Blueprint $table) {
+                $table->bigIncrements('id');
+                $table->string('external_id')->index();
+                $table->unsignedBigInteger('team_id')->index()->nullable();
+                $table->unsignedBigInteger('deal_id')->index();
+                $table->unsignedBigInteger('competitor_id')->nullable();
+                $table->text('problem_statement')->nullable();
+                $table->text('pitfalls_identified')->nullable();
+                $table->text('unique_insight')->nullable();
+                $table->text('execution_plan')->nullable();
+                $table->boolean('commercial_thesis_validated')->nullable();
+                $table->timestamp('loi_signed_at')->nullable();
+                $table->timestamp('pilot_converted_at')->nullable();
+                $table->unsignedBigInteger('user_created_id')->nullable();
+                $table->unsignedBigInteger('user_updated_id')->nullable();
+                $table->timestamps();
+            });
+        }
+
+        if (! Schema::hasTable($prefix.'telemetry_events')) {
+            Schema::create($prefix.'telemetry_events', function (Blueprint $table) {
+                $table->bigIncrements('id');
+                $table->string('external_id')->index();
+                $table->unsignedBigInteger('team_id')->index()->nullable();
+                $table->string('event_name')->index();
+                $table->string('entity_type');
+                $table->string('entity_id')->index();
+                $table->string('ansoff_quadrant')->index();
+                $table->string('pirate_stage')->index();
+                $table->string('metric_key')->index();
+                $table->decimal('metric_value', 15, 4)->default(0.0000);
+                $table->json('payload')->nullable();
+                $table->timestamp('recorded_at')->index();
+                $table->timestamps();
+            });
+        }
+
+        if (! Schema::hasTable($prefix.'processing_performance_logs')) {
+            Schema::create($prefix.'processing_performance_logs', function (Blueprint $table) {
+                $table->bigIncrements('id');
+                $table->string('external_id')->index();
+                $table->string('trace_id')->index();
+                $table->string('stage')->index();
+                $table->decimal('latency_ms', 10, 3);
+                $table->string('status');
+                $table->json('metadata')->nullable();
+                $table->timestamp('created_at')->useCurrent();
+            });
+        }
     }
 }

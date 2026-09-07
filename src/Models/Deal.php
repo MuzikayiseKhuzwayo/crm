@@ -137,4 +137,25 @@ class Deal extends Model
     {
         return $this->belongsTo(PipelineStage::class);
     }
+
+    public function contract()
+    {
+        return $this->hasOne(Contract::class);
+    }
+
+    public function handoffGates()
+    {
+        return $this->hasMany(HandoffGate::class);
+    }
+
+    public function derisking()
+    {
+        return $this->hasOne(DealDerisking::class);
+    }
+
+    public function partner()
+    {
+        return $this->belongsTo(PartnerProfile::class, 'partner_id');
+    }
 }
+

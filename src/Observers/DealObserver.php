@@ -45,7 +45,9 @@ class DealObserver
      */
     public function created(Deal $deal)
     {
-        //
+        if (config('laravel-crm.stage_gates_enabled', true)) {
+            app(\VentureDrake\LaravelCrm\Services\BusinessDevelopment\HandoffGateService::class)->initializeDefaultGates($deal);
+        }
     }
 
     /**
@@ -57,6 +59,10 @@ class DealObserver
     {
         if (! app()->runningInConsole()) {
             $deal->user_updated_id = auth()->user()->id ?? null;
+        }
+
+        if (config('laravel-crm.stage_gates_enabled', true) && $deal->isDirty('closed_status') && $deal->closed_status === 'won') {
+            app(\VentureDrake\LaravelCrm\Services\BusinessDevelopment\HandoffGateService::class)->assertCanAdvanceToWon($deal);
         }
     }
 

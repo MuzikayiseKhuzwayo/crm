@@ -1032,6 +1032,10 @@ class LaravelCrmServiceProvider extends ServiceProvider
         Livewire::component('crm-deal-show', DealShow::class);
         Livewire::component('crm-deal-create', DealCreate::class);
         Livewire::component('crm-deal-edit', DealEdit::class);
+        Livewire::component('crm-handoff-gate-modal', \VentureDrake\LaravelCrm\Livewire\BusinessDevelopment\HandoffGateModal::class);
+        Livewire::component('crm-derisking-playbook-widget', \VentureDrake\LaravelCrm\Livewire\BusinessDevelopment\DeriskingPlaybookWidget::class);
+        Livewire::component('crm-contract-telemetry-card', \VentureDrake\LaravelCrm\Livewire\BusinessDevelopment\ContractTelemetryCard::class);
+        Livewire::component('crm-commercial-intelligence-dashboard', \VentureDrake\LaravelCrm\Livewire\BusinessDevelopment\CommercialIntelligenceDashboard::class);
         Livewire::component('crm-quote-index', QuoteIndex::class);
         Livewire::component('crm-quote-board', QuoteBoard::class);
         Livewire::component('crm-quote-show', QuoteShow::class);

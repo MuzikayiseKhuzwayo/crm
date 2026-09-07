@@ -150,6 +150,9 @@
             </x-mary-card>
         </div>
         <div>
+            <livewire:crm-handoff-gate-modal :deal="$deal" />
+            <livewire:crm-contract-telemetry-card :deal="$deal" />
+            <livewire:crm-derisking-playbook-widget :deal="$deal" />
             <livewire:crm-activity-tabs :model="$deal" />
         </div>
     </div>
