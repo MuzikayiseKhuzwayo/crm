@@ -29,6 +29,7 @@ use VentureDrake\LaravelCrm\Console\LaravelCrmDecrypt;
 use VentureDrake\LaravelCrm\Console\LaravelCrmEmailCampaignsDispatch;
 use VentureDrake\LaravelCrm\Console\LaravelCrmEncrypt;
 use VentureDrake\LaravelCrm\Console\LaravelCrmFields;
+use VentureDrake\LaravelCrm\Console\LaravelCrmImportLinkedinLeads;
 use VentureDrake\LaravelCrm\Console\LaravelCrmInstall;
 use VentureDrake\LaravelCrm\Console\LaravelCrmLabels;
 use VentureDrake\LaravelCrm\Console\LaravelCrmLeadSources;
@@ -105,6 +106,10 @@ use VentureDrake\LaravelCrm\Livewire\ActivityTabs;
 use VentureDrake\LaravelCrm\Livewire\Auth\ForgotPassword;
 use VentureDrake\LaravelCrm\Livewire\Auth\Login;
 use VentureDrake\LaravelCrm\Livewire\Auth\ResetPassword;
+use VentureDrake\LaravelCrm\Livewire\BusinessDevelopment\CommercialIntelligenceDashboard;
+use VentureDrake\LaravelCrm\Livewire\BusinessDevelopment\ContractTelemetryCard;
+use VentureDrake\LaravelCrm\Livewire\BusinessDevelopment\DeriskingPlaybookWidget;
+use VentureDrake\LaravelCrm\Livewire\BusinessDevelopment\HandoffGateModal;
 use VentureDrake\LaravelCrm\Livewire\Calls\CallItem;
 use VentureDrake\LaravelCrm\Livewire\Calls\CallRelated;
 use VentureDrake\LaravelCrm\Livewire\Chat\ChatIndex;
@@ -901,6 +906,7 @@ class LaravelCrmServiceProvider extends ServiceProvider
                 LaravelCrmMonitorCheck::class,
                 LaravelCrmSeedLinkedinTasks::class,
                 LaravelCrmSetupLeadPipeline::class,
+                LaravelCrmImportLinkedinLeads::class,
                 IssueApiToken::class,
             ]);
 
@@ -1032,10 +1038,10 @@ class LaravelCrmServiceProvider extends ServiceProvider
         Livewire::component('crm-deal-show', DealShow::class);
         Livewire::component('crm-deal-create', DealCreate::class);
         Livewire::component('crm-deal-edit', DealEdit::class);
-        Livewire::component('crm-handoff-gate-modal', \VentureDrake\LaravelCrm\Livewire\BusinessDevelopment\HandoffGateModal::class);
-        Livewire::component('crm-derisking-playbook-widget', \VentureDrake\LaravelCrm\Livewire\BusinessDevelopment\DeriskingPlaybookWidget::class);
-        Livewire::component('crm-contract-telemetry-card', \VentureDrake\LaravelCrm\Livewire\BusinessDevelopment\ContractTelemetryCard::class);
-        Livewire::component('crm-commercial-intelligence-dashboard', \VentureDrake\LaravelCrm\Livewire\BusinessDevelopment\CommercialIntelligenceDashboard::class);
+        Livewire::component('crm-handoff-gate-modal', HandoffGateModal::class);
+        Livewire::component('crm-derisking-playbook-widget', DeriskingPlaybookWidget::class);
+        Livewire::component('crm-contract-telemetry-card', ContractTelemetryCard::class);
+        Livewire::component('crm-commercial-intelligence-dashboard', CommercialIntelligenceDashboard::class);
         Livewire::component('crm-quote-index', QuoteIndex::class);
         Livewire::component('crm-quote-board', QuoteBoard::class);
         Livewire::component('crm-quote-show', QuoteShow::class);

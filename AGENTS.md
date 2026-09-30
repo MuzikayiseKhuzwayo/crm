@@ -186,7 +186,22 @@ php artisan laravelcrm:reminders            # send activity reminders (scheduled
 php artisan laravelcrm:archive              # archive old records (scheduled daily)
 php artisan laravelcrm:email-campaigns-dispatch  # queue due email campaign sends (scheduled every minute)
 php artisan laravelcrm:sms-campaigns-dispatch    # queue due SMS campaign sends (scheduled every minute)
+php artisan laravelcrm:import-linkedin-leads {file.json} # import LinkedIn profile search dataset (deduplicates on LinkedIn URL)
 ```
+
+### Importing Leads from LinkedIn Profile Datasets
+To bulk import leads from a LinkedIn profile search JSON dataset:
+```bash
+# Production / Host app:
+php artisan laravelcrm:import-linkedin-leads /path/to/dataset.json [--user=1] [--dry-run]
+
+# Package development environment (Testbench):
+.\vendor\bin\testbench.bat laravelcrm:import-linkedin-leads "C:\path\to\dataset.json"
+```
+- **Entities created**: `Lead`, `Person`, `Organization` (deduplicated by name), and primary `Address` (city, state, country from parsed location).
+- **Deduplication**: Automatically checks `crm_leads.linkedin` and skips any profile whose LinkedIn URL already exists.
+- **Lead details**: Title formatted as `{Company} - {Role}`, headline/metrics/about in `description`, tagged with lead source `LinkedIn`, placed in Lead Pipeline stage 1 (`New` / `Cold Prospect`).
+
 
 ### Scheduled Tasks (auto-registered in ServiceProvider)
 - `laravelcrm:reminders` — every minute (activity reminders)

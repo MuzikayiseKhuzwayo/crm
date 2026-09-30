@@ -46,6 +46,7 @@ php artisan laravelcrm:sms-campaigns        # Dispatch SMS campaigns (scheduled)
 php artisan laravelcrm:reminders            # Send reminder notifications (scheduled)
 php artisan laravelcrm:update               # Check for/apply package updates
 php artisan laravelcrm:archive              # Archive old records
+php artisan laravelcrm:import-linkedin-leads # Import LinkedIn profile search JSON dataset
 php artisan laravelcrm:v2                   # V1→V2 migration helper
 php artisan laravelcrm:xero                 # Xero integration utilities
 ```
