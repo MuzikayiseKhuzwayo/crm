@@ -11,7 +11,10 @@ use Livewire\Attributes\Url;
 use Livewire\Component;
 use Livewire\WithPagination;
 use Mary\Traits\Toast;
+use VentureDrake\LaravelCrm\Models\Deal;
 use VentureDrake\LaravelCrm\Models\Lead;
+use VentureDrake\LaravelCrm\Models\Organization;
+use VentureDrake\LaravelCrm\Models\Person;
 use VentureDrake\LaravelCrm\Models\Task;
 use VentureDrake\LaravelCrm\Traits\ClearsProperties;
 use VentureDrake\LaravelCrm\Traits\ResetsPaginationWhenPropsChanges;
@@ -74,9 +77,9 @@ class TaskIndex extends Component
 
     public function filterCount(): int
     {
-        return (!empty($this->user_id) ? 1 : 0)
-            + (!empty($this->created_by_id) ? 1 : 0)
-            + (!empty($this->lead_id) ? 1 : 0)
+        return (! empty($this->user_id) ? 1 : 0)
+            + (! empty($this->created_by_id) ? 1 : 0)
+            + (! empty($this->lead_id) ? 1 : 0)
             + ($this->status ? 1 : 0)
             + ($this->taskable_type ? 1 : 0)
             + ($this->due_preset ? 1 : 0)
@@ -95,11 +98,11 @@ class TaskIndex extends Component
     public function userOptions(): array
     {
         $options = [
-            ['id' => 'unassigned', 'name' => '- ' . ucfirst(__('laravel-crm::lang.unallocated')) . ' -'],
+            ['id' => 'unassigned', 'name' => '- '.ucfirst(__('laravel-crm::lang.unallocated')).' -'],
         ];
 
         foreach ($this->users() as $user) {
-            $options[] = ['id' => (string)$user->id, 'name' => $user->name];
+            $options[] = ['id' => (string) $user->id, 'name' => $user->name];
         }
 
         return $options;
@@ -153,9 +156,9 @@ class TaskIndex extends Component
         return [
             ['id' => '', 'name' => 'All Related Entities'],
             ['id' => Lead::class, 'name' => ucfirst(__('laravel-crm::lang.lead'))],
-            ['id' => \VentureDrake\LaravelCrm\Models\Deal::class, 'name' => ucfirst(__('laravel-crm::lang.deal'))],
-            ['id' => \VentureDrake\LaravelCrm\Models\Person::class, 'name' => ucfirst(__('laravel-crm::lang.contact'))],
-            ['id' => \VentureDrake\LaravelCrm\Models\Organization::class, 'name' => ucfirst(__('laravel-crm::lang.organization'))],
+            ['id' => Deal::class, 'name' => ucfirst(__('laravel-crm::lang.deal'))],
+            ['id' => Person::class, 'name' => ucfirst(__('laravel-crm::lang.contact'))],
+            ['id' => Organization::class, 'name' => ucfirst(__('laravel-crm::lang.organization'))],
         ];
     }
 
@@ -177,12 +180,13 @@ class TaskIndex extends Component
         $prefix = config('laravel-crm.db_table_prefix');
 
         $query = Task::query()
-            ->select($prefix . 'tasks.*')
-            ->leftJoin('users as assigned_users', $prefix . 'tasks.user_assigned_id', '=', 'assigned_users.id')
-            ->leftJoin('users as created_users', $prefix . 'tasks.user_created_id', '=', 'created_users.id')
-            ->leftJoin($prefix . 'leads as related_leads', function ($join) use ($prefix) {
-                $join->on($prefix . 'tasks.taskable_id', '=', 'related_leads.id')
-                    ->where($prefix . 'tasks.taskable_type', '=', Lead::class);
+            ->select($prefix.'tasks.*')
+            ->leftJoin('users as assigned_users', $prefix.'tasks.user_assigned_id', '=', 'assigned_users.id')
+            ->leftJoin('users as created_users', $prefix.'tasks.user_created_id', '=', 'created_users.id')
+            ->leftJoin($prefix.'leads as related_leads', function ($join) use ($prefix) {
+                $join->on($prefix.'tasks.taskable_id', '=', 'related_leads.id')
+                    ->where($prefix.'tasks.taskable_type', '=', Lead::class)
+                    ->whereNull('related_leads.deleted_at');
             })
             ->with(['taskable', 'ownerUser', 'assignedToUser', 'createdByUser']);
 
@@ -190,8 +194,8 @@ class TaskIndex extends Component
         if ($this->search) {
             $term = $this->search;
             $query->where(function (Builder $q) use ($prefix, $term) {
-                $q->where($prefix . 'tasks.name', 'like', "%{$term}%")
-                    ->orWhere($prefix . 'tasks.description', 'like', "%{$term}%")
+                $q->where($prefix.'tasks.name', 'like', "%{$term}%")
+                    ->orWhere($prefix.'tasks.description', 'like', "%{$term}%")
                     ->orWhere('assigned_users.name', 'like', "%{$term}%")
                     ->orWhere('created_users.name', 'like', "%{$term}%")
                     ->orWhere('related_leads.title', 'like', "%{$term}%");
@@ -200,113 +204,113 @@ class TaskIndex extends Component
 
         // 2. Status Filter
         if ($this->status === 'completed') {
-            $query->whereNotNull($prefix . 'tasks.completed_at');
+            $query->whereNotNull($prefix.'tasks.completed_at');
         } elseif ($this->status === 'pending') {
-            $query->whereNull($prefix . 'tasks.completed_at');
+            $query->whereNull($prefix.'tasks.completed_at');
         } elseif ($this->status === 'overdue') {
-            $query->whereNull($prefix . 'tasks.completed_at')
-                ->whereNotNull($prefix . 'tasks.due_at')
-                ->where($prefix . 'tasks.due_at', '<', now());
+            $query->whereNull($prefix.'tasks.completed_at')
+                ->whereNotNull($prefix.'tasks.due_at')
+                ->where($prefix.'tasks.due_at', '<', now());
         }
 
         // 3. Entity Type Filter
         if ($this->taskable_type) {
-            $query->where($prefix . 'tasks.taskable_type', $this->taskable_type);
+            $query->where($prefix.'tasks.taskable_type', $this->taskable_type);
         }
 
         // 4. Assigned User Filter
-        if (!empty($this->user_id)) {
+        if (! empty($this->user_id)) {
             $hasUnassigned = in_array('unassigned', $this->user_id);
             $userIds = array_values(array_filter($this->user_id, fn ($id) => $id !== 'unassigned'));
 
             $query->where(function (Builder $q) use ($prefix, $hasUnassigned, $userIds) {
-                if (!empty($userIds)) {
-                    $q->whereIn($prefix . 'tasks.user_assigned_id', $userIds);
+                if (! empty($userIds)) {
+                    $q->whereIn($prefix.'tasks.user_assigned_id', $userIds);
                 }
                 if ($hasUnassigned) {
-                    if (!empty($userIds)) {
-                        $q->orWhereNull($prefix . 'tasks.user_assigned_id');
+                    if (! empty($userIds)) {
+                        $q->orWhereNull($prefix.'tasks.user_assigned_id');
                     } else {
-                        $q->whereNull($prefix . 'tasks.user_assigned_id');
+                        $q->whereNull($prefix.'tasks.user_assigned_id');
                     }
                 }
             });
         }
 
         // 5. Created By User Filter
-        if (!empty($this->created_by_id)) {
-            $query->whereIn($prefix . 'tasks.user_created_id', $this->created_by_id);
+        if (! empty($this->created_by_id)) {
+            $query->whereIn($prefix.'tasks.user_created_id', $this->created_by_id);
         }
 
         // 6. Lead Filter
-        if (!empty($this->lead_id)) {
-            $query->where($prefix . 'tasks.taskable_type', Lead::class)
-                ->whereIn($prefix . 'tasks.taskable_id', $this->lead_id);
+        if (! empty($this->lead_id)) {
+            $query->where($prefix.'tasks.taskable_type', Lead::class)
+                ->whereIn($prefix.'tasks.taskable_id', $this->lead_id);
         }
 
         // 7. Due Date Filter
         if ($this->due_preset === 'overdue') {
-            $query->whereNull($prefix . 'tasks.completed_at')
-                ->whereNotNull($prefix . 'tasks.due_at')
-                ->where($prefix . 'tasks.due_at', '<', now());
+            $query->whereNull($prefix.'tasks.completed_at')
+                ->whereNotNull($prefix.'tasks.due_at')
+                ->where($prefix.'tasks.due_at', '<', now());
         } elseif ($this->due_preset === 'today') {
-            $query->whereDate($prefix . 'tasks.due_at', today());
+            $query->whereDate($prefix.'tasks.due_at', today());
         } elseif ($this->due_preset === 'tomorrow') {
-            $query->whereDate($prefix . 'tasks.due_at', now()->addDay());
+            $query->whereDate($prefix.'tasks.due_at', now()->addDay());
         } elseif ($this->due_preset === 'this_week') {
-            $query->whereBetween($prefix . 'tasks.due_at', [now()->startOfWeek(), now()->endOfWeek()]);
+            $query->whereBetween($prefix.'tasks.due_at', [now()->startOfWeek(), now()->endOfWeek()]);
         } elseif ($this->due_preset === 'next_week') {
-            $query->whereBetween($prefix . 'tasks.due_at', [now()->addWeek()->startOfWeek(), now()->addWeek()->endOfWeek()]);
+            $query->whereBetween($prefix.'tasks.due_at', [now()->addWeek()->startOfWeek(), now()->addWeek()->endOfWeek()]);
         } elseif ($this->due_preset === 'has_due_date') {
-            $query->whereNotNull($prefix . 'tasks.due_at');
+            $query->whereNotNull($prefix.'tasks.due_at');
         } elseif ($this->due_preset === 'no_due_date') {
-            $query->whereNull($prefix . 'tasks.due_at');
+            $query->whereNull($prefix.'tasks.due_at');
         }
 
         if ($this->due_from) {
-            $query->whereDate($prefix . 'tasks.due_at', '>=', $this->due_from);
+            $query->whereDate($prefix.'tasks.due_at', '>=', $this->due_from);
         }
         if ($this->due_to) {
-            $query->whereDate($prefix . 'tasks.due_at', '<=', $this->due_to);
+            $query->whereDate($prefix.'tasks.due_at', '<=', $this->due_to);
         }
 
         // 8. Created Date Filter
         if ($this->created_preset === 'today') {
-            $query->whereDate($prefix . 'tasks.created_at', today());
+            $query->whereDate($prefix.'tasks.created_at', today());
         } elseif ($this->created_preset === 'yesterday') {
-            $query->whereDate($prefix . 'tasks.created_at', now()->subDay());
+            $query->whereDate($prefix.'tasks.created_at', now()->subDay());
         } elseif ($this->created_preset === 'this_week') {
-            $query->whereBetween($prefix . 'tasks.created_at', [now()->startOfWeek(), now()->endOfWeek()]);
+            $query->whereBetween($prefix.'tasks.created_at', [now()->startOfWeek(), now()->endOfWeek()]);
         } elseif ($this->created_preset === 'this_month') {
-            $query->whereBetween($prefix . 'tasks.created_at', [now()->startOfMonth(), now()->endOfMonth()]);
+            $query->whereBetween($prefix.'tasks.created_at', [now()->startOfMonth(), now()->endOfMonth()]);
         }
 
         if ($this->created_from) {
-            $query->whereDate($prefix . 'tasks.created_at', '>=', $this->created_from);
+            $query->whereDate($prefix.'tasks.created_at', '>=', $this->created_from);
         }
         if ($this->created_to) {
-            $query->whereDate($prefix . 'tasks.created_at', '<=', $this->created_to);
+            $query->whereDate($prefix.'tasks.created_at', '<=', $this->created_to);
         }
 
         // 9. Assigned Date Filter
         if ($this->assigned_preset === 'today') {
-            $query->whereNotNull($prefix . 'tasks.user_assigned_id')
-                ->whereDate($prefix . 'tasks.updated_at', today());
+            $query->whereNotNull($prefix.'tasks.user_assigned_id')
+                ->whereDate($prefix.'tasks.updated_at', today());
         } elseif ($this->assigned_preset === 'this_week') {
-            $query->whereNotNull($prefix . 'tasks.user_assigned_id')
-                ->whereBetween($prefix . 'tasks.updated_at', [now()->startOfWeek(), now()->endOfWeek()]);
+            $query->whereNotNull($prefix.'tasks.user_assigned_id')
+                ->whereBetween($prefix.'tasks.updated_at', [now()->startOfWeek(), now()->endOfWeek()]);
         } elseif ($this->assigned_preset === 'this_month') {
-            $query->whereNotNull($prefix . 'tasks.user_assigned_id')
-                ->whereBetween($prefix . 'tasks.updated_at', [now()->startOfMonth(), now()->endOfMonth()]);
+            $query->whereNotNull($prefix.'tasks.user_assigned_id')
+                ->whereBetween($prefix.'tasks.updated_at', [now()->startOfMonth(), now()->endOfMonth()]);
         }
 
         if ($this->assigned_from) {
-            $query->whereNotNull($prefix . 'tasks.user_assigned_id')
-                ->whereDate($prefix . 'tasks.updated_at', '>=', $this->assigned_from);
+            $query->whereNotNull($prefix.'tasks.user_assigned_id')
+                ->whereDate($prefix.'tasks.updated_at', '>=', $this->assigned_from);
         }
         if ($this->assigned_to) {
-            $query->whereNotNull($prefix . 'tasks.user_assigned_id')
-                ->whereDate($prefix . 'tasks.updated_at', '<=', $this->assigned_to);
+            $query->whereNotNull($prefix.'tasks.user_assigned_id')
+                ->whereDate($prefix.'tasks.updated_at', '<=', $this->assigned_to);
         }
 
         // 10. Sorting
@@ -318,9 +322,9 @@ class TaskIndex extends Component
         } elseif ($sortCol === 'lead_title') {
             $query->orderBy('related_leads.title', $sortDir);
         } elseif (in_array($sortCol, ['name', 'due_at', 'created_at', 'completed_at', 'updated_at'])) {
-            $query->orderBy($prefix . 'tasks.' . $sortCol, $sortDir);
+            $query->orderBy($prefix.'tasks.'.$sortCol, $sortDir);
         } else {
-            $query->orderBy($prefix . 'tasks.created_at', 'desc');
+            $query->orderBy($prefix.'tasks.created_at', 'desc');
         }
 
         return $query->paginate(25);
@@ -343,6 +347,8 @@ class TaskIndex extends Component
             $this->authorize('update', $task);
 
             $task->update(['completed_at' => now()]);
+
+            $this->dispatch('task-completed', taskId: $task->id);
 
             $this->success(ucfirst(trans('laravel-crm::lang.task_completed')));
         }

@@ -23,6 +23,9 @@ class TaskShow extends Component
         $this->authorize('update', $this->task);
 
         $this->task->update(['completed_at' => now()]);
+        $this->task = $this->task->fresh();
+
+        $this->dispatch('task-completed', taskId: $this->task->id);
 
         $this->success(ucfirst(trans('laravel-crm::lang.task_completed')));
     }

@@ -3,6 +3,7 @@
 namespace VentureDrake\LaravelCrm\Livewire\Leads;
 
 use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
+use Livewire\Attributes\On;
 use Livewire\Component;
 use Mary\Traits\Toast;
 use Ramsey\Uuid\Uuid;
@@ -29,6 +30,13 @@ class LeadShow extends Component
         $this->email = $lead->getPrimaryEmail();
         $this->phone = $lead->getPrimaryPhone();
         $this->address = $lead->getPrimaryAddress();
+    }
+
+    #[On('task-completed')]
+    #[On('task-updated')]
+    public function onTaskCompleted(): void
+    {
+        $this->lead->refresh();
     }
 
     public function updateStage(int $stageId): void
@@ -81,7 +89,7 @@ class LeadShow extends Component
 
         if (isset($taskConfigs[$type])) {
             $config = $taskConfigs[$type];
-            Task::create([
+            $task = Task::create([
                 'external_id' => Uuid::uuid4()->toString(),
                 'name' => $config['name'],
                 'description' => $config['description'],
@@ -92,8 +100,28 @@ class LeadShow extends Component
                 'user_assigned_id' => auth()->id() ?: ($this->lead->user_assigned_id ?: 1),
             ]);
 
+            $this->lead->activities()->create([
+                'causeable_type' => auth()->user() ? auth()->user()->getMorphClass() : null,
+                'causeable_id' => auth()->id(),
+                'timelineable_type' => $this->lead->getMorphClass(),
+                'timelineable_id' => $this->lead->id,
+                'recordable_type' => $task->getMorphClass(),
+                'recordable_id' => $task->id,
+            ]);
+
             $this->success("Task '{$config['name']}' created!");
             $this->dispatch('select-activity-tab', tab: 'tasks');
+        }
+    }
+
+    public function delete($id)
+    {
+        if ($lead = Lead::find($id)) {
+            $this->authorize('delete', $lead);
+
+            $lead->delete();
+
+            $this->success(ucfirst(trans('laravel-crm::lang.lead_deleted')), redirectTo: route('laravel-crm.leads.index'));
         }
     }
 

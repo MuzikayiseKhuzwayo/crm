@@ -131,6 +131,11 @@ class Person extends Model
         return $this->hasMany(Deal::class);
     }
 
+    public function leads()
+    {
+        return $this->hasMany(Lead::class);
+    }
+
     public function createdByUser()
     {
         return $this->belongsTo(User::class, 'user_created_id');

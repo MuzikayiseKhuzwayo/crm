@@ -135,7 +135,7 @@ class Lead extends Model
      */
     public function customFieldValues()
     {
-        return $this->morphMany(FieldValue::class, 'custom_field_valueable');
+        return $this->morphMany(FieldValue::class, 'field_valueable');
     }
 
     public function createdByUser()

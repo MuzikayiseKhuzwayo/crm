@@ -112,6 +112,11 @@ class Organization extends Model
         return $this->hasMany(Deal::class);
     }
 
+    public function leads()
+    {
+        return $this->hasMany(Lead::class);
+    }
+
     /**
      * Get all of the labels for the lead.
      */

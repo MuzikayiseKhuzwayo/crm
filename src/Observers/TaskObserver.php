@@ -4,6 +4,7 @@ namespace VentureDrake\LaravelCrm\Observers;
 
 use Ramsey\Uuid\Uuid;
 use VentureDrake\LaravelCrm\Models\Task;
+use VentureDrake\LaravelCrm\Services\LeadStatusAutomationService;
 
 class TaskObserver
 {
@@ -50,7 +51,9 @@ class TaskObserver
      */
     public function updated(Task $task)
     {
-        //
+        if ($task->wasChanged('completed_at') && $task->completed_at !== null) {
+            app(LeadStatusAutomationService::class)->handleTaskCompleted($task);
+        }
     }
 
     /**

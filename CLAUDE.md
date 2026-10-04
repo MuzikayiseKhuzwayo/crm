@@ -47,6 +47,8 @@ php artisan laravelcrm:reminders            # Send reminder notifications (sched
 php artisan laravelcrm:update               # Check for/apply package updates
 php artisan laravelcrm:archive              # Archive old records
 php artisan laravelcrm:import-linkedin-leads # Import LinkedIn profile search JSON dataset
+php artisan laravelcrm:sync-lead-stages      # Auto-advance Lead stages & status based on completed tasks
+php artisan laravelcrm:sync-leads-from-sqlite # Sync leads, contacts, orgs & tasks from SQLite into production DB
 php artisan laravelcrm:v2                   # V1→V2 migration helper
 php artisan laravelcrm:xero                 # Xero integration utilities
 ```

@@ -187,6 +187,8 @@ php artisan laravelcrm:archive              # archive old records (scheduled dai
 php artisan laravelcrm:email-campaigns-dispatch  # queue due email campaign sends (scheduled every minute)
 php artisan laravelcrm:sms-campaigns-dispatch    # queue due SMS campaign sends (scheduled every minute)
 php artisan laravelcrm:import-linkedin-leads {file.json} # import LinkedIn profile search dataset (deduplicates on LinkedIn URL)
+php artisan laravelcrm:sync-lead-stages          # auto-advance Lead stages & status based on completed tasks
+php artisan laravelcrm:sync-leads-from-sqlite    # sync leads, contacts, orgs & tasks from SQLite into production DB
 ```
 
 ### Importing Leads from LinkedIn Profile Datasets

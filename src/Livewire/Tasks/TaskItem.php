@@ -116,6 +116,7 @@ class TaskItem extends Component
 
         $this->success(ucfirst(trans('laravel-crm::lang.task_completed')));
 
+        $this->dispatch('task-completed', taskId: $this->task->id);
         $this->dispatch('task-updated');
         $this->dispatch('activity-logged');
     }

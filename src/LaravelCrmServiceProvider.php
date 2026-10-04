@@ -41,6 +41,8 @@ use VentureDrake\LaravelCrm\Console\LaravelCrmSampleData;
 use VentureDrake\LaravelCrm\Console\LaravelCrmSeedLinkedinTasks;
 use VentureDrake\LaravelCrm\Console\LaravelCrmSetupLeadPipeline;
 use VentureDrake\LaravelCrm\Console\LaravelCrmSmsCampaignsDispatch;
+use VentureDrake\LaravelCrm\Console\LaravelCrmSyncLeadStages;
+use VentureDrake\LaravelCrm\Console\LaravelCrmSyncLeadsFromSqlite;
 use VentureDrake\LaravelCrm\Console\LaravelCrmUpdate;
 use VentureDrake\LaravelCrm\Console\LaravelCrmUpgrade;
 use VentureDrake\LaravelCrm\Console\LaravelCrmV2;
@@ -907,6 +909,8 @@ class LaravelCrmServiceProvider extends ServiceProvider
                 LaravelCrmSeedLinkedinTasks::class,
                 LaravelCrmSetupLeadPipeline::class,
                 LaravelCrmImportLinkedinLeads::class,
+                LaravelCrmSyncLeadStages::class,
+                LaravelCrmSyncLeadsFromSqlite::class,
                 IssueApiToken::class,
             ]);
 
