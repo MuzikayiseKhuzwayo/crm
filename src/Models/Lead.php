@@ -185,4 +185,12 @@ class Lead extends Model
     {
         return $this->belongsTo(PipelineStage::class);
     }
+
+    /**
+     * Get the company-level outreach intelligence summary for this lead.
+     */
+    public function getCompanyOutreachSummaryAttribute(): ?array
+    {
+        return $this->organization?->outreachSummary($this->id);
+    }
 }

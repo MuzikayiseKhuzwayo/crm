@@ -213,6 +213,7 @@ use VentureDrake\LaravelCrm\Livewire\Quotes\QuoteIndex;
 use VentureDrake\LaravelCrm\Livewire\Quotes\QuoteSend;
 use VentureDrake\LaravelCrm\Livewire\Quotes\QuoteShow;
 use VentureDrake\LaravelCrm\Livewire\RelatedDeals;
+use VentureDrake\LaravelCrm\Livewire\RelatedLeads;
 use VentureDrake\LaravelCrm\Livewire\RelatedOrganizations;
 use VentureDrake\LaravelCrm\Livewire\RelatedPeople;
 use VentureDrake\LaravelCrm\Livewire\Settings\ChatWidgets\ChatWidgetEdit;
@@ -1119,6 +1120,7 @@ class LaravelCrmServiceProvider extends ServiceProvider
         Livewire::component('crm-model-products', ModelProducts::class);
         Livewire::component('crm-related-people', RelatedPeople::class);
         Livewire::component('crm-related-organizations', RelatedOrganizations::class);
+        Livewire::component('crm-related-leads', RelatedLeads::class);
         Livewire::component('crm-related-deals', RelatedDeals::class);
 
         Livewire::component('crm-settings-edit', SettingEdit::class);

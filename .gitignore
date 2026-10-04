@@ -12,3 +12,6 @@ package-lock.json
 .air
 .ai
 .context
+scratch_*.php
+scratch/
+

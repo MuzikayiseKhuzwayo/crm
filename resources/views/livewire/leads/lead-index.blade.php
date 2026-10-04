@@ -34,6 +34,10 @@
                 <x-mary-badge value="Status: {{ ucfirst($lead_status) }}" icon-right="o-x-mark" wire:click="$set('lead_status', 'active')" class="badge-neutral text-white gap-1 cursor-pointer" />
             @endif
 
+            @if($company_status !== '')
+                <x-mary-badge value="Company: {{ ucfirst($company_status) }}" icon-right="o-x-mark" wire:click="$set('company_status', '')" class="badge-warning text-white gap-1 cursor-pointer" />
+            @endif
+
             @if(!empty($user_id))
                 <x-mary-badge value="Owners: {{ count((array)$user_id) }}" icon-right="o-x-mark" wire:click="$set('user_id', [])" class="badge-primary text-white gap-1 cursor-pointer" />
             @endif
@@ -98,10 +102,33 @@
 
             @scope('cell_organization_name', $lead)
                 @if($lead->organization)
-                    <a href="{{ route('laravel-crm.organizations.show', $lead->organization) }}" class="inline-flex items-center gap-1 text-xs text-accent hover:underline">
-                        <x-mary-icon name="o-building-office" class="w-3.5 h-3.5 shrink-0" style="width:14px;height:14px;" />
-                        <span>{{ $lead->organization->name }}</span>
-                    </a>
+                    <div class="flex flex-col gap-0.5">
+                        <a href="{{ route('laravel-crm.organizations.show', $lead->organization) }}" class="inline-flex items-center gap-1 text-xs text-accent hover:underline font-semibold">
+                            <x-mary-icon name="o-building-office" class="w-3.5 h-3.5 shrink-0" style="width:14px;height:14px;" />
+                            <span>{{ $lead->organization->name }}</span>
+                        </a>
+                        @php
+                            $summary = $lead->company_outreach_summary;
+                        @endphp
+                        @if($summary)
+                            @if($summary['status'] === 'disqualified')
+                                <span class="inline-flex items-center gap-1 text-[10px] font-bold text-error">
+                                    <x-mary-icon name="o-no-symbol" class="w-3 h-3 shrink-0" style="width:12px;height:12px;" />
+                                    Co. Disqualified
+                                </span>
+                            @elseif($summary['status'] === 'active')
+                                <span class="inline-flex items-center gap-1 text-[10px] font-semibold text-warning" title="{{ $summary['description'] }}">
+                                    <x-mary-icon name="o-exclamation-triangle" class="w-3 h-3 shrink-0" style="width:12px;height:12px;" />
+                                    Active ({{ $summary['total_leads_count'] }} at Co)
+                                </span>
+                            @elseif($summary['total_leads_count'] > 1)
+                                <span class="inline-flex items-center gap-1 text-[10px] text-base-content/60">
+                                    <x-mary-icon name="o-users" class="w-3 h-3 shrink-0" style="width:12px;height:12px;" />
+                                    {{ $summary['total_leads_count'] }} at Company
+                                </span>
+                            @endif
+                        @endif
+                    </div>
                 @else
                     <span class="text-xs text-neutral-content/40">-</span>
                 @endif
@@ -148,7 +175,12 @@
                 </div>
             </div>
 
-            {{-- 2. PIPELINE STAGE --}}
+            {{-- 2. COMPANY OUTREACH STATUS --}}
+            <div>
+                <x-mary-select label="Company Outreach Status" wire:model.live="company_status" :options="$companyStatusOptions" icon="o-building-office" inline />
+            </div>
+
+            {{-- 3. PIPELINE STAGE --}}
             <div>
                 <x-mary-choices label="Pipeline Stage" wire:model.live="pipeline_stage_id" :options="$pipelineStages" icon="o-chart-bar" allow-all />
             </div>

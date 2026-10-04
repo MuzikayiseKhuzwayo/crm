@@ -45,6 +45,9 @@ class LeadIndex extends Component
     public string $lead_status = 'active';
 
     #[Url]
+    public string $company_status = '';
+
+    #[Url]
     public string $amount_preset = '';
 
     #[Url]
@@ -74,8 +77,19 @@ class LeadIndex extends Component
             + (count((array) $this->lead_source_id) > 0 ? 1 : 0)
             + (count((array) $this->pipeline_stage_id) > 0 ? 1 : 0)
             + ($this->lead_status !== 'active' ? 1 : 0)
+            + ($this->company_status !== '' ? 1 : 0)
             + ($this->amount_preset !== '' || $this->min_amount || $this->max_amount ? 1 : 0)
             + ($this->created_preset !== '' || $this->created_from || $this->created_to ? 1 : 0);
+    }
+
+    public function companyStatusOptions(): array
+    {
+        return [
+            ['id' => '', 'name' => 'All Companies'],
+            ['id' => 'uncontacted', 'name' => '🟢 Fresh / Uncontacted Companies Only'],
+            ['id' => 'active', 'name' => '🟡 Active Outreach at Company'],
+            ['id' => 'disqualified', 'name' => '🛑 Disqualified / Do Not Contact Companies'],
+        ];
     }
 
     public function users(): Collection
@@ -160,10 +174,21 @@ class LeadIndex extends Component
                 "{$prefix}people.last_name",
                 "{$prefix}organizations.name as organization_name"
             )
+            ->with([
+                'organization.labels',
+                'organization.leads.pipelineStage',
+                'organization.leads.tasks',
+                'organization.leads.labels',
+                'labels',
+                'person',
+                'pipelineStage',
+                'ownerUser',
+                'leadSource',
+            ])
             ->leftJoin("{$prefix}people", "{$prefix}leads.person_id", '=', "{$prefix}people.id")
             ->leftJoin("{$prefix}organizations", "{$prefix}leads.organization_id", '=', "{$prefix}organizations.id")
             ->leftJoin("{$prefix}lead_sources", "{$prefix}leads.lead_source_id", '=', "{$prefix}lead_sources.id")
-            ->leftJoin("users as owner_users", "{$prefix}leads.user_owner_id", '=', "owner_users.id");
+            ->leftJoin('users as owner_users', "{$prefix}leads.user_owner_id", '=', 'owner_users.id');
 
         // Converted Status Filter
         if ($this->lead_status === 'active') {
@@ -177,7 +202,7 @@ class LeadIndex extends Component
             $term = $this->search;
             $q->where(function ($q) use ($prefix, $term) {
                 $q->orWhere("{$prefix}leads.title", 'like', "%{$term}%")
-                  ->orWhere("{$prefix}leads.lead_id", 'like', "%{$term}%");
+                    ->orWhere("{$prefix}leads.lead_id", 'like', "%{$term}%");
 
                 if ($this->encryptionEnabled()) {
                     if (($personIds = $this->matchingPersonIds($term))->isNotEmpty()) {
@@ -188,9 +213,9 @@ class LeadIndex extends Component
                     }
                 } else {
                     $q->orWhere("{$prefix}organizations.name", 'like', "%{$term}%")
-                      ->orWhere("{$prefix}people.first_name", 'like', "%{$term}%")
-                      ->orWhere("{$prefix}people.last_name", 'like', "%{$term}%")
-                      ->orWhereRaw("CONCAT({$prefix}people.first_name, ' ', {$prefix}people.last_name) like ?", ["%{$term}%"]);
+                        ->orWhere("{$prefix}people.first_name", 'like', "%{$term}%")
+                        ->orWhere("{$prefix}people.last_name", 'like', "%{$term}%")
+                        ->orWhereRaw("CONCAT({$prefix}people.first_name, ' ', {$prefix}people.last_name) like ?", ["%{$term}%"]);
                 }
             });
         });
@@ -222,6 +247,36 @@ class LeadIndex extends Component
         // Pipeline Stages Filter
         if (! empty($this->pipeline_stage_id)) {
             $query->whereIn("{$prefix}leads.pipeline_stage_id", (array) $this->pipeline_stage_id);
+        }
+
+        // Company Outreach Status Filter
+        if ($this->company_status === 'disqualified') {
+            $query->whereHas('organization', function ($orgQ) use ($prefix) {
+                $orgQ->whereHas('labels', function ($lQ) use ($prefix) {
+                    $lQ->whereRaw("LOWER({$prefix}labels.name) IN ('do not contact', 'disqualified', 'lost', 'not a fit', 'blacklisted')");
+                })->orWhereHas('leads', function ($leadQ) use ($prefix) {
+                    $leadQ->whereHas('labels', function ($lQ) use ($prefix) {
+                        $lQ->whereRaw("LOWER({$prefix}labels.name) IN ('do not contact', 'disqualified', 'lost', 'not a fit', 'blacklisted')");
+                    });
+                });
+            });
+        } elseif ($this->company_status === 'active') {
+            $query->whereHas('organization.leads', function ($leadQ) {
+                $leadQ->whereHas('pipelineStage', fn ($sq) => $sq->where('order', '>', 1))
+                    ->orWhereHas('tasks');
+            });
+        } elseif ($this->company_status === 'uncontacted') {
+            $query->where(function ($q) use ($prefix) {
+                $q->whereNull("{$prefix}leads.organization_id")
+                    ->orWhere(function ($sub) use ($prefix) {
+                        $sub->whereDoesntHave('organization.labels', function ($lQ) use ($prefix) {
+                            $lQ->whereRaw("LOWER({$prefix}labels.name) IN ('do not contact', 'disqualified', 'lost', 'not a fit', 'blacklisted')");
+                        })->whereDoesntHave('organization.leads', function ($leadQ) {
+                            $leadQ->whereHas('pipelineStage', fn ($sq) => $sq->where('order', '>', 1))
+                                ->orWhereHas('tasks');
+                        });
+                    });
+            });
         }
 
         // Amount Value Filter
@@ -301,6 +356,7 @@ class LeadIndex extends Component
             'lead_source_id',
             'pipeline_stage_id',
             'lead_status',
+            'company_status',
             'amount_preset',
             'min_amount',
             'max_amount',
@@ -330,6 +386,7 @@ class LeadIndex extends Component
             'labels' => $this->labels(),
             'leadSources' => $this->leadSources(),
             'pipelineStages' => $this->pipelineStages(),
+            'companyStatusOptions' => $this->companyStatusOptions(),
             'amountPresets' => $this->amountPresets(),
             'createdPresets' => $this->createdPresets(),
             'filterCount' => $this->filterCount(),

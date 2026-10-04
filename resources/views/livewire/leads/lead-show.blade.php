@@ -27,6 +27,36 @@
         </x-slot:actions>
     </x-crm-header>
 
+    {{-- ACCOUNT OUTREACH INTELLIGENCE & COLLISION BANNER --}}
+    @php
+        $companySummary = $this->companyOutreach;
+    @endphp
+    @if($companySummary)
+        <div class="mb-5 p-4 rounded-xl border {{ $companySummary['banner_class'] }} flex flex-col md:flex-row md:items-center justify-between gap-4 shadow-xs">
+            <div class="flex items-start gap-3">
+                <x-mary-icon :name="$companySummary['icon']" class="w-6 h-6 shrink-0 mt-0.5" />
+                <div class="space-y-1">
+                    <div class="flex items-center gap-2">
+                        <span class="font-bold text-sm tracking-wide uppercase">{{ $companySummary['headline'] }}</span>
+                        <x-mary-badge :value="$companySummary['badge_label']" :class="$companySummary['badge_class'].' text-white text-xs'" />
+                    </div>
+                    <p class="text-xs opacity-90 leading-relaxed">{{ $companySummary['description'] }}</p>
+                </div>
+            </div>
+
+            <div class="flex items-center gap-2 shrink-0 self-end md:self-center">
+                @if($lead->organization)
+                    @if($companySummary['status'] === 'disqualified')
+                        <x-mary-button label="Clear Do Not Contact" wire:click="clearCompanyDisqualified" icon="o-check" class="btn-xs btn-outline bg-base-100" spinner="clearCompanyDisqualified" />
+                    @else
+                        <x-mary-button label="Mark Company as Disqualified" wire:click="markCompanyDisqualified" icon="o-no-symbol" class="btn-xs btn-outline btn-error bg-base-100" spinner="markCompanyDisqualified" />
+                    @endif
+                    <x-mary-button label="View Company" link="{{ route('laravel-crm.organizations.show', $lead->organization) }}" icon="o-arrow-top-right-on-square" class="btn-xs btn-outline bg-base-100" />
+                @endif
+            </div>
+        </div>
+    @endif
+
     {{-- PIPELINE STAGE PROGRESSION & QUICK TASK AUTOMATION BAR --}}
     <x-mary-card shadow class="mb-5 border border-base-300">
         <div class="space-y-4">
@@ -191,6 +221,38 @@
                     </div>
                 </div>
             </x-mary-card>
+            @if($companySummary && $companySummary['other_leads']->isNotEmpty())
+                <x-mary-card title="Colleagues at {{ $lead->organization->name }} ({{ $companySummary['other_leads']->count() }})" shadow separator>
+                    <div class="space-y-2.5">
+                        @foreach($companySummary['other_leads'] as $otherLead)
+                            <div class="flex items-center justify-between p-2.5 rounded-lg border border-base-200 bg-base-100 hover:bg-base-200/50 transition-colors gap-2">
+                                <div class="space-y-0.5">
+                                    <div class="flex items-center gap-1.5">
+                                        <a href="{{ route('laravel-crm.leads.show', $otherLead) }}" class="font-bold text-xs hover:text-primary hover:underline">
+                                            {{ $otherLead->person?->name ?: $otherLead->title }}
+                                        </a>
+                                        @if($otherLead->person && $otherLead->title !== $otherLead->person->name)
+                                            <span class="text-[11px] text-base-content/60">· {{ $otherLead->title }}</span>
+                                        @endif
+                                    </div>
+                                    <div class="flex flex-wrap items-center gap-2 text-[11px] text-base-content/60">
+                                        <span>Owner: {{ $otherLead->ownerUser?->name ?: 'Unallocated' }}</span>
+                                        @if($otherLead->amount)
+                                            <span>· {{ money($otherLead->amount, $otherLead->currency) }}</span>
+                                        @endif
+                                    </div>
+                                </div>
+                                <div class="flex items-center gap-1.5 shrink-0">
+                                    @if($otherLead->pipelineStage)
+                                        <x-mary-badge :value="$otherLead->pipelineStage->name" class="badge-xs badge-neutral text-white" />
+                                    @endif
+                                    <x-mary-button icon="o-arrow-top-right-on-square" link="{{ route('laravel-crm.leads.show', $otherLead) }}" class="btn-xs btn-ghost btn-square" />
+                                </div>
+                            </div>
+                        @endforeach
+                    </div>
+                </x-mary-card>
+            @endif
         </div>
         <div>
             <livewire:crm-activity-tabs :model="$lead" />

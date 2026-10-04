@@ -136,6 +136,31 @@ class LeadShow extends Component
         return PipelineStage::orderBy('order', 'asc')->get();
     }
 
+    public function getCompanyOutreachProperty(): ?array
+    {
+        return $this->lead->organization?->outreachSummary($this->lead->id);
+    }
+
+    public function markCompanyDisqualified(): void
+    {
+        if ($this->lead->organization) {
+            $this->lead->organization->markDisqualified();
+            $this->lead->organization->refresh();
+            $this->lead->refresh();
+            $this->success("Company '{$this->lead->organization->name}' marked as Do Not Contact / Disqualified.");
+        }
+    }
+
+    public function clearCompanyDisqualified(): void
+    {
+        if ($this->lead->organization) {
+            $this->lead->organization->clearDisqualified();
+            $this->lead->organization->refresh();
+            $this->lead->refresh();
+            $this->success("Company '{$this->lead->organization->name}' disqualification cleared.");
+        }
+    }
+
     public function render()
     {
         return view('laravel-crm::livewire.leads.lead-show');

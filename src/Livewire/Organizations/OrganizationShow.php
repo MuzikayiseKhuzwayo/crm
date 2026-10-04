@@ -24,6 +24,27 @@ class OrganizationShow extends Component
         }
     }
 
+    public function getOutreachSummaryProperty(): array
+    {
+        return $this->organization->outreachSummary();
+    }
+
+    public function markDisqualified(): void
+    {
+        $this->organization->markDisqualified();
+        $this->organization->refresh();
+        $this->success('Company marked as Do Not Contact / Disqualified.');
+        $this->dispatch('related-leads-updated');
+    }
+
+    public function clearDisqualified(): void
+    {
+        $this->organization->clearDisqualified();
+        $this->organization->refresh();
+        $this->success('Company disqualification cleared.');
+        $this->dispatch('related-leads-updated');
+    }
+
     public function render()
     {
         return view('laravel-crm::livewire.organizations.organization-show');

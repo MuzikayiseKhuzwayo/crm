@@ -15,6 +15,34 @@
             @endcan
         </x-slot:actions>
     </x-crm-header>
+
+    {{-- ACCOUNT OUTREACH INTELLIGENCE & COLLISION BANNER --}}
+    @php
+        $summary = $this->outreachSummary;
+    @endphp
+    @if($summary)
+        <div class="mb-5 p-4 rounded-xl border {{ $summary['banner_class'] }} flex flex-col md:flex-row md:items-center justify-between gap-4 shadow-xs">
+            <div class="flex items-start gap-3">
+                <x-mary-icon :name="$summary['icon']" class="w-6 h-6 shrink-0 mt-0.5" />
+                <div class="space-y-1">
+                    <div class="flex items-center gap-2">
+                        <span class="font-bold text-sm tracking-wide uppercase">{{ $summary['headline'] }}</span>
+                        <x-mary-badge :value="$summary['badge_label']" :class="$summary['badge_class'].' text-white text-xs'" />
+                    </div>
+                    <p class="text-xs opacity-90 leading-relaxed">{{ $summary['description'] }}</p>
+                </div>
+            </div>
+
+            <div class="flex items-center gap-2 shrink-0 self-end md:self-center">
+                @if($summary['status'] === 'disqualified')
+                    <x-mary-button label="Clear Do Not Contact" wire:click="clearDisqualified" icon="o-check" class="btn-xs btn-outline bg-base-100" spinner="clearDisqualified" />
+                @else
+                    <x-mary-button label="Mark as Do Not Contact" wire:click="markDisqualified" icon="o-no-symbol" class="btn-xs btn-outline btn-error bg-base-100" spinner="markDisqualified" />
+                @endif
+            </div>
+        </div>
+    @endif
+
     <div class="grid lg:grid-cols-2 gap-5 items-start">
         <div class="grid gap-y-5">
             <x-mary-card title="{{ ucfirst(__('laravel-crm::lang.details')) }}" shadow separator>
@@ -118,6 +146,7 @@
                 </div>
             </x-mary-card>
             <x-crm-custom-field-values :model="$organization" :group="true" />
+            <livewire:crm-related-leads :model="$organization" />
             <livewire:crm-related-people :model="$organization" />
             <livewire:crm-related-organizations :model="$organization" />
             {{--<livewire:crm-related-deals :model="$organization" />--}}
