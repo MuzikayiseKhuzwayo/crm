@@ -41,7 +41,21 @@ class LaravelCrmSyncLeadsFromSqlite extends Command
     {
         ini_set('memory_limit', '1024M');
 
-        $sqlitePath = $this->option('sqlite-path') ?: base_path('database/database.sqlite');
+        $sqlitePath = $this->option('sqlite-path');
+        if (! $sqlitePath) {
+            $candidates = [
+                base_path('database/database.sqlite'),
+                dirname(__DIR__, 2).'/database/database.sqlite',
+                base_path('../../../../database/database.sqlite'),
+            ];
+            foreach ($candidates as $cand) {
+                if (file_exists($cand)) {
+                    $sqlitePath = $cand;
+                    break;
+                }
+            }
+            $sqlitePath = $sqlitePath ?: base_path('database/database.sqlite');
+        }
 
         if (! file_exists($sqlitePath)) {
             $this->error("SQLite database file not found at: {$sqlitePath}");
