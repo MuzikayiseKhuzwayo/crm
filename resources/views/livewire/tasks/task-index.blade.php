@@ -8,6 +8,14 @@
 
         {{-- ACTIONS --}}
         <x-slot:actions>
+            <x-mary-button 
+                label="{{ $account_relay === 'active_only' ? 'Active Outreach Only' : ($account_relay === 'standby_only' ? 'Standby Accounts Only' : 'All Accounts') }}" 
+                wire:click="$set('account_relay', '{{ $account_relay === 'active_only' ? '' : 'active_only' }}')" 
+                icon="{{ $account_relay === 'active_only' ? 'o-check-badge' : 'o-arrows-pointing-out' }}" 
+                class="btn-sm {{ $account_relay === 'active_only' ? 'btn-primary text-white' : 'btn-ghost border border-base-300' }}" 
+                title="{{ $account_relay === 'active_only' ? 'Currently hiding tasks under standby accounts. Click to show all.' : 'Click to hide tasks under standby accounts.' }}"
+                responsive />
+
             <x-mary-button label="Filters"
                            icon="o-funnel"
                            :badge="$filterCount ?? 0"
@@ -25,6 +33,9 @@
     @if($filterCount > 0)
         <div class="flex flex-wrap items-center gap-2 mb-4 p-3 bg-base-200/50 rounded-lg text-xs">
             <span class="font-semibold text-base-content/70">Active Filters:</span>
+            @if($account_relay)
+                <x-mary-badge value="Relay: {{ $account_relay === 'active_only' ? 'Active Accounts Only' : 'Standby Accounts Only' }}" class="badge-primary badge-outline gap-1" icon="o-x-mark" wire:click="$set('account_relay', null)" />
+            @endif
             @if($status)
                 <x-mary-badge value="Status: {{ ucfirst($status) }}" class="badge-primary badge-outline gap-1" icon="o-x-mark" wire:click="$set('status', null)" />
             @endif
@@ -71,36 +82,49 @@
         <x-mary-table :headers="$headers" :rows="$tasks" :link="route('laravel-crm.tasks.show', ['task' => '[id]'])" with-pagination :sort-by="$sortBy" class="whitespace-nowrap">
             {{-- NAME & DESCRIPTION --}}
             @scope('cell_name', $task)
-                <div>
-                    <a href="{{ route('laravel-crm.tasks.show', $task) }}" class="font-semibold text-base-content hover:text-primary">
-                        {{ $task->name }}
-                    </a>
+                <div class="{{ $task->is_standby ? 'opacity-60' : '' }}">
+                    <div class="flex items-center gap-1.5 flex-wrap">
+                        @if($task->is_standby)
+                            <span class="badge badge-xs badge-neutral text-base-content/80 font-mono font-semibold" title="Account in standby queue">STANDBY #{{ $task->lead_relay_order ?: ($task->lead?->relay_order ?: 2) }}</span>
+                        @endif
+                        <a href="{{ route('laravel-crm.tasks.show', $task) }}" class="font-semibold text-base-content hover:text-primary">
+                            {{ $task->name }}
+                        </a>
+                    </div>
                     @if($task->description)
                         <p class="text-xs text-neutral-content/70 truncate max-w-xs">{{ $task->description }}</p>
+                    @endif
+                    @if($task->is_standby)
+                        <p class="text-[11px] text-warning/90 italic flex items-center gap-1 mt-0.5">
+                            <x-mary-icon name="o-pause-circle" class="w-3.5 h-3.5 text-warning shrink-0" />
+                            <span>Account on standby (Lead in relay queue).</span>
+                        </p>
                     @endif
                 </div>
             @endscope
 
             {{-- DUE DATE --}}
             @scope('cell_due_at', $task)
-                @if($task->due_at)
-                    @if(!$task->completed_at && $task->due_at->isPast())
-                        <div class="flex items-center gap-1 text-error text-xs font-semibold">
-                            <x-mary-icon name="o-exclamation-triangle" class="w-4 h-4" />
-                            <span>{{ $task->due_at->format('M d, Y H:i') }}</span>
-                            <span class="text-[10px] opacity-80">({{ $task->due_at->diffForHumans() }})</span>
-                        </div>
-                    @elseif(!$task->completed_at && $task->due_at->isToday())
-                        <div class="flex items-center gap-1 text-warning text-xs font-semibold">
-                            <x-mary-icon name="o-clock" class="w-4 h-4" />
-                            <span>Today {{ $task->due_at->format('H:i') }}</span>
-                        </div>
+                <div class="{{ $task->is_standby ? 'opacity-60' : '' }}">
+                    @if($task->due_at)
+                        @if(!$task->completed_at && !$task->is_standby && $task->due_at->isPast())
+                            <div class="flex items-center gap-1 text-error text-xs font-semibold">
+                                <x-mary-icon name="o-exclamation-triangle" class="w-4 h-4" />
+                                <span>{{ $task->due_at->format('M d, Y H:i') }}</span>
+                                <span class="text-[10px] opacity-80">({{ $task->due_at->diffForHumans() }})</span>
+                            </div>
+                        @elseif(!$task->completed_at && !$task->is_standby && $task->due_at->isToday())
+                            <div class="flex items-center gap-1 text-warning text-xs font-semibold">
+                                <x-mary-icon name="o-clock" class="w-4 h-4" />
+                                <span>Today {{ $task->due_at->format('H:i') }}</span>
+                            </div>
+                        @else
+                            <span class="text-xs text-base-content/80">{{ $task->due_at->format('M d, Y H:i') }}</span>
+                        @endif
                     @else
-                        <span class="text-xs text-base-content/80">{{ $task->due_at->format('M d, Y H:i') }}</span>
+                        <span class="text-xs text-neutral-content/50">-</span>
                     @endif
-                @else
-                    <span class="text-xs text-neutral-content/50">-</span>
-                @endif
+                </div>
             @endscope
 
             {{-- CREATED DATE --}}
@@ -250,6 +274,8 @@
             @scope('cell_completed_at', $task)
                 @if($task->completed_at)
                     <x-mary-badge value="Completed" class="badge-success text-white badge-sm" />
+                @elseif($task->is_standby)
+                    <x-mary-badge value="Account Standby" class="badge-neutral badge-outline badge-sm font-medium" />
                 @elseif($task->due_at && $task->due_at->isPast())
                     <x-mary-badge value="Overdue" class="badge-error text-white badge-sm" />
                 @else
@@ -259,7 +285,7 @@
 
             {{-- ACTIONS --}}
             @scope('actions', $task)
-                <div class="flex gap-1 justify-end items-center">
+                <div class="flex gap-1 justify-end items-center {{ $task->is_standby ? 'opacity-70' : '' }}">
                     @if($linkedinUrl = $task->linkedin_url)
                         <a href="{{ $linkedinUrl }}"
                            target="_blank"
@@ -273,7 +299,12 @@
                     @endif
                     @can('edit crm tasks')
                         @if(! $task->completed_at)
-                            <x-mary-button label="{{ ucfirst(__('laravel-crm::lang.complete')) }}" wire:click="complete({{ $task->id }})" class="btn-sm btn-success text-white" spinner />
+                            <x-mary-button 
+                                label="{{ ucfirst(__('laravel-crm::lang.complete')) }}" 
+                                wire:click="complete({{ $task->id }})" 
+                                class="btn-sm {{ $task->is_standby ? 'btn-outline btn-neutral' : 'btn-success text-white' }}" 
+                                :title="$task->is_standby ? 'Account is on standby in relay queue' : ''"
+                                spinner />
                         @endif
                     @endcan
                     @can('view crm tasks')
@@ -297,6 +328,8 @@
             {{-- STATUS & ENTITY TYPE --}}
             <div class="space-y-4">
                 <h4 class="font-semibold text-sm text-base-content/80">Status & Entity</h4>
+                <x-mary-select label="Account Relay (Waterfall)" wire:model.live="account_relay" :options="$this->accountRelayOptions()" icon="o-arrow-path" />
+
                 <x-mary-select label="Task Status" wire:model.live="status" :options="[
                     ['id' => '', 'name' => 'All Statuses'],
                     ['id' => 'pending', 'name' => ucfirst(__('laravel-crm::lang.pending'))],

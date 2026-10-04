@@ -1,4 +1,4 @@
-<x-mary-card class="border border-base-300 mt-2">
+<x-mary-card class="border border-base-300 mt-2 {{ $task->is_standby ? 'opacity-60 bg-base-200/30 border-dashed hover:opacity-100 transition-opacity' : '' }}">
     <div class="grid gap-3">
         <div class="flex justify-between items-start">
             <div class="font-bold text-lg">
@@ -8,6 +8,8 @@
                 <div class="flex flex-row gap-1 mt-1">
                     @if($task->completed_at)
                         <x-mary-badge value="{{ ucfirst(__('laravel-crm::lang.complete')) }}" class="badge-sm badge-success" />
+                    @elseif($task->is_standby)
+                        <x-mary-badge value="Account Standby" class="badge-sm badge-neutral" />
                     @else
                         @if($task->due_at && $task->due_at->isPast())
                             <x-mary-badge value="Overdue" class="badge-sm badge-error text-white font-bold" />
@@ -22,6 +24,12 @@
                         <x-mary-badge value="{{ ucfirst(__('laravel-crm::lang.due')) }} {{ $task->due_at->format('h:i A') }} {{ __('laravel-crm::lang.on') }} {{ $task->due_at->toFormattedDateString() }}" class="badge-soft badge-sm" />
                     @endif
                 </div>
+                @if($task->is_standby)
+                    <div class="text-xs text-base-content/60 italic flex items-center gap-1.5 mt-1.5">
+                        <x-mary-icon name="o-pause-circle" class="w-4 h-4 text-warning shrink-0" />
+                        <span>Account on standby in relay queue. Task will become actionable when outreach rotates to this contact.</span>
+                    </div>
+                @endif
                 @if($related && $task->taskable)
                     <div class="flex flex-row items-center gap-2 mt-1">
                         @if(class_basename($task->taskable->getMorphClass()) == 'Lead')

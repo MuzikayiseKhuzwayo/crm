@@ -74,6 +74,9 @@ class TaskIndex extends Component
     public ?string $has_linkedin = null;
 
     #[Url]
+    public ?string $account_relay = null;
+
+    #[Url]
     public array $sortBy = ['column' => 'created_at', 'direction' => 'desc'];
 
     public bool $showFilters = false;
@@ -86,12 +89,22 @@ class TaskIndex extends Component
             + ($this->status ? 1 : 0)
             + ($this->taskable_type ? 1 : 0)
             + ($this->has_linkedin ? 1 : 0)
+            + ($this->account_relay ? 1 : 0)
             + ($this->due_preset ? 1 : 0)
             + ($this->due_from || $this->due_to ? 1 : 0)
             + ($this->created_preset ? 1 : 0)
             + ($this->created_from || $this->created_to ? 1 : 0)
             + ($this->assigned_preset ? 1 : 0)
             + ($this->assigned_from || $this->assigned_to ? 1 : 0);
+    }
+
+    public function accountRelayOptions(): array
+    {
+        return [
+            ['id' => '', 'name' => 'All Tasks (Include Standby)'],
+            ['id' => 'active_only', 'name' => 'Active Accounts Only (Hide Standby)'],
+            ['id' => 'standby_only', 'name' => 'Standby Accounts Only'],
+        ];
     }
 
     public function users(): Collection
@@ -184,7 +197,11 @@ class TaskIndex extends Component
         $prefix = config('laravel-crm.db_table_prefix');
 
         $query = Task::query()
-            ->select($prefix.'tasks.*')
+            ->select(
+                $prefix.'tasks.*',
+                'related_leads.relay_status as lead_relay_status',
+                'related_leads.relay_order as lead_relay_order'
+            )
             ->leftJoin('users as assigned_users', $prefix.'tasks.user_assigned_id', '=', 'assigned_users.id')
             ->leftJoin('users as created_users', $prefix.'tasks.user_created_id', '=', 'created_users.id')
             ->leftJoin($prefix.'leads as related_leads', function ($join) use ($prefix) {
@@ -368,7 +385,21 @@ class TaskIndex extends Component
                 ->whereDate($prefix.'tasks.updated_at', '<=', $this->assigned_to);
         }
 
-        // 10. Sorting
+        // 10. Account Relay / Standby Filter
+        if ($this->account_relay === 'active_only') {
+            $query->where(function (Builder $q) use ($prefix) {
+                $q->whereNotNull($prefix.'tasks.completed_at')
+                    ->orWhere(function ($sub) {
+                        $sub->whereNull('related_leads.relay_status')
+                            ->orWhere('related_leads.relay_status', '!=', 'standby');
+                    });
+            });
+        } elseif ($this->account_relay === 'standby_only') {
+            $query->whereNull($prefix.'tasks.completed_at')
+                ->where('related_leads.relay_status', '=', 'standby');
+        }
+
+        // 11. Sorting
         $sortCol = $this->sortBy['column'] ?? 'created_at';
         $sortDir = strtolower($this->sortBy['direction'] ?? 'desc') === 'asc' ? 'asc' : 'desc';
 

@@ -73,7 +73,31 @@ class LeadObserver
      */
     public function updated(Lead $lead)
     {
-        //
+        if ($lead->wasChanged('relay_status')) {
+            $status = $lead->relay_status;
+
+            if ($status === 'fallen_off' || $status === 'disqualified') {
+                // Operational cog: When a lead falls off or is disqualified, remove/soft-delete all its incomplete tasks ("unless completed")
+                $lead->tasks()->whereNull('completed_at')->each(function ($task) use ($status) {
+                    $note = "[Account Relay: Inactive due to lead {$status}]";
+                    $task->description = trim(($task->description ?? '')."\n".$note);
+                    $task->saveQuietly();
+                    $task->delete();
+                });
+            } elseif ($status === 'active') {
+                // Operational cog: When a lead rotates to active from standby, restore any soft-deleted tasks
+                // and advance overdue dates that expired while waiting on standby
+                $lead->tasks()->onlyTrashed()->each(function ($task) {
+                    $task->restore();
+                });
+
+                $lead->tasks()->whereNull('completed_at')->each(function ($task) {
+                    if ($task->due_at && $task->due_at->isPast()) {
+                        $task->update(['due_at' => now()->addDay()]);
+                    }
+                });
+            }
+        }
     }
 
     /**

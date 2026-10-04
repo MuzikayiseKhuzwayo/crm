@@ -230,9 +230,11 @@ class AccountRelayService
 
         $tableName = $org->leads()->getModel()->getTable();
         if (Schema::hasColumn($tableName, 'relay_status')) {
-            $org->leads()->update([
-                'relay_status' => 'disqualified',
-            ]);
+            $org->leads()->each(function (Lead $lead) {
+                $lead->update([
+                    'relay_status' => 'disqualified',
+                ]);
+            });
         }
     }
 

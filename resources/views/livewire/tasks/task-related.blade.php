@@ -4,6 +4,15 @@
         <x-mary-form wire:submit="save">
             <div class="grid gap-3" wire:key="details">
                 @if($lead = $this->resolveLead())
+                    @if($lead->relay_status === 'standby')
+                        <div class="alert alert-warning/15 border border-warning/30 text-xs py-2.5 px-3 rounded-xl flex items-center gap-2.5">
+                            <x-mary-icon name="o-pause-circle" class="w-5 h-5 text-warning shrink-0" />
+                            <div>
+                                <div class="font-bold text-base-content">Account on Standby (Queue #{{ $lead->relay_order ?: 2 }})</div>
+                                <div class="text-base-content/70 text-[11px]">This colleague is in standby in the waterfall cadence. Incomplete tasks under this contact are greyed out / paused until active outreach rotates to them.</div>
+                            </div>
+                        </div>
+                    @endif
                     <div class="p-3 bg-base-200/50 rounded-xl border border-base-300 space-y-2">
                         <div class="flex flex-wrap items-center justify-between gap-1 text-xs">
                             <span class="font-bold uppercase tracking-wider text-base-content/80 flex items-center gap-1.5">

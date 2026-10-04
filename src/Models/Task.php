@@ -122,4 +122,66 @@ class Task extends Model
 
         return str_starts_with($raw, 'http') ? $raw : 'https://'.$raw;
     }
+
+    /**
+     * Check if the task's linked lead or account is currently on standby in the relay queue.
+     * Note: Completed tasks are never considered standby ("unless completed").
+     */
+    public function isStandby(): bool
+    {
+        if ($this->completed_at !== null) {
+            return false;
+        }
+
+        if (array_key_exists('lead_relay_status', $this->attributes)) {
+            return $this->attributes['lead_relay_status'] === 'standby';
+        }
+
+        $lead = $this->lead;
+        if ($lead) {
+            return $lead->relay_status === 'standby' || ($lead->organization && $lead->organization->isDisqualified());
+        }
+
+        if ($this->taskable instanceof Organization) {
+            return $this->taskable->isDisqualified();
+        }
+
+        return false;
+    }
+
+    /**
+     * Virtual accessor for standby status.
+     */
+    public function getIsStandbyAttribute(): bool
+    {
+        return $this->isStandby();
+    }
+
+    /**
+     * Get the relay status of the task's associated lead.
+     */
+    public function getRelayStatusAttribute(): ?string
+    {
+        if (array_key_exists('lead_relay_status', $this->attributes)) {
+            return $this->attributes['lead_relay_status'];
+        }
+
+        return $this->lead?->relay_status;
+    }
+
+    /**
+     * Scope query to active outreach (excluding uncompleted tasks on standby leads).
+     */
+    public function scopeActiveOutreach($query)
+    {
+        $prefix = config('laravel-crm.db_table_prefix', 'crm_');
+
+        return $query->where(function ($q) use ($prefix) {
+            $q->whereNotNull($prefix.'tasks.completed_at')
+                ->orWhereDoesntHaveMorph('taskable', [Lead::class], function ($leadQuery) {
+                    $leadQuery->where('relay_status', 'standby');
+                });
+        });
+    }
 }
+
