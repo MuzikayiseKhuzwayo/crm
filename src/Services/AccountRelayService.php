@@ -26,7 +26,7 @@ class AccountRelayService
             try {
                 Schema::table($tableName, function (Blueprint $table) use ($tableName) {
                     if (! Schema::hasColumn($tableName, 'relay_status')) {
-                        $table->string('relay_status')->nullable()->default('standby');
+                        $table->string('relay_status')->nullable()->default('active');
                     }
                     if (! Schema::hasColumn($tableName, 'relay_order')) {
                         $table->integer('relay_order')->nullable()->default(1);
@@ -47,7 +47,7 @@ class AccountRelayService
     /**
      * Initialize or sync an account relay basket for an organization.
      */
-    public function initializeOrganizationBasket(Organization $organization): Collection
+    public function initializeOrganizationBasket(Organization $organization, bool $reset = false): Collection
     {
         $this->ensureRelayColumnsExist();
 
@@ -62,6 +62,17 @@ class AccountRelayService
 
         if ($leads->isEmpty()) {
             return collect();
+        }
+
+        if ($organization->isDisqualified()) {
+            foreach ($leads as $index => $lead) {
+                $lead->update([
+                    'relay_status' => 'disqualified',
+                    'relay_order' => $index + 1,
+                ]);
+            }
+
+            return $organization->leads()->orderBy('relay_order', 'asc')->get();
         }
 
         // Sort leads by seniority / job role priority
@@ -81,9 +92,13 @@ class AccountRelayService
             return 40;
         })->values();
 
-        $hasActiveOrEngaged = $hasRelayStatus && $sorted->contains(function (Lead $lead) {
-            return in_array($lead->relay_status, ['active', 'engaged']);
-        });
+        // Find existing engaged lead, or existing activated lead
+        $activeOrEngagedLead = null;
+        if (! $reset && $hasRelayStatus) {
+            $activeOrEngagedLead = $sorted->first(function (Lead $lead) {
+                return $lead->relay_status === 'engaged' || ($lead->relay_status === 'active' && ! empty($lead->relay_activated_at));
+            });
+        }
 
         foreach ($sorted as $index => $lead) {
             $order = $index + 1;
@@ -94,7 +109,15 @@ class AccountRelayService
             }
 
             if ($hasRelayStatus) {
-                if (! $hasActiveOrEngaged) {
+                if ($activeOrEngagedLead) {
+                    if ($lead->id === $activeOrEngagedLead->id) {
+                        if ($hasRelayActivatedAt && empty($lead->relay_activated_at)) {
+                            $updates['relay_activated_at'] = Carbon::now();
+                        }
+                    } else {
+                        $updates['relay_status'] = 'standby';
+                    }
+                } else {
                     if ($index === 0) {
                         $updates['relay_status'] = 'active';
                         if ($hasRelayActivatedAt) {
@@ -103,8 +126,6 @@ class AccountRelayService
                     } else {
                         $updates['relay_status'] = 'standby';
                     }
-                } elseif (empty($lead->relay_status)) {
-                    $updates['relay_status'] = 'standby';
                 }
             }
 
@@ -121,6 +142,74 @@ class AccountRelayService
         }
 
         return $query->get();
+    }
+
+    /**
+     * Batch initialize or reset all account relay baskets across the entire CRM.
+     *
+     * @return array{solo_leads: int, org_leads: int, multi_orgs: int, total_active: int, total_standby: int, total_disqualified: int}
+     */
+    public function initializeAllBaskets(bool $reset = false, ?callable $onProgress = null): array
+    {
+        $this->ensureRelayColumnsExist();
+
+        $stats = [
+            'solo_leads' => 0,
+            'org_leads' => 0,
+            'multi_orgs' => 0,
+            'total_active' => 0,
+            'total_standby' => 0,
+            'total_disqualified' => 0,
+        ];
+
+        // 1. Solo Leads (no organization assigned) -> Always active #1
+        $soloLeads = Lead::whereNull('organization_id')
+            ->whereNull('deleted_at')
+            ->get();
+
+        foreach ($soloLeads as $soloLead) {
+            $soloLead->update([
+                'relay_status' => 'active',
+                'relay_order' => 1,
+                'relay_activated_at' => $soloLead->relay_activated_at ?: Carbon::now(),
+            ]);
+            $stats['solo_leads']++;
+            $stats['total_active']++;
+            if ($onProgress) {
+                $onProgress('lead', $soloLead);
+            }
+        }
+
+        // 2. All Organizations with Leads
+        $organizations = Organization::whereHas('leads')
+            ->whereNull('deleted_at')
+            ->withCount('leads')
+            ->get();
+
+        foreach ($organizations as $org) {
+            if ($org->leads_count > 1) {
+                $stats['multi_orgs']++;
+            }
+
+            $baskettedLeads = $this->initializeOrganizationBasket($org, $reset);
+            $stats['org_leads'] += $baskettedLeads->count();
+
+            foreach ($baskettedLeads as $bLead) {
+                if ($bLead->relay_status === 'active') {
+                    $stats['total_active']++;
+                } elseif ($bLead->relay_status === 'standby') {
+                    $stats['total_standby']++;
+                } elseif ($bLead->relay_status === 'disqualified') {
+                    $stats['total_disqualified']++;
+                }
+            }
+
+            if ($onProgress) {
+                $onProgress('org', $org);
+            }
+        }
+
+        return $stats;
     }
 
     /**

@@ -30,6 +30,22 @@ class TaskShow extends Component
         $this->success(ucfirst(trans('laravel-crm::lang.task_completed')));
     }
 
+    public function rebase(int $days = 1): void
+    {
+        $this->authorize('update', $this->task);
+
+        $taskService = app(\VentureDrake\LaravelCrm\Services\TaskService::class);
+        $taskService->rebaseDeadline($this->task, $days);
+
+        $this->task->refresh();
+
+        $this->dispatch('task-updated');
+        $this->dispatch('activity-logged');
+
+        $dayText = $days === 1 ? '1 day' : "{$days} days";
+        $this->success("Task deadline rebased by {$dayText} (starts today, due {$this->task->due_at?->format('M j')}).");
+    }
+
     public function delete($id): void
     {
         if ($task = Task::find($id)) {

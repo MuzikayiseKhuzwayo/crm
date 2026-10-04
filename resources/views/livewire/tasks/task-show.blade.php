@@ -19,6 +19,22 @@
             <x-mary-button label="{{ ucfirst(__('laravel-crm::lang.back_to_tasks')) }}" link="{{ url(route('laravel-crm.tasks.index')) }}" icon="fas.angle-double-left" class="btn-sm btn-outline" responsive />
             @can('edit crm tasks')
                 @if(! $task->completed_at)
+                    <x-mary-dropdown class="btn-sm btn-outline {{ ($task->due_at && $task->due_at->isPast()) ? 'btn-warning font-semibold' : 'btn-neutral' }} gap-1" right>
+                        <x-slot:trigger>
+                            <x-mary-icon name="o-arrow-path" class="w-4 h-4" />
+                            <span class="hidden sm:inline">Rebase Deadline</span>
+                            <span class="sm:hidden">Rebase</span>
+                        </x-slot:trigger>
+                        <x-mary-menu-item wire:click="rebase(1)" title="Light (+1 Day - Tomorrow)" icon="o-clock" />
+                        <x-mary-menu-item wire:click="rebase(2)" title="Light (+2 Days - 48h)" icon="o-clock" />
+                        <x-mary-menu-item wire:click="rebase(3)" title="Medium (+3 Days)" icon="o-bolt" />
+                        <x-mary-menu-item wire:click="rebase(5)" title="Moderate (+5 Days - 1 Wk)" icon="o-calendar" />
+                        <x-mary-menu-item wire:click="rebase(7)" title="Deep (+7 Days)" icon="o-calendar-days" />
+                        @if($task->original_span_days && !in_array($task->original_span_days, [1, 2, 3, 5, 7]))
+                            <x-mary-menu-separator />
+                            <x-mary-menu-item wire:click="rebase({{ $task->original_span_days }})" title="Original Span (+{{ $task->original_span_days }} Days)" icon="o-arrow-path" />
+                        @endif
+                    </x-mary-dropdown>
                     | <x-mary-button label="{{ ucfirst(__('laravel-crm::lang.complete')) }}" wire:click="complete" class="btn-sm btn-success text-white" spinner="complete" responsive />
                 @endif
                 <x-mary-button link="{{ url(route('laravel-crm.tasks.edit', $task)) }}" icon="o-pencil-square" class="btn-sm btn-square btn-outline" responsive />
@@ -35,12 +51,31 @@
         <div class="grid gap-y-5">
             {{-- DUE DATE & OVERDUE ALERT BANNER --}}
             @if(! $task->completed_at && $task->due_at && $task->due_at->isPast())
-                <div class="alert alert-error shadow-sm rounded-xl text-white flex items-center gap-3">
-                    <x-mary-icon name="o-exclamation-triangle" class="w-6 h-6 shrink-0" />
-                    <div>
-                        <h4 class="font-bold text-sm">Task Overdue</h4>
-                        <p class="text-xs opacity-90">This task was due {{ $task->due_at->diffForHumans() }} ({{ $task->due_at->format('M j, Y g:i A') }}).</p>
+                <div class="alert alert-error shadow-sm rounded-xl text-white flex flex-wrap items-center justify-between gap-3">
+                    <div class="flex items-center gap-3">
+                        <x-mary-icon name="o-exclamation-triangle" class="w-6 h-6 shrink-0" />
+                        <div>
+                            <h4 class="font-bold text-sm">Task Overdue</h4>
+                            <p class="text-xs opacity-90">This task was due {{ $task->due_at->diffForHumans() }} ({{ $task->due_at->format('M j, Y g:i A') }}).</p>
+                        </div>
                     </div>
+                    @can('edit crm tasks')
+                        <x-mary-dropdown class="btn-sm bg-white text-error hover:bg-white/90 border-0 font-bold gap-1 shadow-sm" right>
+                            <x-slot:trigger>
+                                <x-mary-icon name="o-arrow-path" class="w-4 h-4 text-error" />
+                                <span>Rebase Deadline</span>
+                            </x-slot:trigger>
+                            <x-mary-menu-item wire:click="rebase(1)" title="Light (+1 Day - Tomorrow)" icon="o-clock" class="text-base-content" />
+                            <x-mary-menu-item wire:click="rebase(2)" title="Light (+2 Days - 48h)" icon="o-clock" class="text-base-content" />
+                            <x-mary-menu-item wire:click="rebase(3)" title="Medium (+3 Days)" icon="o-bolt" class="text-base-content" />
+                            <x-mary-menu-item wire:click="rebase(5)" title="Moderate (+5 Days - 1 Wk)" icon="o-calendar" class="text-base-content" />
+                            <x-mary-menu-item wire:click="rebase(7)" title="Deep (+7 Days)" icon="o-calendar-days" class="text-base-content" />
+                            @if($task->original_span_days && !in_array($task->original_span_days, [1, 2, 3, 5, 7]))
+                                <x-mary-menu-separator />
+                                <x-mary-menu-item wire:click="rebase({{ $task->original_span_days }})" title="Original Span (+{{ $task->original_span_days }} Days)" icon="o-arrow-path" class="text-base-content" />
+                            @endif
+                        </x-mary-dropdown>
+                    @endcan
                 </div>
             @endif
 

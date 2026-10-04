@@ -18,7 +18,7 @@ return new class extends Migration
         if (Schema::hasTable($prefix.'leads')) {
             Schema::table($prefix.'leads', function (Blueprint $table) {
                 if (! Schema::hasColumn($table->getTable(), 'relay_status')) {
-                    $table->string('relay_status')->nullable()->default('standby');
+                    $table->string('relay_status')->nullable()->default('active');
                 }
                 if (! Schema::hasColumn($table->getTable(), 'relay_order')) {
                     $table->integer('relay_order')->nullable()->default(1);

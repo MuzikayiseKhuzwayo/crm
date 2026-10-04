@@ -10,6 +10,9 @@
                         <x-mary-badge value="{{ ucfirst(__('laravel-crm::lang.complete')) }}" class="badge-sm badge-success" />
                     @elseif($task->is_standby)
                         <x-mary-badge value="Account Standby" class="badge-sm badge-neutral" />
+                        @if($task->due_at && $task->due_at->isPast())
+                            <x-mary-badge value="Overdue" class="badge-sm badge-error text-white font-bold" />
+                        @endif
                     @else
                         @if($task->due_at && $task->due_at->isPast())
                             <x-mary-badge value="Overdue" class="badge-sm badge-error text-white font-bold" />
@@ -66,6 +69,25 @@
                     </a>
                 @endif
                 <x-mary-button link="{{ route('laravel-crm.tasks.show', $task) }}" icon="o-eye" class="btn-xs btn-outline btn-primary" label="{{ ucfirst(__('laravel-crm::lang.view')) }}" responsive />
+                @can('edit crm tasks')
+                    @if(! $completed_at)
+                        <x-mary-dropdown class="btn-xs btn-outline {{ ($task->due_at && $task->due_at->isPast()) ? 'btn-warning font-semibold' : 'btn-neutral' }} gap-1" right>
+                            <x-slot:trigger>
+                                <x-mary-icon name="o-arrow-path" class="w-3 h-3" />
+                                <span class="hidden sm:inline">Rebase</span>
+                            </x-slot:trigger>
+                            <x-mary-menu-item wire:click="rebase(1)" title="Light (+1 Day - Tomorrow)" icon="o-clock" />
+                            <x-mary-menu-item wire:click="rebase(2)" title="Light (+2 Days - 48h)" icon="o-clock" />
+                            <x-mary-menu-item wire:click="rebase(3)" title="Medium (+3 Days)" icon="o-bolt" />
+                            <x-mary-menu-item wire:click="rebase(5)" title="Moderate (+5 Days - 1 Wk)" icon="o-calendar" />
+                            <x-mary-menu-item wire:click="rebase(7)" title="Deep (+7 Days)" icon="o-calendar-days" />
+                            @if($task->original_span_days && !in_array($task->original_span_days, [1, 2, 3, 5, 7]))
+                                <x-mary-menu-separator />
+                                <x-mary-menu-item wire:click="rebase({{ $task->original_span_days }})" title="Original Span (+{{ $task->original_span_days }} Days)" icon="o-arrow-path" />
+                            @endif
+                        </x-mary-dropdown>
+                    @endif
+                @endcan
                 @canany(['edit crm tasks', 'delete crm tasks'])
                     <x-mary-dropdown right>
                         <x-slot:trigger>
@@ -76,6 +98,10 @@
                             <x-mary-menu-item wire:click="edit" title="{{ ucfirst(__('laravel-crm::lang.edit')) }}" icon="o-pencil-square" />
                             @if(! $completed_at)
                                 <x-mary-menu-item wire:click="complete" title="{{ ucfirst(__('laravel-crm::lang.complete')) }}" icon="o-check" />
+                                <x-mary-menu-separator />
+                                <x-mary-menu-item wire:click="rebase(1)" title="Rebase: Light (+1d)" icon="o-arrow-path" />
+                                <x-mary-menu-item wire:click="rebase(3)" title="Rebase: Medium (+3d)" icon="o-bolt" />
+                                <x-mary-menu-item wire:click="rebase(7)" title="Rebase: Deep (+7d)" icon="o-calendar-days" />
                             @endif
                         @endcan
                         @can('delete crm tasks')

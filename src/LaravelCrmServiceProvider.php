@@ -32,6 +32,7 @@ use VentureDrake\LaravelCrm\Console\LaravelCrmFields;
 use VentureDrake\LaravelCrm\Console\LaravelCrmGeneratePlaybookTasks;
 use VentureDrake\LaravelCrm\Console\LaravelCrmImportLinkedinLeads;
 use VentureDrake\LaravelCrm\Console\LaravelCrmInstall;
+use VentureDrake\LaravelCrm\Console\LaravelCrmInitRelayBaskets;
 use VentureDrake\LaravelCrm\Console\LaravelCrmLabels;
 use VentureDrake\LaravelCrm\Console\LaravelCrmLeadSources;
 use VentureDrake\LaravelCrm\Console\LaravelCrmMonitorCheck;
@@ -918,6 +919,7 @@ class LaravelCrmServiceProvider extends ServiceProvider
                 LaravelCrmSyncLeadsFromSqlite::class,
                 LaravelCrmPruneTemplateLeads::class,
                 LaravelCrmRotateAccountRelay::class,
+                LaravelCrmInitRelayBaskets::class,
                 LaravelCrmGeneratePlaybookTasks::class,
                 IssueApiToken::class,
             ]);

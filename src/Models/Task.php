@@ -98,6 +98,10 @@ class Task extends Model
             return $this->taskable->lead;
         }
 
+        if ($this->taskable instanceof Person) {
+            return $this->taskable->leads()->latest()->first();
+        }
+
         return null;
     }
 
@@ -170,6 +174,50 @@ class Task extends Model
     }
 
     /**
+     * Calculate the original planned duration of the task in days.
+     */
+    public function getOriginalSpanDaysAttribute(): ?int
+    {
+        if ($this->start_at && $this->due_at) {
+            $diff = $this->start_at->diffInDays($this->due_at);
+
+            return max(1, (int) round($diff));
+        }
+
+        if ($this->created_at && $this->due_at) {
+            $diff = $this->created_at->diffInDays($this->due_at);
+
+            return max(1, (int) round($diff));
+        }
+
+        return null;
+    }
+
+    /**
+     * Rebase this task's deadline starting from now/today and moving forward by $days based on intensity.
+     */
+    public function rebaseDeadline(int $days = 1): self
+    {
+        $now = now();
+        $newStart = $now->copy();
+        $newDue = $now->copy()->addDays($days);
+
+        if ($this->due_at) {
+            $newDue->setTime($this->due_at->hour, $this->due_at->minute, $this->due_at->second);
+            if ($newDue->lte($newStart)) {
+                $newDue = $now->copy()->addDays($days);
+            }
+        }
+
+        $this->update([
+            'start_at' => $newStart,
+            'due_at' => $newDue,
+        ]);
+
+        return $this;
+    }
+
+    /**
      * Scope query to active outreach (excluding uncompleted tasks on standby leads).
      */
     public function scopeActiveOutreach($query)
@@ -184,4 +232,3 @@ class Task extends Model
         });
     }
 }
-

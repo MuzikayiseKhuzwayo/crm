@@ -259,7 +259,7 @@ class TestSchema
             $table->unsignedBigInteger('pipeline_stage_id')->nullable();
             $table->integer('pipeline_order')->nullable();
             $table->boolean('qualified')->default(false);
-            $table->string('relay_status')->nullable()->default('standby');
+            $table->string('relay_status')->nullable()->default('active');
             $table->integer('relay_order')->nullable()->default(1);
             $table->datetime('relay_activated_at')->nullable();
             $table->datetime('relay_fallen_off_at')->nullable();

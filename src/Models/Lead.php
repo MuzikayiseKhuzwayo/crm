@@ -33,7 +33,8 @@ class Lead extends Model
             'standby' => ['label' => 'Standby #'.($this->relay_order ?: 2), 'class' => 'badge-neutral text-white'],
             'engaged' => ['label' => 'Engaged / In Talks', 'class' => 'badge-info text-white'],
             'fallen_off' => ['label' => 'Relay Fallen Off', 'class' => 'badge-error text-white'],
-            default => ['label' => 'Standby', 'class' => 'badge-ghost text-base-content/70'],
+            'disqualified' => ['label' => 'Disqualified', 'class' => 'badge-error text-white'],
+            default => ['label' => 'Relay Active #'.($this->relay_order ?: 1), 'class' => 'badge-success text-white'],
         };
     }
 

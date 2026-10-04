@@ -121,6 +121,23 @@ class TaskItem extends Component
         $this->dispatch('activity-logged');
     }
 
+    public function rebase(int $days = 1): void
+    {
+        $this->authorize('update', $this->task);
+
+        $taskService = app(\VentureDrake\LaravelCrm\Services\TaskService::class);
+        $taskService->rebaseDeadline($this->task, $days);
+
+        $this->task->refresh();
+        $this->hydrateFromRecord();
+
+        $this->dispatch('task-updated');
+        $this->dispatch('activity-logged');
+
+        $dayText = $days === 1 ? '1 day' : "{$days} days";
+        $this->success("Task deadline rebased by {$dayText} (starts today, due {$this->task->due_at?->format('M j')}).");
+    }
+
     public function delete(): void
     {
         $this->authorize('delete', $this->task);

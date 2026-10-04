@@ -440,6 +440,29 @@ class TaskIndex extends Component
         }
     }
 
+    public function rebaseTask(int $id, int $days = 1): void
+    {
+        if ($task = Task::find($id)) {
+            $this->authorize('update', $task);
+
+            $taskService = app(\VentureDrake\LaravelCrm\Services\TaskService::class);
+            $taskService->rebaseDeadline($task, $days);
+
+            $this->dispatch('task-updated');
+            $this->dispatch('activity-logged');
+
+            $dayText = $days === 1 ? '1 day' : "{$days} days";
+            $this->success("Task deadline rebased by {$dayText} (starts today, due {$task->due_at?->format('M j')}).");
+        }
+    }
+
+    public function rebase(int $days = 1, ?int $id = null): void
+    {
+        if ($id) {
+            $this->rebaseTask($id, $days);
+        }
+    }
+
     public function render()
     {
         return view('laravel-crm::livewire.tasks.task-index', [
