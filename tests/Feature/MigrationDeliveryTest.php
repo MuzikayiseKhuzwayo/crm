@@ -203,7 +203,8 @@ test('an already-published migration keeps the filename the host gave it', funct
     file_put_contents($published, '<?php');
 
     try {
-        expect(mintMigrationFileName('an_already_published_migration.php', 1))->toBe($published);
+        expect(str_replace('\\', '/', mintMigrationFileName('an_already_published_migration.php', 1)))
+            ->toBe(str_replace('\\', '/', $published));
     } finally {
         unlink($published);
     }

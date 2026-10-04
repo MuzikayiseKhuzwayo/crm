@@ -3,7 +3,10 @@
 namespace VentureDrake\LaravelCrm\Services;
 
 use Carbon\Carbon;
+use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Schema;
 use Ramsey\Uuid\Uuid;
 use VentureDrake\LaravelCrm\Models\Activity;
 use VentureDrake\LaravelCrm\Models\Lead;
@@ -13,10 +16,46 @@ use VentureDrake\LaravelCrm\Models\Task;
 class AccountRelayService
 {
     /**
+     * Ensure relay columns exist on the leads table (auto-healing schema check).
+     */
+    public function ensureRelayColumnsExist(): void
+    {
+        $tableName = config('laravel-crm.db_table_prefix', 'crm_').'leads';
+
+        if (Schema::hasTable($tableName) && ! Schema::hasColumn($tableName, 'relay_order')) {
+            try {
+                Schema::table($tableName, function (Blueprint $table) use ($tableName) {
+                    if (! Schema::hasColumn($tableName, 'relay_status')) {
+                        $table->string('relay_status')->nullable()->default('standby');
+                    }
+                    if (! Schema::hasColumn($tableName, 'relay_order')) {
+                        $table->integer('relay_order')->nullable()->default(1);
+                    }
+                    if (! Schema::hasColumn($tableName, 'relay_activated_at')) {
+                        $table->datetime('relay_activated_at')->nullable();
+                    }
+                    if (! Schema::hasColumn($tableName, 'relay_fallen_off_at')) {
+                        $table->datetime('relay_fallen_off_at')->nullable();
+                    }
+                });
+            } catch (\Throwable $e) {
+                Log::warning('AccountRelayService: could not auto-create relay columns: '.$e->getMessage());
+            }
+        }
+    }
+
+    /**
      * Initialize or sync an account relay basket for an organization.
      */
     public function initializeOrganizationBasket(Organization $organization): Collection
     {
+        $this->ensureRelayColumnsExist();
+
+        $tableName = $organization->leads()->getModel()->getTable();
+        $hasRelayOrder = Schema::hasColumn($tableName, 'relay_order');
+        $hasRelayStatus = Schema::hasColumn($tableName, 'relay_status');
+        $hasRelayActivatedAt = Schema::hasColumn($tableName, 'relay_activated_at');
+
         $leads = $organization->leads()
             ->with(['person', 'pipelineStage', 'ownerUser', 'tasks'])
             ->get();
@@ -42,29 +81,46 @@ class AccountRelayService
             return 40;
         })->values();
 
-        $hasActiveOrEngaged = $sorted->contains(function (Lead $lead) {
+        $hasActiveOrEngaged = $hasRelayStatus && $sorted->contains(function (Lead $lead) {
             return in_array($lead->relay_status, ['active', 'engaged']);
         });
 
         foreach ($sorted as $index => $lead) {
             $order = $index + 1;
-            $updates = ['relay_order' => $order];
+            $updates = [];
 
-            if (! $hasActiveOrEngaged) {
-                if ($index === 0) {
-                    $updates['relay_status'] = 'active';
-                    $updates['relay_activated_at'] = Carbon::now();
-                } else {
-                    $updates['relay_status'] = 'standby';
-                }
-            } elseif (empty($lead->relay_status)) {
-                $updates['relay_status'] = 'standby';
+            if ($hasRelayOrder) {
+                $updates['relay_order'] = $order;
             }
 
-            $lead->update($updates);
+            if ($hasRelayStatus) {
+                if (! $hasActiveOrEngaged) {
+                    if ($index === 0) {
+                        $updates['relay_status'] = 'active';
+                        if ($hasRelayActivatedAt) {
+                            $updates['relay_activated_at'] = Carbon::now();
+                        }
+                    } else {
+                        $updates['relay_status'] = 'standby';
+                    }
+                } elseif (empty($lead->relay_status)) {
+                    $updates['relay_status'] = 'standby';
+                }
+            }
+
+            if (! empty($updates)) {
+                $lead->update($updates);
+            }
         }
 
-        return $organization->leads()->orderBy('relay_order', 'asc')->get();
+        $query = $organization->leads();
+        if ($hasRelayOrder) {
+            $query->orderBy('relay_order', 'asc');
+        } else {
+            $query->orderBy('id', 'asc');
+        }
+
+        return $query->get();
     }
 
     /**
@@ -72,38 +128,56 @@ class AccountRelayService
      */
     public function rotateToNext(Lead $currentLead, string $reason = 'unresponsive'): ?Lead
     {
+        $this->ensureRelayColumnsExist();
+
         $org = $currentLead->organization;
+        $tableName = $currentLead->getTable();
+        $hasRelayStatus = Schema::hasColumn($tableName, 'relay_status');
+        $hasRelayOrder = Schema::hasColumn($tableName, 'relay_order');
+        $hasRelayFallenOffAt = Schema::hasColumn($tableName, 'relay_fallen_off_at');
+        $hasRelayActivatedAt = Schema::hasColumn($tableName, 'relay_activated_at');
 
         // Mark current lead as fallen off
-        $currentLead->update([
-            'relay_status' => 'fallen_off',
-            'relay_fallen_off_at' => Carbon::now(),
-        ]);
+        if ($hasRelayStatus) {
+            $updates = ['relay_status' => 'fallen_off'];
+            if ($hasRelayFallenOffAt) {
+                $updates['relay_fallen_off_at'] = Carbon::now();
+            }
+            $currentLead->update($updates);
+        }
 
         if (! $org || $org->isDisqualified()) {
             return null;
         }
 
         // Look for next lead in the company queue
-        $nextLead = $org->leads()
-            ->where('id', '!=', $currentLead->id)
-            ->where(function ($q) {
+        $leadsQuery = $org->leads()->where('id', '!=', $currentLead->id);
+
+        if ($hasRelayStatus) {
+            $leadsQuery->where(function ($q) {
                 $q->where('relay_status', 'standby')
                     ->orWhereNull('relay_status');
-            })
-            ->orderBy('relay_order', 'asc')
-            ->orderBy('id', 'asc')
-            ->first();
+            });
+        }
+
+        if ($hasRelayOrder) {
+            $leadsQuery->orderBy('relay_order', 'asc');
+        }
+
+        $nextLead = $leadsQuery->orderBy('id', 'asc')->first();
 
         if (! $nextLead) {
             // Account basket exhausted - all contacts engaged or fallen off
             return null;
         }
 
-        $nextLead->update([
-            'relay_status' => 'active',
-            'relay_activated_at' => Carbon::now(),
-        ]);
+        if ($hasRelayStatus) {
+            $nextUpdates = ['relay_status' => 'active'];
+            if ($hasRelayActivatedAt) {
+                $nextUpdates['relay_activated_at'] = Carbon::now();
+            }
+            $nextLead->update($nextUpdates);
+        }
 
         $prevName = $currentLead->person?->name ?: $currentLead->title;
         $nextName = $nextLead->person?->name ?: $nextLead->title;
@@ -138,9 +212,12 @@ class AccountRelayService
      */
     public function freezeBasket(Lead $lead): void
     {
-        $lead->update([
-            'relay_status' => 'engaged',
-        ]);
+        $this->ensureRelayColumnsExist();
+        if (Schema::hasColumn($lead->getTable(), 'relay_status')) {
+            $lead->update([
+                'relay_status' => 'engaged',
+            ]);
+        }
     }
 
     /**
@@ -148,11 +225,15 @@ class AccountRelayService
      */
     public function disqualifyBasket(Organization $org, string $reason = 'Do Not Contact'): void
     {
+        $this->ensureRelayColumnsExist();
         $org->markDisqualified($reason);
 
-        $org->leads()->update([
-            'relay_status' => 'disqualified',
-        ]);
+        $tableName = $org->leads()->getModel()->getTable();
+        if (Schema::hasColumn($tableName, 'relay_status')) {
+            $org->leads()->update([
+                'relay_status' => 'disqualified',
+            ]);
+        }
     }
 
     /**
@@ -162,6 +243,13 @@ class AccountRelayService
      */
     public function autoRotateDueLeads(int $daysThreshold = 14): array
     {
+        $this->ensureRelayColumnsExist();
+        $tableName = config('laravel-crm.db_table_prefix', 'crm_').'leads';
+
+        if (! Schema::hasColumn($tableName, 'relay_status') || ! Schema::hasColumn($tableName, 'relay_activated_at')) {
+            return [];
+        }
+
         $cutoff = Carbon::now()->subDays($daysThreshold);
 
         $dueLeads = Lead::where('relay_status', 'active')

@@ -1,6 +1,6 @@
 <?php
 
-require __DIR__ . '/../vendor/autoload.php';
+require __DIR__.'/../vendor/autoload.php';
 
 // Set production DB env before bootstrapping Testbench
 $_ENV['DB_CONNECTION'] = 'mysql';
@@ -17,19 +17,20 @@ putenv('DB_DATABASE=laravel_crm');
 putenv('DB_USERNAME=crm_user');
 putenv('DB_PASSWORD=SecurePass123!');
 
-$app = require_once __DIR__ . '/../vendor/orchestra/testbench-core/laravel/bootstrap/app.php';
-$app->register(\VentureDrake\LaravelCrm\LaravelCrmServiceProvider::class);
-$kernel = $app->make(Illuminate\Contracts\Console\Kernel::class);
+$app = require_once __DIR__.'/../vendor/orchestra/testbench-core/laravel/bootstrap/app.php';
+$app->register(LaravelCrmServiceProvider::class);
+$kernel = $app->make(Kernel::class);
 $kernel->bootstrap();
 
 // Ensure CRM table prefix config is set
 config(['laravel-crm.db_table_prefix' => 'crm_']);
 
 use Carbon\Carbon;
+use Illuminate\Contracts\Console\Kernel;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Str;
-use VentureDrake\LaravelCrm\Models\Activity;
+use VentureDrake\LaravelCrm\LaravelCrmServiceProvider;
 use VentureDrake\LaravelCrm\Models\Address;
 use VentureDrake\LaravelCrm\Models\AddressType;
 use VentureDrake\LaravelCrm\Models\Call;
@@ -111,7 +112,7 @@ $tablesToTruncate = [
 ];
 
 foreach ($tablesToTruncate as $table) {
-    $full = $prefix . $table;
+    $full = $prefix.$table;
     if (Schema::hasTable($full)) {
         DB::table($full)->truncate();
     }
@@ -464,7 +465,7 @@ foreach ($orgsData as $oData) {
         'first_name' => $c['first'],
         'last_name' => $c['last'],
         'organization_id' => $org->id,
-        'description' => $c['desc'] . ' at ' . $org->name,
+        'description' => $c['desc'].' at '.$org->name,
         'user_created_id' => $userId,
         'user_owner_id' => $userId,
     ]);
@@ -592,7 +593,7 @@ foreach ($leadsData as $ld) {
 
     $lead = Lead::create([
         'external_id' => Str::uuid()->toString(),
-        'lead_id' => 'TFA-L' . $leadIdx,
+        'lead_id' => 'TFA-L'.$leadIdx,
         'prefix' => 'TFA-L',
         'number' => $leadIdx++,
         'title' => $ld['title'],
@@ -713,7 +714,7 @@ foreach ($dealsData as $dd) {
 
     $deal = Deal::create([
         'external_id' => Str::uuid()->toString(),
-        'deal_id' => 'TFA-D' . $dealIdx,
+        'deal_id' => 'TFA-D'.$dealIdx,
         'prefix' => 'TFA-D',
         'number' => $dealIdx++,
         'title' => $dd['title'],
@@ -827,11 +828,11 @@ foreach ($quotesData as $qd) {
 
     $quote = Quote::create([
         'external_id' => Str::uuid()->toString(),
-        'quote_id' => 'TFA-Q' . $quoteIdx,
+        'quote_id' => 'TFA-Q'.$quoteIdx,
         'prefix' => 'TFA-Q',
         'number' => $quoteIdx++,
         'title' => $qd['title'],
-        'description' => 'Dubstrata institutional proposal for ' . $org->name,
+        'description' => 'Dubstrata institutional proposal for '.$org->name,
         'reference' => $qd['ref'],
         'deal_id' => $deal ? $deal->id : null,
         'lead_id' => $deal ? $deal->lead_id : null,
@@ -903,7 +904,7 @@ foreach ($ordersData as $od) {
 
     $order = Order::create([
         'external_id' => Str::uuid()->toString(),
-        'order_id' => 'TFA-O' . $orderIdx,
+        'order_id' => 'TFA-O'.$orderIdx,
         'prefix' => 'TFA-O',
         'number' => $orderIdx++,
         'reference' => $od['ref'],
@@ -987,11 +988,11 @@ foreach ($invoicesData as $invD) {
 
     $invoice = Invoice::create([
         'external_id' => Str::uuid()->toString(),
-        'invoice_id' => 'TFA-INV' . $invIdx,
+        'invoice_id' => 'TFA-INV'.$invIdx,
         'prefix' => 'TFA-INV',
         'number' => $invIdx++,
         'title' => $invD['title'],
-        'description' => 'Dubstrata institutional invoice for ' . $org->name,
+        'description' => 'Dubstrata institutional invoice for '.$org->name,
         'order_id' => $order ? $order->id : null,
         'quote_id' => $order ? $order->quote_id : null,
         'person_id' => $person->id,
@@ -1063,7 +1064,7 @@ foreach ($deliveriesData as $delD) {
 
     $delivery = Delivery::create([
         'external_id' => Str::uuid()->toString(),
-        'delivery_id' => 'TFA-DEL' . $delIdx,
+        'delivery_id' => 'TFA-DEL'.$delIdx,
         'prefix' => 'TFA-DEL',
         'number' => $delIdx++,
         'order_id' => $order->id,
@@ -1111,7 +1112,7 @@ foreach ($poData as $pod) {
 
     $po = PurchaseOrder::create([
         'external_id' => Str::uuid()->toString(),
-        'purchase_order_id' => 'TFA-PO' . $poIdx,
+        'purchase_order_id' => 'TFA-PO'.$poIdx,
         'prefix' => 'TFA-PO',
         'number' => $poIdx++,
         'subtotal' => $pod['subtotal'],

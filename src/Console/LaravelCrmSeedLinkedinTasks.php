@@ -53,6 +53,7 @@ class LaravelCrmSeedLinkedinTasks extends Command
 
             if ($hasDmTask) {
                 $skippedLeadsCount++;
+
                 continue;
             }
 

@@ -4,7 +4,7 @@ use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\Schema;
 
-class AddRelayFieldsToLaravelCrmLeadsTable extends Migration
+return new class extends Migration
 {
     /**
      * Run the migrations.
@@ -44,8 +44,24 @@ class AddRelayFieldsToLaravelCrmLeadsTable extends Migration
 
         if (Schema::hasTable($prefix.'leads')) {
             Schema::table($prefix.'leads', function (Blueprint $table) {
-                $table->dropColumn(['relay_status', 'relay_order', 'relay_activated_at', 'relay_fallen_off_at']);
+                $columns = [];
+                if (Schema::hasColumn($table->getTable(), 'relay_status')) {
+                    $columns[] = 'relay_status';
+                }
+                if (Schema::hasColumn($table->getTable(), 'relay_order')) {
+                    $columns[] = 'relay_order';
+                }
+                if (Schema::hasColumn($table->getTable(), 'relay_activated_at')) {
+                    $columns[] = 'relay_activated_at';
+                }
+                if (Schema::hasColumn($table->getTable(), 'relay_fallen_off_at')) {
+                    $columns[] = 'relay_fallen_off_at';
+                }
+
+                if (! empty($columns)) {
+                    $table->dropColumn($columns);
+                }
             });
         }
     }
-}
+};

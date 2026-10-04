@@ -13,6 +13,7 @@ use Livewire\WithPagination;
 use Mary\Traits\Toast;
 use VentureDrake\LaravelCrm\Models\Monitor;
 use VentureDrake\LaravelCrm\Models\MonitorCheck;
+use VentureDrake\LaravelCrm\Services\MonitorCheckService;
 
 class MonitorIndex extends Component
 {
@@ -123,7 +124,7 @@ class MonitorIndex extends Component
         if ($monitor = Monitor::find($id)) {
             $this->authorize('view', $monitor);
 
-            $service = app(\VentureDrake\LaravelCrm\Services\MonitorCheckService::class);
+            $service = app(MonitorCheckService::class);
             $result = $service->checkUptime($monitor);
 
             $monitor->update([
@@ -133,7 +134,7 @@ class MonitorIndex extends Component
                 'last_checked_at' => now(),
             ]);
 
-            $this->success("Checked {$monitor->displayName()}: Status {$result['status']} (".($result['response_time_ms'] ?? 0)."ms)");
+            $this->success("Checked {$monitor->displayName()}: Status {$result['status']} (".($result['response_time_ms'] ?? 0).'ms)');
         }
     }
 

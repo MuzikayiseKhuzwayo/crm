@@ -3,6 +3,7 @@
 namespace VentureDrake\LaravelCrm\Livewire\Leads;
 
 use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
+use Illuminate\Support\Facades\Log;
 use Livewire\Attributes\On;
 use Livewire\Component;
 use Mary\Traits\Toast;
@@ -203,9 +204,14 @@ class LeadShow extends Component
     public function initializeRelayQueue(): void
     {
         if ($this->lead->organization) {
-            app(AccountRelayService::class)->initializeOrganizationBasket($this->lead->organization);
-            $this->lead->refresh();
-            $this->success("Account Relay Basket initialized for {$this->lead->organization->name}.");
+            try {
+                app(AccountRelayService::class)->initializeOrganizationBasket($this->lead->organization);
+                $this->lead->refresh();
+                $this->success("Account Relay Basket initialized for {$this->lead->organization->name}.");
+            } catch (\Throwable $e) {
+                Log::error('initializeRelayQueue failed: '.$e->getMessage());
+                $this->error('Could not initialize relay basket: '.$e->getMessage().'. Please ensure migrations have run (`php artisan migrate`).');
+            }
         }
     }
 
@@ -215,16 +221,21 @@ class LeadShow extends Component
             return;
         }
 
-        $relayService = app(AccountRelayService::class);
-        $nextLead = $relayService->rotateToNext($this->lead, $reason);
+        try {
+            $relayService = app(AccountRelayService::class);
+            $nextLead = $relayService->rotateToNext($this->lead, $reason);
 
-        $this->lead->refresh();
+            $this->lead->refresh();
 
-        if ($nextLead) {
-            $this->success("Relay passed to {$nextLead->title}!");
-            $this->redirect(route('laravel-crm.leads.show', $nextLead));
-        } else {
-            $this->warning("Account queue exhausted. No more standby leads for {$this->lead->organization->name}.");
+            if ($nextLead) {
+                $this->success("Relay passed to {$nextLead->title}!");
+                $this->redirect(route('laravel-crm.leads.show', $nextLead));
+            } else {
+                $this->warning("Account queue exhausted. No more standby leads for {$this->lead->organization->name}.");
+            }
+        } catch (\Throwable $e) {
+            Log::error('rotateRelay failed: '.$e->getMessage());
+            $this->error('Could not rotate relay: '.$e->getMessage().'. Please ensure migrations have run (`php artisan migrate`).');
         }
     }
 

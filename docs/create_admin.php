@@ -1,20 +1,21 @@
 <?php
 
-require __DIR__ . '/vendor/autoload.php';
+require __DIR__.'/vendor/autoload.php';
 
-$app = require_once __DIR__ . '/vendor/orchestra/testbench-core/laravel/bootstrap/app.php';
-$kernel = $app->make(Illuminate\Contracts\Console\Kernel::class);
+$app = require_once __DIR__.'/vendor/orchestra/testbench-core/laravel/bootstrap/app.php';
+$kernel = $app->make(Kernel::class);
 $kernel->bootstrap();
 
-use VentureDrake\LaravelCrm\Tests\Stubs\User;
+use Illuminate\Contracts\Console\Kernel;
 use VentureDrake\LaravelCrm\Models\Role;
+use VentureDrake\LaravelCrm\Tests\Stubs\User;
 
 $user = User::updateOrCreate(
     ['email' => 'admin@laravelcrm.com'],
     [
         'name' => 'Admin Owner',
         'password' => bcrypt('password'),
-        'crm_access' => 1
+        'crm_access' => 1,
     ]
 );
 

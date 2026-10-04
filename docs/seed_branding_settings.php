@@ -1,6 +1,6 @@
 <?php
 
-require __DIR__ . '/../vendor/autoload.php';
+require __DIR__.'/../vendor/autoload.php';
 
 // Set production DB env before bootstrapping Testbench
 $_ENV['DB_CONNECTION'] = 'mysql';
@@ -17,10 +17,11 @@ putenv('DB_DATABASE=laravel_crm');
 putenv('DB_USERNAME=crm_user');
 putenv('DB_PASSWORD=SecurePass123!');
 
-$app = require_once __DIR__ . '/../vendor/orchestra/testbench-core/laravel/bootstrap/app.php';
-$kernel = $app->make(Illuminate\Contracts\Console\Kernel::class);
+$app = require_once __DIR__.'/../vendor/orchestra/testbench-core/laravel/bootstrap/app.php';
+$kernel = $app->make(Kernel::class);
 $kernel->bootstrap();
 
+use Illuminate\Contracts\Console\Kernel;
 use Illuminate\Support\Facades\DB;
 
 $settings = [

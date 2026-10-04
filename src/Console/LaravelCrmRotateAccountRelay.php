@@ -31,6 +31,8 @@ class LaravelCrmRotateAccountRelay extends Command
      */
     public function handle(AccountRelayService $relayService): int
     {
+        $relayService->ensureRelayColumnsExist();
+
         $days = (int) $this->option('days');
         $companyFilter = $this->option('company');
         $isDryRun = (bool) $this->option('dry-run');

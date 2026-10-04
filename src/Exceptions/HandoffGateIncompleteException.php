@@ -6,9 +6,6 @@ use Exception;
 
 class HandoffGateIncompleteException extends Exception
 {
-    /**
-     * @var array
-     */
     protected array $pendingGates;
 
     public function __construct(array $pendingGates, string $message = 'Cannot transition deal to Won: Operational clearance gates are incomplete.')

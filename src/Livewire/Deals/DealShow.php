@@ -6,6 +6,7 @@ use Carbon\Carbon;
 use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
 use Livewire\Component;
 use Mary\Traits\Toast;
+use VentureDrake\LaravelCrm\Exceptions\HandoffGateIncompleteException;
 use VentureDrake\LaravelCrm\Models\Deal;
 
 class DealShow extends Component
@@ -53,7 +54,7 @@ class DealShow extends Component
 
                 $this->success(ucfirst(trans('laravel-crm::lang.deal_won')));
                 $this->dispatch('refreshDeal');
-            } catch (\VentureDrake\LaravelCrm\Exceptions\HandoffGateIncompleteException $e) {
+            } catch (HandoffGateIncompleteException $e) {
                 $this->error($e->getMessage());
             }
         }

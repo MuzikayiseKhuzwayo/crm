@@ -12,7 +12,6 @@ class NormalizeTelemetryBoundary
      * Handle incoming telemetry request and normalize UUID parameters to prevent 22P02 exceptions.
      *
      * @param  Request  $request
-     * @param  Closure  $next
      * @return mixed
      */
     public function handle($request, Closure $next)

@@ -6,6 +6,7 @@ use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
 use Livewire\Component;
 use Ramsey\Uuid\Uuid;
 use VentureDrake\LaravelCrm\Models\Note;
+use VentureDrake\LaravelCrm\Models\Task;
 use VentureDrake\LaravelCrm\Services\SettingService;
 use VentureDrake\LaravelCrm\Traits\NotifyToast;
 
@@ -90,12 +91,12 @@ class LiveNotes extends Component
             $noteIds[] = $note->id;
         }
 
-        if (method_exists($this->model, 'tasks') && ! ($this->model instanceof \VentureDrake\LaravelCrm\Models\Task)) {
+        if (method_exists($this->model, 'tasks') && ! ($this->model instanceof Task)) {
             $taskIds = $this->model->tasks()->pluck('id')->toArray();
             if (count($taskIds) > 0) {
                 $taskNotes = Note::where(function ($q) {
-                    $q->where('noteable_type', \VentureDrake\LaravelCrm\Models\Task::class)
-                        ->orWhere('noteable_type', (new \VentureDrake\LaravelCrm\Models\Task)->getMorphClass());
+                    $q->where('noteable_type', Task::class)
+                        ->orWhere('noteable_type', (new Task)->getMorphClass());
                 })->whereIn('noteable_id', $taskIds)->get(['id']);
 
                 foreach ($taskNotes as $taskNote) {
