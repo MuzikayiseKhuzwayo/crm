@@ -47,7 +47,10 @@ class Product extends Model
 
     public function getDefaultPrice()
     {
-        return $this->productPrices()->where('currency', Setting::currency()->value ?? 'USD')->first();
+        $currency = Setting::currency()->value ?? 'USD';
+
+        return $this->productPrices()->where('currency', $currency)->first()
+            ?? $this->productPrices()->first();
     }
 
     public function productVariations()
