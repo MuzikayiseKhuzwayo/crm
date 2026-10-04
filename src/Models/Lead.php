@@ -22,7 +22,20 @@ class Lead extends Model
 
     protected $casts = [
         'converted_at' => 'datetime',
+        'relay_activated_at' => 'datetime',
+        'relay_fallen_off_at' => 'datetime',
     ];
+
+    public function getRelayBadgeAttribute(): array
+    {
+        return match ($this->relay_status) {
+            'active' => ['label' => 'Relay Active #'.($this->relay_order ?: 1), 'class' => 'badge-success text-white'],
+            'standby' => ['label' => 'Standby #'.($this->relay_order ?: 2), 'class' => 'badge-neutral text-white'],
+            'engaged' => ['label' => 'Engaged / In Talks', 'class' => 'badge-info text-white'],
+            'fallen_off' => ['label' => 'Relay Fallen Off', 'class' => 'badge-error text-white'],
+            default => ['label' => 'Standby', 'class' => 'badge-ghost text-base-content/70'],
+        };
+    }
 
     protected $searchable = [
         'lead_id',
@@ -192,5 +205,17 @@ class Lead extends Model
     public function getCompanyOutreachSummaryAttribute(): ?array
     {
         return $this->organization?->outreachSummary($this->id);
+    }
+
+    /**
+     * Get the resolved LinkedIn URL for the lead or associated contact person.
+     */
+    public function getLinkedinUrlAttribute(): ?string
+    {
+        if ($this->linkedin) {
+            return str_starts_with($this->linkedin, 'http') ? $this->linkedin : 'https://'.$this->linkedin;
+        }
+
+        return $this->person?->linkedin_url;
     }
 }

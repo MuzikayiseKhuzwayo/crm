@@ -1,5 +1,12 @@
 <x-mary-card title="{{ ucfirst(__('laravel-crm::lang.leads')) }} ({{ $this->leads->count() }})" shadow separator>
     <x-slot:menu>
+        @if($this->leads->count() > 1)
+            <x-mary-button label="Sync Relay Queue" 
+                           wire:click="initializeRelayQueue" 
+                           icon="o-arrow-path-rounded-square" 
+                           class="btn-xs btn-outline" 
+                           spinner="initializeRelayQueue" />
+        @endif
         @can('create crm leads')
             <x-mary-button label="{{ ucfirst(__('laravel-crm::lang.create_lead')) }}" 
                            link="{{ route('laravel-crm.leads.create', ['organization_id' => $model->id]) }}" 
@@ -41,6 +48,10 @@
                     </div>
 
                     <div class="flex items-center gap-2 shrink-0">
+                        @php
+                            $relayBadge = $lead->relay_badge;
+                        @endphp
+                        <x-mary-badge :value="$relayBadge['label']" :class="$relayBadge['class'].' badge-xs'" />
                         @if($lead->pipelineStage)
                             <x-mary-badge :value="$lead->pipelineStage->name" class="badge-sm badge-neutral text-white" />
                         @endif

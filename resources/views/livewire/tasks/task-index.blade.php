@@ -40,6 +40,9 @@
             @if($taskable_type)
                 <x-mary-badge value="Entity Type Filter" class="badge-primary badge-outline gap-1" icon="o-x-mark" wire:click="$set('taskable_type', null)" />
             @endif
+            @if($has_linkedin)
+                <x-mary-badge value="LinkedIn: {{ $has_linkedin === 'yes' ? 'Has Profile' : 'No Profile' }}" class="badge-primary badge-outline gap-1" icon="o-x-mark" wire:click="$set('has_linkedin', null)" />
+            @endif
             @if($due_preset)
                 <x-mary-badge value="Due: {{ str_replace('_', ' ', ucfirst($due_preset)) }}" class="badge-primary badge-outline gap-1" icon="o-x-mark" wire:click="$set('due_preset', null)" />
             @endif
@@ -132,20 +135,104 @@
             @scope('cell_lead_title', $task)
                 @if($task->taskable)
                     @if($task->taskable_type === 'VentureDrake\LaravelCrm\Models\Lead')
-                        <a href="{{ route('laravel-crm.leads.show', $task->taskable) }}" class="inline-flex items-center gap-1.5 text-xs font-medium text-primary hover:underline">
-                            <x-mary-icon name="o-funnel" class="w-4 h-4 shrink-0" style="width: 1rem; height: 1rem; min-width: 1rem; min-height: 1rem;" />
-                            <span>{{ $task->taskable->title }}</span>
-                        </a>
+                        <div class="flex flex-col gap-0.5 items-start">
+                            <a href="{{ route('laravel-crm.leads.show', $task->taskable) }}" class="inline-flex items-center gap-1.5 text-xs font-medium text-primary hover:underline">
+                                <x-mary-icon name="o-funnel" class="w-4 h-4 shrink-0" style="width: 1rem; height: 1rem; min-width: 1rem; min-height: 1rem;" />
+                                <span>{{ $task->taskable->title }}</span>
+                            </a>
+                            @if($task->taskable->person && $task->taskable->person->name)
+                                <span class="text-[11px] text-base-content/60 inline-flex items-center gap-1">
+                                    <x-mary-icon name="o-user" class="w-3 h-3 shrink-0" />
+                                    {{ $task->taskable->person->name }}
+                                </span>
+                            @endif
+                            @if($linkedinUrl = $task->linkedin_url)
+                                <div class="flex items-center gap-1.5 mt-0.5" x-data="{ copied: false }">
+                                    <a href="{{ $linkedinUrl }}"
+                                       target="_blank"
+                                       rel="noopener noreferrer"
+                                       onclick="event.stopPropagation();"
+                                       class="inline-flex items-center gap-1 text-[11px] font-semibold text-primary hover:underline bg-primary/10 hover:bg-primary/20 px-2 py-0.5 rounded transition-colors"
+                                       title="{{ $linkedinUrl }}">
+                                        <x-mary-icon name="o-arrow-top-right-on-square" class="w-3 h-3 shrink-0" />
+                                        <span>LinkedIn Profile</span>
+                                    </a>
+                                    <button type="button"
+                                            @click.stop="navigator.clipboard.writeText('{{ $linkedinUrl }}'); copied = true; setTimeout(() => copied = false, 2000)"
+                                            class="text-[10px] text-base-content/50 hover:text-primary transition-colors p-0.5 rounded hover:bg-base-200"
+                                            :title="copied ? 'Copied!' : 'Copy LinkedIn URL'">
+                                        <span x-show="!copied">
+                                            <x-mary-icon name="o-clipboard-document" class="w-3.5 h-3.5" />
+                                        </span>
+                                        <span x-show="copied" class="text-success text-[10px] font-bold">
+                                            ✓
+                                        </span>
+                                    </button>
+                                </div>
+                            @endif
+                        </div>
                     @elseif($task->taskable_type === 'VentureDrake\LaravelCrm\Models\Deal')
-                        <a href="{{ route('laravel-crm.deals.show', $task->taskable) }}" class="inline-flex items-center gap-1.5 text-xs font-medium text-secondary hover:underline">
-                            <x-mary-icon name="o-briefcase" class="w-4 h-4 shrink-0" style="width: 1rem; height: 1rem; min-width: 1rem; min-height: 1rem;" />
-                            <span>{{ $task->taskable->title }}</span>
-                        </a>
+                        <div class="flex flex-col gap-0.5 items-start">
+                            <a href="{{ route('laravel-crm.deals.show', $task->taskable) }}" class="inline-flex items-center gap-1.5 text-xs font-medium text-secondary hover:underline">
+                                <x-mary-icon name="o-briefcase" class="w-4 h-4 shrink-0" style="width: 1rem; height: 1rem; min-width: 1rem; min-height: 1rem;" />
+                                <span>{{ $task->taskable->title }}</span>
+                            </a>
+                            @if($linkedinUrl = $task->linkedin_url)
+                                <div class="flex items-center gap-1.5 mt-0.5" x-data="{ copied: false }">
+                                    <a href="{{ $linkedinUrl }}"
+                                       target="_blank"
+                                       rel="noopener noreferrer"
+                                       onclick="event.stopPropagation();"
+                                       class="inline-flex items-center gap-1 text-[11px] font-semibold text-secondary hover:underline bg-secondary/10 hover:bg-secondary/20 px-2 py-0.5 rounded transition-colors"
+                                       title="{{ $linkedinUrl }}">
+                                        <x-mary-icon name="o-arrow-top-right-on-square" class="w-3 h-3 shrink-0" />
+                                        <span>LinkedIn Profile</span>
+                                    </a>
+                                    <button type="button"
+                                            @click.stop="navigator.clipboard.writeText('{{ $linkedinUrl }}'); copied = true; setTimeout(() => copied = false, 2000)"
+                                            class="text-[10px] text-base-content/50 hover:text-secondary transition-colors p-0.5 rounded hover:bg-base-200"
+                                            :title="copied ? 'Copied!' : 'Copy LinkedIn URL'">
+                                        <span x-show="!copied">
+                                            <x-mary-icon name="o-clipboard-document" class="w-3.5 h-3.5" />
+                                        </span>
+                                        <span x-show="copied" class="text-success text-[10px] font-bold">
+                                            ✓
+                                        </span>
+                                    </button>
+                                </div>
+                            @endif
+                        </div>
                     @elseif($task->taskable_type === 'VentureDrake\LaravelCrm\Models\Person')
-                        <a href="{{ route('laravel-crm.people.show', $task->taskable) }}" class="inline-flex items-center gap-1.5 text-xs font-medium text-info hover:underline">
-                            <x-mary-icon name="o-user" class="w-4 h-4 shrink-0" style="width: 1rem; height: 1rem; min-width: 1rem; min-height: 1rem;" />
-                            <span>{{ $task->taskable->name }}</span>
-                        </a>
+                        <div class="flex flex-col gap-0.5 items-start">
+                            <a href="{{ route('laravel-crm.people.show', $task->taskable) }}" class="inline-flex items-center gap-1.5 text-xs font-medium text-info hover:underline">
+                                <x-mary-icon name="o-user" class="w-4 h-4 shrink-0" style="width: 1rem; height: 1rem; min-width: 1rem; min-height: 1rem;" />
+                                <span>{{ $task->taskable->name }}</span>
+                            </a>
+                            @if($linkedinUrl = $task->linkedin_url)
+                                <div class="flex items-center gap-1.5 mt-0.5" x-data="{ copied: false }">
+                                    <a href="{{ $linkedinUrl }}"
+                                       target="_blank"
+                                       rel="noopener noreferrer"
+                                       onclick="event.stopPropagation();"
+                                       class="inline-flex items-center gap-1 text-[11px] font-semibold text-info hover:underline bg-info/10 hover:bg-info/20 px-2 py-0.5 rounded transition-colors"
+                                       title="{{ $linkedinUrl }}">
+                                        <x-mary-icon name="o-arrow-top-right-on-square" class="w-3 h-3 shrink-0" />
+                                        <span>LinkedIn Profile</span>
+                                    </a>
+                                    <button type="button"
+                                            @click.stop="navigator.clipboard.writeText('{{ $linkedinUrl }}'); copied = true; setTimeout(() => copied = false, 2000)"
+                                            class="text-[10px] text-base-content/50 hover:text-info transition-colors p-0.5 rounded hover:bg-base-200"
+                                            :title="copied ? 'Copied!' : 'Copy LinkedIn URL'">
+                                        <span x-show="!copied">
+                                            <x-mary-icon name="o-clipboard-document" class="w-3.5 h-3.5" />
+                                        </span>
+                                        <span x-show="copied" class="text-success text-[10px] font-bold">
+                                            ✓
+                                        </span>
+                                    </button>
+                                </div>
+                            @endif
+                        </div>
                     @elseif($task->taskable_type === 'VentureDrake\LaravelCrm\Models\Organization')
                         <a href="{{ route('laravel-crm.organizations.show', $task->taskable) }}" class="inline-flex items-center gap-1.5 text-xs font-medium text-accent hover:underline">
                             <x-mary-icon name="o-building-office" class="w-4 h-4 shrink-0" style="width: 1rem; height: 1rem; min-width: 1rem; min-height: 1rem;" />
@@ -172,7 +259,18 @@
 
             {{-- ACTIONS --}}
             @scope('actions', $task)
-                <div class="flex gap-1 justify-end">
+                <div class="flex gap-1 justify-end items-center">
+                    @if($linkedinUrl = $task->linkedin_url)
+                        <a href="{{ $linkedinUrl }}"
+                           target="_blank"
+                           rel="noopener noreferrer"
+                           onclick="event.stopPropagation();"
+                           class="btn btn-sm btn-outline btn-primary gap-1"
+                           title="Open LinkedIn Profile">
+                            <x-mary-icon name="o-arrow-top-right-on-square" class="w-4 h-4 shrink-0" />
+                            <span class="hidden md:inline">LinkedIn</span>
+                        </a>
+                    @endif
                     @can('edit crm tasks')
                         @if(! $task->completed_at)
                             <x-mary-button label="{{ ucfirst(__('laravel-crm::lang.complete')) }}" wire:click="complete({{ $task->id }})" class="btn-sm btn-success text-white" spinner />
@@ -207,6 +305,12 @@
                 ]" icon="o-check-circle" />
 
                 <x-mary-select label="Related Entity Type" wire:model.live="taskable_type" :options="$entityTypeOptions" icon="o-rectangle-stack" />
+
+                <x-mary-select label="LinkedIn Profile" wire:model.live="has_linkedin" :options="[
+                    ['id' => '', 'name' => 'All (With or without LinkedIn)'],
+                    ['id' => 'yes', 'name' => 'Has LinkedIn Profile'],
+                    ['id' => 'no', 'name' => 'No LinkedIn Profile'],
+                ]" icon="o-link" />
             </div>
 
             {{-- ASSIGNMENT & CREATOR --}}

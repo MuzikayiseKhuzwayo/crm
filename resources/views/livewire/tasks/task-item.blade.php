@@ -22,9 +22,14 @@
                         <x-mary-badge value="{{ ucfirst(__('laravel-crm::lang.due')) }} {{ $task->due_at->format('h:i A') }} {{ __('laravel-crm::lang.on') }} {{ $task->due_at->toFormattedDateString() }}" class="badge-soft badge-sm" />
                     @endif
                 </div>
-                @if($related)
+                @if($related && $task->taskable)
                     <div class="flex flex-row items-center gap-2 mt-1">
-                        @if(class_basename($task->taskable->getMorphClass()) == 'Person')
+                        @if(class_basename($task->taskable->getMorphClass()) == 'Lead')
+                            <x-mary-icon name="o-funnel" class="text-sm text-primary" />
+                            <span class="text-sm">
+                                <a href="{{ route('laravel-crm.leads.show', $task->taskable) }}" class="link link-hover link-primary">{{ $task->taskable->title }}</a>
+                            </span>
+                        @elseif(class_basename($task->taskable->getMorphClass()) == 'Person')
                             <x-mary-icon name="fas.user-circle" class="text-sm" />
                             <span class="text-sm">
                                 <a href="{{ route('laravel-crm.people.show', $task->taskable) }}" class="link link-hover link-primary">{{ $task->taskable->name }}</a>
@@ -35,10 +40,23 @@
                                 <a href="{{ route('laravel-crm.organizations.show', $task->taskable) }}" class="link link-hover link-primary">{{ $task->taskable->name }}</a>
                             </span>
                         @endif
+
+                        @if($linkedinUrl = $task->linkedin_url)
+                            <a href="{{ $linkedinUrl }}" target="_blank" rel="noopener noreferrer" class="btn btn-xs btn-outline btn-primary gap-1" title="Open LinkedIn Profile">
+                                <x-mary-icon name="o-arrow-top-right-on-square" class="w-3 h-3" />
+                                <span>LinkedIn</span>
+                            </a>
+                        @endif
                     </div>
                 @endif
             </div>
             <div class="flex items-center gap-2">
+                @if($linkedinUrl = $task->linkedin_url)
+                    <a href="{{ $linkedinUrl }}" target="_blank" rel="noopener noreferrer" class="btn btn-xs btn-outline btn-primary gap-1" title="Open LinkedIn Profile">
+                        <x-mary-icon name="o-arrow-top-right-on-square" class="w-3 h-3" />
+                        <span>LinkedIn</span>
+                    </a>
+                @endif
                 <x-mary-button link="{{ route('laravel-crm.tasks.show', $task) }}" icon="o-eye" class="btn-xs btn-outline btn-primary" label="{{ ucfirst(__('laravel-crm::lang.view')) }}" responsive />
                 @canany(['edit crm tasks', 'delete crm tasks'])
                     <x-mary-dropdown right>

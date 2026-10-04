@@ -6,7 +6,9 @@ use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
 use Livewire\Attributes\On;
 use Livewire\Component;
 use Mary\Traits\Toast;
+use VentureDrake\LaravelCrm\Models\Lead;
 use VentureDrake\LaravelCrm\Models\Task;
+use VentureDrake\LaravelCrm\Services\SalesPlaybookService;
 
 class TaskRelated extends Component
 {
@@ -29,6 +31,8 @@ class TaskRelated extends Component
     public $user_assigned_id;
 
     public $showForm = false;
+
+    public $selectedPlaybookTemplate = '';
 
     public array $data = [];
 
@@ -133,6 +137,74 @@ class TaskRelated extends Component
         }
     }
 
+    public function updatedSelectedPlaybookTemplate($value): void
+    {
+        if (! $value) {
+            return;
+        }
+
+        $lead = $this->resolveLead();
+        if (! $lead) {
+            return;
+        }
+
+        $playbookService = app(SalesPlaybookService::class);
+        $rendered = $playbookService->renderTemplate($value, $lead);
+
+        $this->name = $rendered['name'];
+        $this->description = $rendered['body'];
+        if ($rendered['due_in_days']) {
+            $this->due_at = now()->addDays($rendered['due_in_days'])->format('Y-m-d\TH:i');
+        }
+
+        $this->toast(
+            type: 'info',
+            title: 'Playbook Template Applied',
+            description: "Pre-filled with {$lead->title} details."
+        );
+    }
+
+    public function resolveLead(): ?Lead
+    {
+        if ($this->model instanceof Lead) {
+            return $this->model;
+        }
+
+        if (method_exists($this->model, 'lead') && $this->model->lead) {
+            return $this->model->lead;
+        }
+
+        if (method_exists($this->model, 'leads') && $this->model->leads()->exists()) {
+            return $this->model->leads()->first();
+        }
+
+        return null;
+    }
+
+    public function getPlaybookOptionsProperty(): array
+    {
+        $lead = $this->resolveLead();
+        if (! $lead) {
+            return [];
+        }
+
+        $playbookService = app(SalesPlaybookService::class);
+        $recommended = $playbookService->detectRecommendedAngle($lead);
+        $templates = $playbookService->getTemplates();
+
+        $options = [];
+        foreach ($templates as $key => $tmpl) {
+            $isRec = ($key === $recommended);
+            $prefix = $isRec ? '🎯 [RECOMMENDED] ' : '';
+            $options[] = [
+                'id' => $key,
+                'name' => $prefix.$tmpl['name'],
+            ];
+        }
+
+        return $options;
+    }
+
     private function normalizeDatetime(?string $value): ?string
     {
         return $value ? str_replace('T', ' ', $value) : null;
@@ -140,7 +212,7 @@ class TaskRelated extends Component
 
     private function resetFields(): void
     {
-        $this->reset('name', 'description', 'start_at', 'due_at');
+        $this->reset('name', 'description', 'start_at', 'due_at', 'selectedPlaybookTemplate');
         $this->user_owner_id = auth()->user()->id;
         $this->user_assigned_id = auth()->user()->id;
     }

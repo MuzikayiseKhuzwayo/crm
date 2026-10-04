@@ -71,6 +71,9 @@ class TaskIndex extends Component
     public ?string $assigned_to = null;
 
     #[Url]
+    public ?string $has_linkedin = null;
+
+    #[Url]
     public array $sortBy = ['column' => 'created_at', 'direction' => 'desc'];
 
     public bool $showFilters = false;
@@ -82,6 +85,7 @@ class TaskIndex extends Component
             + (! empty($this->lead_id) ? 1 : 0)
             + ($this->status ? 1 : 0)
             + ($this->taskable_type ? 1 : 0)
+            + ($this->has_linkedin ? 1 : 0)
             + ($this->due_preset ? 1 : 0)
             + ($this->due_from || $this->due_to ? 1 : 0)
             + ($this->created_preset ? 1 : 0)
@@ -188,7 +192,26 @@ class TaskIndex extends Component
                     ->where($prefix.'tasks.taskable_type', '=', Lead::class)
                     ->whereNull('related_leads.deleted_at');
             })
-            ->with(['taskable', 'ownerUser', 'assignedToUser', 'createdByUser']);
+            ->leftJoin($prefix.'people as related_lead_people', function ($join) {
+                $join->on('related_leads.person_id', '=', 'related_lead_people.id')
+                    ->whereNull('related_lead_people.deleted_at');
+            })
+            ->leftJoin($prefix.'people as taskable_people', function ($join) use ($prefix) {
+                $join->on($prefix.'tasks.taskable_id', '=', 'taskable_people.id')
+                    ->where($prefix.'tasks.taskable_type', '=', Person::class)
+                    ->whereNull('taskable_people.deleted_at');
+            })
+            ->with([
+                'taskable' => function ($morphTo) {
+                    $morphTo->morphWith([
+                        Lead::class => ['person'],
+                        Deal::class => ['lead.person', 'person'],
+                    ]);
+                },
+                'ownerUser',
+                'assignedToUser',
+                'createdByUser',
+            ]);
 
         // 1. Search Filter
         if ($this->search) {
@@ -198,7 +221,10 @@ class TaskIndex extends Component
                     ->orWhere($prefix.'tasks.description', 'like', "%{$term}%")
                     ->orWhere('assigned_users.name', 'like', "%{$term}%")
                     ->orWhere('created_users.name', 'like', "%{$term}%")
-                    ->orWhere('related_leads.title', 'like', "%{$term}%");
+                    ->orWhere('related_leads.title', 'like', "%{$term}%")
+                    ->orWhere('related_leads.linkedin', 'like', "%{$term}%")
+                    ->orWhere('related_lead_people.linkedin', 'like', "%{$term}%")
+                    ->orWhere('taskable_people.linkedin', 'like', "%{$term}%");
             });
         }
 
@@ -246,6 +272,35 @@ class TaskIndex extends Component
         if (! empty($this->lead_id)) {
             $query->where($prefix.'tasks.taskable_type', Lead::class)
                 ->whereIn($prefix.'tasks.taskable_id', $this->lead_id);
+        }
+
+        // 7. LinkedIn Profile Filter
+        if ($this->has_linkedin === 'yes') {
+            $query->where(function (Builder $q) {
+                $q->where(function ($sub) {
+                    $sub->whereNotNull('related_leads.linkedin')
+                        ->where('related_leads.linkedin', '!=', '');
+                })->orWhere(function ($sub) {
+                    $sub->whereNotNull('related_lead_people.linkedin')
+                        ->where('related_lead_people.linkedin', '!=', '');
+                })->orWhere(function ($sub) {
+                    $sub->whereNotNull('taskable_people.linkedin')
+                        ->where('taskable_people.linkedin', '!=', '');
+                });
+            });
+        } elseif ($this->has_linkedin === 'no') {
+            $query->where(function (Builder $q) {
+                $q->where(function ($sub) {
+                    $sub->whereNull('related_leads.linkedin')
+                        ->orWhere('related_leads.linkedin', '=', '');
+                })->where(function ($sub) {
+                    $sub->whereNull('related_lead_people.linkedin')
+                        ->orWhere('related_lead_people.linkedin', '=', '');
+                })->where(function ($sub) {
+                    $sub->whereNull('taskable_people.linkedin')
+                        ->orWhere('taskable_people.linkedin', '=', '');
+                });
+            });
         }
 
         // 7. Due Date Filter

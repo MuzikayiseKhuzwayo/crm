@@ -92,6 +92,8 @@ class LaravelCrmSyncLeadsFromSqlite extends Command
         $this->info('Reading leads from SQLite...');
         $stmt = $sqlite->query('SELECT * FROM crm_leads ORDER BY id ASC');
         $sqliteLeads = $stmt->fetchAll(PDO::FETCH_ASSOC);
+        // Exclude soft-deleted leads if deleted_at column is present
+        $sqliteLeads = array_values(array_filter($sqliteLeads, fn ($row) => empty($row['deleted_at'])));
         $totalLeads = count($sqliteLeads);
         $this->info("Found {$totalLeads} total leads in SQLite.");
 

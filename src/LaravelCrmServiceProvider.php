@@ -29,6 +29,7 @@ use VentureDrake\LaravelCrm\Console\LaravelCrmDecrypt;
 use VentureDrake\LaravelCrm\Console\LaravelCrmEmailCampaignsDispatch;
 use VentureDrake\LaravelCrm\Console\LaravelCrmEncrypt;
 use VentureDrake\LaravelCrm\Console\LaravelCrmFields;
+use VentureDrake\LaravelCrm\Console\LaravelCrmGeneratePlaybookTasks;
 use VentureDrake\LaravelCrm\Console\LaravelCrmImportLinkedinLeads;
 use VentureDrake\LaravelCrm\Console\LaravelCrmInstall;
 use VentureDrake\LaravelCrm\Console\LaravelCrmLabels;
@@ -36,13 +37,15 @@ use VentureDrake\LaravelCrm\Console\LaravelCrmLeadSources;
 use VentureDrake\LaravelCrm\Console\LaravelCrmMonitorCheck;
 use VentureDrake\LaravelCrm\Console\LaravelCrmOrganizationTypes;
 use VentureDrake\LaravelCrm\Console\LaravelCrmPermissions;
+use VentureDrake\LaravelCrm\Console\LaravelCrmPruneTemplateLeads;
 use VentureDrake\LaravelCrm\Console\LaravelCrmReminders;
+use VentureDrake\LaravelCrm\Console\LaravelCrmRotateAccountRelay;
 use VentureDrake\LaravelCrm\Console\LaravelCrmSampleData;
 use VentureDrake\LaravelCrm\Console\LaravelCrmSeedLinkedinTasks;
 use VentureDrake\LaravelCrm\Console\LaravelCrmSetupLeadPipeline;
 use VentureDrake\LaravelCrm\Console\LaravelCrmSmsCampaignsDispatch;
-use VentureDrake\LaravelCrm\Console\LaravelCrmSyncLeadStages;
 use VentureDrake\LaravelCrm\Console\LaravelCrmSyncLeadsFromSqlite;
+use VentureDrake\LaravelCrm\Console\LaravelCrmSyncLeadStages;
 use VentureDrake\LaravelCrm\Console\LaravelCrmUpdate;
 use VentureDrake\LaravelCrm\Console\LaravelCrmUpgrade;
 use VentureDrake\LaravelCrm\Console\LaravelCrmV2;
@@ -450,6 +453,7 @@ use VentureDrake\LaravelCrm\Policies\TaskPolicy;
 use VentureDrake\LaravelCrm\Policies\TaxRatePolicy;
 use VentureDrake\LaravelCrm\Policies\TeamPolicy;
 use VentureDrake\LaravelCrm\Policies\UserPolicy;
+use VentureDrake\LaravelCrm\Services\AccountRelayService;
 use VentureDrake\LaravelCrm\Services\SettingService;
 use VentureDrake\LaravelCrm\Services\SystemCheckService;
 use VentureDrake\LaravelCrm\View\Components\Addresses;
@@ -865,6 +869,7 @@ class LaravelCrmServiceProvider extends ServiceProvider
                 __DIR__.'/../database/migrations/make_name_nullable_on_laravel_crm_monitors_table.php.stub' => $this->getMigrationFileName($filesystem, 'make_name_nullable_on_laravel_crm_monitors_table.php', 132),
                 __DIR__.'/../database/migrations/add_views_count_to_laravel_crm_features_table.php.stub' => $this->getMigrationFileName($filesystem, 'add_views_count_to_laravel_crm_features_table.php', 133),
                 __DIR__.'/../database/migrations/create_laravel_crm_feature_views_table.php.stub' => $this->getMigrationFileName($filesystem, 'create_laravel_crm_feature_views_table.php', 134),
+                __DIR__.'/../database/migrations/add_relay_fields_to_laravel_crm_leads_table.php.stub' => $this->getMigrationFileName($filesystem, 'add_relay_fields_to_laravel_crm_leads_table.php', 135),
             ], 'migrations');
 
             // Publishing the seeders
@@ -912,6 +917,9 @@ class LaravelCrmServiceProvider extends ServiceProvider
                 LaravelCrmImportLinkedinLeads::class,
                 LaravelCrmSyncLeadStages::class,
                 LaravelCrmSyncLeadsFromSqlite::class,
+                LaravelCrmPruneTemplateLeads::class,
+                LaravelCrmRotateAccountRelay::class,
+                LaravelCrmGeneratePlaybookTasks::class,
                 IssueApiToken::class,
             ]);
 
@@ -1210,6 +1218,11 @@ class LaravelCrmServiceProvider extends ServiceProvider
                         ->withoutOverlapping();
                 }
 
+                $schedule->command('laravelcrm:rotate-account-relay')
+                    ->name('laravelCrmRotateAccountRelay')
+                    ->daily()
+                    ->withoutOverlapping();
+
                 if (config('xero.clientId') && config('xero.clientSecret')) {
                     $schedule->command('xero:keep-alive')
                         ->name('laravelCrmXeroKeepAlive')
@@ -1382,6 +1395,10 @@ class LaravelCrmServiceProvider extends ServiceProvider
         });
 
         $this->app->alias('laravel-crm.system-check', SystemCheckService::class);
+
+        $this->app->singleton(AccountRelayService::class, function () {
+            return new AccountRelayService;
+        });
 
         $this->app->register(LaravelCrmEventServiceProvider::class);
     }

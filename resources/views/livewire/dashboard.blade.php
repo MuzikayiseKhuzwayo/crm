@@ -189,7 +189,7 @@
                                             default => null
                                         };
                                     @endphp
-                                    <div class="text-xs text-base-content/60">
+                                    <div class="text-xs text-base-content/60 flex items-center gap-1.5 flex-wrap">
                                         @if($taskableRoute)
                                             <a href="{{ $taskableRoute }}" class="link link-hover text-base-content/70">
                                                 {{ $type }}: {{ $task->taskable->title ?? $task->taskable->name }}
@@ -197,11 +197,23 @@
                                         @else
                                             <span>{{ $type }}</span>
                                         @endif
+                                        @if($linkedinUrl = $task->linkedin_url)
+                                            <a href="{{ $linkedinUrl }}" target="_blank" rel="noopener noreferrer" class="badge badge-primary badge-outline text-[10px] gap-1 hover:badge-primary" title="Open LinkedIn Profile">
+                                                <x-mary-icon name="o-arrow-top-right-on-square" class="w-2.5 h-2.5" />
+                                                LinkedIn
+                                            </a>
+                                        @endif
                                     </div>
                                 @endif
                             </div>
                         </div>
                         <div class="flex items-center gap-2">
+                            @if($linkedinUrl = $task->linkedin_url)
+                                <a href="{{ $linkedinUrl }}" target="_blank" rel="noopener noreferrer" class="btn btn-xs btn-outline btn-primary gap-1" title="Open LinkedIn Profile">
+                                    <x-mary-icon name="o-arrow-top-right-on-square" class="w-3 h-3" />
+                                    <span class="hidden sm:inline">LinkedIn</span>
+                                </a>
+                            @endif
                             @if($task->due_at)
                                 <span class="badge badge-sm {{ $task->due_at->isPast() ? 'badge-error text-white font-bold' : 'badge-neutral' }}">
                                     {{ $task->due_at->diffForHumans() }}

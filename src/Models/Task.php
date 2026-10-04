@@ -84,4 +84,42 @@ class Task extends Model
     {
         return $this->morphOne(Activity::class, 'recordable');
     }
+
+    /**
+     * Get the associated Lead model if the task is linked to a lead or a model having a lead.
+     */
+    public function getLeadAttribute(): ?Lead
+    {
+        if ($this->taskable instanceof Lead) {
+            return $this->taskable;
+        }
+
+        if ($this->taskable instanceof Deal && $this->taskable->lead) {
+            return $this->taskable->lead;
+        }
+
+        return null;
+    }
+
+    /**
+     * Get the resolved LinkedIn URL for the task's linked lead/contact.
+     */
+    public function getLinkedinUrlAttribute(): ?string
+    {
+        $raw = null;
+
+        if ($this->taskable instanceof Lead) {
+            $raw = $this->taskable->linkedin ?: $this->taskable->person?->linkedin;
+        } elseif ($this->taskable instanceof Person) {
+            $raw = $this->taskable->linkedin;
+        } elseif ($this->taskable instanceof Deal) {
+            $raw = $this->taskable->lead?->linkedin ?: $this->taskable->person?->linkedin;
+        }
+
+        if (! $raw) {
+            return null;
+        }
+
+        return str_starts_with($raw, 'http') ? $raw : 'https://'.$raw;
+    }
 }

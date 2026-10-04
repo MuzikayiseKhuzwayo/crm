@@ -11,6 +11,8 @@ use VentureDrake\LaravelCrm\Models\Lead;
 use VentureDrake\LaravelCrm\Models\Pipeline;
 use VentureDrake\LaravelCrm\Models\PipelineStage;
 use VentureDrake\LaravelCrm\Models\Task;
+use VentureDrake\LaravelCrm\Services\AccountRelayService;
+use VentureDrake\LaravelCrm\Services\SalesPlaybookService;
 
 class LeadShow extends Component
 {
@@ -54,22 +56,38 @@ class LeadShow extends Component
 
     public function createStageTask(string $type): void
     {
+        $playbookService = app(SalesPlaybookService::class);
+
+        // Map short alias to template key
+        $templateKey = match ($type) {
+            'connection_request', 'connect' => $playbookService->detectRecommendedAngle($this->lead),
+            'angle_a' => 'connection_angle_a',
+            'angle_b' => 'connection_angle_b',
+            'angle_c' => 'connection_angle_c',
+            'intro_dm', 'scenario_1' => 'scenario_1',
+            'scenario_2', 'offer_kit' => 'scenario_2',
+            'scenario_3', 'send_kit' => 'scenario_3',
+            'scenario_4', 'follow_up', 'nudge' => 'scenario_4',
+            'scenario_5', 'disconnect' => 'scenario_5',
+            'schedule_call', 'call', 'call_transition' => 'call_transition',
+            default => $type,
+        };
+
+        $templates = $playbookService->getTemplates();
+
+        if (isset($templates[$templateKey])) {
+            $task = $playbookService->createPlaybookTask($this->lead, $templateKey);
+            $this->lead->refresh();
+            $this->success("Playbook Task '{$task->name}' created with pre-filled lead details!");
+            $this->dispatch('select-activity-tab', tab: 'tasks');
+            $this->dispatch('task-added');
+            $this->dispatch('activity-logged');
+
+            return;
+        }
+
+        // Fallback for legacy custom stage tasks
         $taskConfigs = [
-            'connection_request' => [
-                'name' => 'Send a Connection Request and get accepted',
-                'description' => 'Send a personalized connection request on LinkedIn and wait for acceptance.',
-                'due_in_days' => 2,
-            ],
-            'intro_dm' => [
-                'name' => 'Send an introductory DM',
-                'description' => 'Send introductory message via LinkedIn DM once connection request is accepted.',
-                'due_in_days' => 3,
-            ],
-            'schedule_call' => [
-                'name' => 'Schedule Discovery / Pitch Call',
-                'description' => 'Propose a 15-min discovery call via chat / email and book calendar slot.',
-                'due_in_days' => 1,
-            ],
             'conduct_call' => [
                 'name' => 'Conduct Discovery Meeting',
                 'description' => 'Host discovery call, take call notes, and validate budget & requirements.',
@@ -79,11 +97,6 @@ class LeadShow extends Component
                 'name' => 'Prepare & Send Formal Proposal / Quote',
                 'description' => 'Draft proposal or quote and send to decision maker.',
                 'due_in_days' => 2,
-            ],
-            'follow_up' => [
-                'name' => 'Follow up on Proposal / Discussion',
-                'description' => 'Follow up via chat or email regarding proposal feedback.',
-                'due_in_days' => 3,
             ],
         ];
 
@@ -111,7 +124,33 @@ class LeadShow extends Component
 
             $this->success("Task '{$config['name']}' created!");
             $this->dispatch('select-activity-tab', tab: 'tasks');
+            $this->dispatch('task-added');
+            $this->dispatch('activity-logged');
         }
+    }
+
+    public function getPlaybookProperty(): array
+    {
+        $playbookService = app(SalesPlaybookService::class);
+        $recommendedAngle = $playbookService->detectRecommendedAngle($this->lead);
+        $templates = $playbookService->getTemplates();
+
+        $rendered = [];
+        foreach ($templates as $key => $tmpl) {
+            $rendered[$key] = array_merge(
+                $playbookService->renderTemplate($key, $this->lead),
+                ['is_recommended' => ($key === $recommendedAngle)]
+            );
+        }
+
+        return [
+            'id' => SalesPlaybookService::PLAYBOOK_ID,
+            'name' => SalesPlaybookService::PLAYBOOK_NAME,
+            'target_audience' => SalesPlaybookService::TARGET_AUDIENCE,
+            'guiding_principle' => SalesPlaybookService::GUIDING_PRINCIPLE,
+            'recommended_angle' => $recommendedAngle,
+            'templates' => $rendered,
+        ];
     }
 
     public function delete($id)
@@ -158,6 +197,34 @@ class LeadShow extends Component
             $this->lead->organization->refresh();
             $this->lead->refresh();
             $this->success("Company '{$this->lead->organization->name}' disqualification cleared.");
+        }
+    }
+
+    public function initializeRelayQueue(): void
+    {
+        if ($this->lead->organization) {
+            app(AccountRelayService::class)->initializeOrganizationBasket($this->lead->organization);
+            $this->lead->refresh();
+            $this->success("Account Relay Basket initialized for {$this->lead->organization->name}.");
+        }
+    }
+
+    public function rotateRelay(string $reason = 'unresponsive'): void
+    {
+        if (! $this->lead->organization) {
+            return;
+        }
+
+        $relayService = app(AccountRelayService::class);
+        $nextLead = $relayService->rotateToNext($this->lead, $reason);
+
+        $this->lead->refresh();
+
+        if ($nextLead) {
+            $this->success("Relay passed to {$nextLead->title}!");
+            $this->redirect(route('laravel-crm.leads.show', $nextLead));
+        } else {
+            $this->warning("Account queue exhausted. No more standby leads for {$this->lead->organization->name}.");
         }
     }
 

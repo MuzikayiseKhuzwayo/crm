@@ -63,6 +63,15 @@ class Person extends Model
         return trim($this->first_name.' '.$this->last_name);
     }
 
+    public function getLinkedinUrlAttribute(): ?string
+    {
+        if (! $this->linkedin) {
+            return null;
+        }
+
+        return str_starts_with($this->linkedin, 'http') ? $this->linkedin : 'https://'.$this->linkedin;
+    }
+
     /*public function setBirthdayAttribute($value)
     {
         if ($value) {
