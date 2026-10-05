@@ -271,27 +271,35 @@ class AccountRelayService
         $prevName = $currentLead->person?->name ?: $currentLead->title;
         $nextName = $nextLead->person?->name ?: $nextLead->title;
 
-        // Seed initial outreach task for this new colleague
-        $task = Task::create([
-            'external_id' => Uuid::uuid4()->toString(),
-            'name' => "Reach out to {$nextName} (Account Relay: {$prevName} was {$reason})",
-            'description' => "Previous outreach to {$prevName} at {$org->name} fell off ({$reason}). Now working on {$nextName} as next in the account queue.",
-            'taskable_type' => get_class($nextLead),
-            'taskable_id' => $nextLead->id,
-            'due_at' => Carbon::now()->addDay(),
-            'user_owner_id' => auth()->id() ?: ($nextLead->user_owner_id ?: 1),
-            'user_assigned_id' => auth()->id() ?: ($nextLead->user_assigned_id ?: 1),
-        ]);
+        // Rebase any existing overdue pending tasks so they are actionable starting tomorrow
+        $nextLead->tasks()->whereNull('completed_at')->where('due_at', '<', Carbon::now())->each(function (Task $overdueTask) {
+            $overdueTask->update(['due_at' => Carbon::now()->addDay()]);
+        });
 
-        // Record activity on new lead timeline
-        $nextLead->activities()->create([
-            'causeable_type' => auth()->user() ? auth()->user()->getMorphClass() : null,
-            'causeable_id' => auth()->id() ?: ($nextLead->user_owner_id ?: 1),
-            'timelineable_type' => $nextLead->getMorphClass(),
-            'timelineable_id' => $nextLead->id,
-            'recordable_type' => $task->getMorphClass(),
-            'recordable_id' => $task->id,
-        ]);
+        // Seed initial outreach task for this new colleague if none exists
+        $hasExistingPendingTask = $nextLead->tasks()->whereNull('completed_at')->exists();
+        if (! $hasExistingPendingTask) {
+            $task = Task::create([
+                'external_id' => Uuid::uuid4()->toString(),
+                'name' => "Reach out to {$nextName} (Account Relay: {$prevName} was {$reason})",
+                'description' => "Previous outreach to {$prevName} at {$org->name} fell off ({$reason}). Now working on {$nextName} as next in the account queue.",
+                'taskable_type' => get_class($nextLead),
+                'taskable_id' => $nextLead->id,
+                'due_at' => Carbon::now()->addDay(),
+                'user_owner_id' => auth()->id() ?: ($nextLead->user_owner_id ?: 1),
+                'user_assigned_id' => auth()->id() ?: ($nextLead->user_assigned_id ?: 1),
+            ]);
+
+            // Record activity on new lead timeline
+            $nextLead->activities()->create([
+                'causeable_type' => auth()->user() ? auth()->user()->getMorphClass() : null,
+                'causeable_id' => auth()->id() ?: ($nextLead->user_owner_id ?: 1),
+                'timelineable_type' => $nextLead->getMorphClass(),
+                'timelineable_id' => $nextLead->id,
+                'recordable_type' => $task->getMorphClass(),
+                'recordable_id' => $task->id,
+            ]);
+        }
 
         return $nextLead->fresh();
     }
