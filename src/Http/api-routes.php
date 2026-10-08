@@ -2,14 +2,20 @@
 
 use Illuminate\Support\Facades\Route;
 use VentureDrake\LaravelCrm\Http\Controllers\Api\V2\AuthController;
+use VentureDrake\LaravelCrm\Http\Controllers\Api\V2\AutomationController;
 use VentureDrake\LaravelCrm\Http\Controllers\Api\V2\DealController;
+use VentureDrake\LaravelCrm\Http\Controllers\Api\V2\DeliveryController;
+use VentureDrake\LaravelCrm\Http\Controllers\Api\V2\FeatureController;
 use VentureDrake\LaravelCrm\Http\Controllers\Api\V2\InvoiceController;
 use VentureDrake\LaravelCrm\Http\Controllers\Api\V2\LeadController;
+use VentureDrake\LaravelCrm\Http\Controllers\Api\V2\MonitorController;
 use VentureDrake\LaravelCrm\Http\Controllers\Api\V2\OrderController;
 use VentureDrake\LaravelCrm\Http\Controllers\Api\V2\OrganizationController;
 use VentureDrake\LaravelCrm\Http\Controllers\Api\V2\PersonController;
 use VentureDrake\LaravelCrm\Http\Controllers\Api\V2\ProductController;
+use VentureDrake\LaravelCrm\Http\Controllers\Api\V2\PurchaseOrderController;
 use VentureDrake\LaravelCrm\Http\Controllers\Api\V2\QuoteController;
+use VentureDrake\LaravelCrm\Http\Controllers\Api\V2\TaskController;
 
 /*
  * Laravel CRM API routes (v2).
@@ -63,4 +69,32 @@ Route::middleware(['auth:sanctum', 'crm-api', 'laravel-crm.api.team'])->group(fu
     Route::apiResource('invoices', InvoiceController::class)
         ->names('laravel-crm.api.v2.invoices')
         ->scoped(['invoice' => 'external_id']);
+
+    Route::apiResource('tasks', TaskController::class)
+        ->names('laravel-crm.api.v2.tasks')
+        ->scoped(['task' => 'external_id']);
+
+    Route::apiResource('deliveries', DeliveryController::class)
+        ->names('laravel-crm.api.v2.deliveries')
+        ->scoped(['delivery' => 'external_id']);
+
+    Route::apiResource('purchase-orders', PurchaseOrderController::class)
+        ->names('laravel-crm.api.v2.purchase-orders')
+        ->scoped(['purchase_order' => 'external_id']);
+
+    Route::apiResource('features', FeatureController::class)
+        ->names('laravel-crm.api.v2.features')
+        ->scoped(['feature' => 'external_id']);
+
+    Route::apiResource('monitors', MonitorController::class)
+        ->names('laravel-crm.api.v2.monitors')
+        ->scoped(['monitor' => 'external_id']);
+
+    // Automation & Operational Bridge APIs
+    Route::post('automations/sync-lead-stages', [AutomationController::class, 'syncLeadStages'])
+        ->name('laravel-crm.api.v2.automations.sync-lead-stages');
+    Route::post('automations/generate-playbook-tasks', [AutomationController::class, 'generatePlaybookTasks'])
+        ->name('laravel-crm.api.v2.automations.generate-playbook-tasks');
+    Route::get('system/health', [AutomationController::class, 'health'])
+        ->name('laravel-crm.api.v2.system.health');
 });

@@ -1,17 +1,48 @@
+# Dependencies
 /vendor
-/.idea
-/build
-composer.lock
-.phpunit.result.cache
-coverage
-.php_cs.cache
 /node_modules
 package-lock.json
 /bower_components
 /docs/node_modules
+
+# Environment & Sensitive configs
+.env
+.env.*
+!.env.example
+
+# Local databases & storage
+*.sqlite
+*.sqlite3
+database/*.sqlite
+/storage/*.key
+
+# Binary files & large scratch archives
+*.phar
+composer.phar
+dataset*.json
+dataset_*.json
+
+# Cache & Build artifacts
+.phpunit.result.cache
+coverage
+.php_cs.cache
+/build
 .air
 .ai
 .context
 scratch_*.php
 scratch/
+testbench_compiled_views/
+*.log
 
+# OS & IDE metadata
+.DS_Store
+Thumbs.db
+/.idea
+/.vscode
+
+# Whitelist public assets and showcases
+!public/
+!public/showcase.html
+!public/vendor/
+!public/vendor/laravel-crm/

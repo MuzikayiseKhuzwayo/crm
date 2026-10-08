@@ -180,7 +180,7 @@ test('a skipped publish prunes nothing', function () {
     } finally {
         chmod($path.'/vendor/laravel-crm', 0755);
     }
-})->skip(fn () => posix_geteuid() === 0, 'root ignores the write bit');
+})->skip(fn () => function_exists('posix_geteuid') && posix_geteuid() === 0, 'root ignores the write bit');
 
 test('upgrade leaves everything outside the build directory alone', function () {
     // img/, fonts/, libs/ and css/ are published from resources/assets and are
