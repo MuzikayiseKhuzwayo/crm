@@ -98,16 +98,19 @@ class CrmHeartbeatService
                 'name' => $t->name,
                 'due' => $t->due_at?->diffForHumans(),
                 'lead_id' => $t->taskable instanceof Lead ? $t->taskable->lead_id : null,
+                'lead_url' => $t->taskable instanceof Lead ? $this->tools->getLeadUrl($t->taskable->id) : null,
                 'lead_title' => $t->taskable instanceof Lead ? $t->taskable->title : null,
             ])->values()->toArray(),
             'stale_active_leads_count' => $staleActiveLeads->count(),
             'sample_stale_leads' => $staleActiveLeads->take(3)->map(fn ($l) => [
                 'lead_id' => $l->lead_id,
+                'url' => $this->tools->getLeadUrl($l->id),
                 'title' => $l->title,
                 'last_activity' => $l->updated_at?->diffForHumans(),
             ])->values()->toArray(),
             'leads_ready_for_stage_advancement' => $readyLeads->map(fn ($l) => [
                 'lead_id' => $l->lead_id,
+                'url' => $this->tools->getLeadUrl($l->id),
                 'title' => $l->title,
                 'current_stage' => $l->pipelineStage?->name,
             ])->values()->toArray(),
@@ -126,6 +129,7 @@ Highlight:
 1. Urgent tasks that require immediate outreach or resolution.
 2. Any stale leads at risk of dropping off.
 3. Leads ready to advance in the pipeline.
+Make every lead reference a 1-click clickable Markdown link using its provided URL, e.g.: [TFA-L1013](https://crm.techfusion-alchemy.xyz/crm/leads/...) - Title.
 Keep it compact, clear, and actionable with emoji indicators. If no emergencies exist, give a brief 2-bullet status update.';
 
         $briefing = $this->gemini->executeTurn($prompt);

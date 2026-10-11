@@ -101,6 +101,45 @@ class CrmToolsService
     }
 
     /**
+     * Generate the direct web URL for a lead in the CRM.
+     */
+    public function getLeadUrl(int|string $leadId): string
+    {
+        $baseUrl = config('app.url') ?: 'https://crm.techfusion-alchemy.xyz';
+        $baseUrl = rtrim($baseUrl, '/');
+        $prefix = trim(config('laravel-crm.route_prefix', 'crm'), '/');
+        $path = $prefix ? "{$prefix}/leads/{$leadId}" : "leads/{$leadId}";
+
+        return "{$baseUrl}/{$path}";
+    }
+
+    /**
+     * Generate the direct web URL for a contact/person in the CRM.
+     */
+    public function getContactUrl(int|string $contactId): string
+    {
+        $baseUrl = config('app.url') ?: 'https://crm.techfusion-alchemy.xyz';
+        $baseUrl = rtrim($baseUrl, '/');
+        $prefix = trim(config('laravel-crm.route_prefix', 'crm'), '/');
+        $path = $prefix ? "{$prefix}/people/{$contactId}" : "people/{$contactId}";
+
+        return "{$baseUrl}/{$path}";
+    }
+
+    /**
+     * Generate the direct web URL for an organization in the CRM.
+     */
+    public function getOrganizationUrl(int|string $orgId): string
+    {
+        $baseUrl = config('app.url') ?: 'https://crm.techfusion-alchemy.xyz';
+        $baseUrl = rtrim($baseUrl, '/');
+        $prefix = trim(config('laravel-crm.route_prefix', 'crm'), '/');
+        $path = $prefix ? "{$prefix}/organizations/{$orgId}" : "organizations/{$orgId}";
+
+        return "{$baseUrl}/{$path}";
+    }
+
+    /**
      * Get CRM overview metrics.
      */
     public function getCrmOverview(): array
@@ -265,6 +304,7 @@ class CrmToolsService
             return [
                 'id' => $lead->id,
                 'lead_id' => $lead->lead_id,
+                'url' => $this->getLeadUrl($lead->id),
                 'title' => $lead->title,
                 'person' => $lead->person ? $lead->person->name : null,
                 'organization' => $lead->organization ? $lead->organization->name : null,
@@ -355,6 +395,7 @@ class CrmToolsService
         $contacts = $results->map(function ($person) {
             return [
                 'id' => $person->id,
+                'url' => $this->getContactUrl($person->id),
                 'name' => $person->name,
                 'job_title' => $person->title,
                 'organization' => $person->organization?->name,
@@ -404,6 +445,7 @@ class CrmToolsService
 
         return [
             'id' => $person->id,
+            'url' => $this->getContactUrl($person->id),
             'name' => $person->name,
             'job_title' => $person->title,
             'organization' => $person->organization?->name,
@@ -416,6 +458,7 @@ class CrmToolsService
                 return [
                     'id' => $l->id,
                     'lead_id' => $l->lead_id,
+                    'url' => $this->getLeadUrl($l->id),
                     'title' => $l->title,
                     'stage' => $l->pipelineStage?->name,
                     'relay_status' => $l->relay_status,
@@ -473,6 +516,7 @@ class CrmToolsService
         $orgs = $results->map(function ($org) {
             return [
                 'id' => $org->id,
+                'url' => $this->getOrganizationUrl($org->id),
                 'name' => $org->name,
                 'owner' => $org->ownerUser?->name,
                 'domain' => $org->domain,
@@ -524,6 +568,7 @@ class CrmToolsService
         return [
             'id' => $lead->id,
             'lead_id' => $lead->lead_id,
+            'url' => $this->getLeadUrl($lead->id),
             'title' => $lead->title,
             'description' => $lead->description,
             'stage' => $lead->pipelineStage ? $lead->pipelineStage->name : null,
@@ -626,6 +671,7 @@ class CrmToolsService
                 $linkedLead = [
                     'id' => $task->taskable->id,
                     'lead_id' => $task->taskable->lead_id,
+                    'url' => $this->getLeadUrl($task->taskable->id),
                     'title' => $task->taskable->title,
                 ];
             }
@@ -945,6 +991,7 @@ class CrmToolsService
                     'name' => $t->name,
                     'due_at' => $t->due_at?->diffForHumans(),
                     'lead_id' => $t->taskable instanceof Lead ? $t->taskable->lead_id : null,
+                    'lead_url' => $t->taskable instanceof Lead ? $this->getLeadUrl($t->taskable->id) : null,
                     'lead_title' => $t->taskable instanceof Lead ? $t->taskable->title : null,
                 ];
             })->toArray();
@@ -958,6 +1005,7 @@ class CrmToolsService
                 return [
                     'id' => $l->id,
                     'lead_id' => $l->lead_id,
+                    'url' => $this->getLeadUrl($l->id),
                     'title' => $l->title,
                     'last_updated' => $l->updated_at?->diffForHumans(),
                 ];
@@ -978,6 +1026,7 @@ class CrmToolsService
                 return [
                     'id' => $l->id,
                     'lead_id' => $l->lead_id,
+                    'url' => $this->getLeadUrl($l->id),
                     'title' => $l->title,
                     'current_stage' => $l->pipelineStage?->name,
                 ];

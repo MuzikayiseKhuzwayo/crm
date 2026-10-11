@@ -219,4 +219,44 @@ class Lead extends Model
 
         return $this->person?->linkedin_url;
     }
+
+    /**
+     * Retrieve the model for a bound value supporting ID, lead_id (e.g. TFA-L4711), LD- prefix, or external_id.
+     */
+    public function resolveRouteBinding($value, $field = null)
+    {
+        if ($field) {
+            return $this->where($field, $value)->first();
+        }
+
+        if (is_numeric($value)) {
+            $lead = $this->where('id', $value)->first();
+            if ($lead) {
+                return $lead;
+            }
+        }
+
+        // Match on lead_id or external_id
+        $lead = $this->where('lead_id', $value)->orWhere('external_id', $value)->first();
+        if ($lead) {
+            return $lead;
+        }
+
+        // Match with stripped LD- prefix
+        $stripped = preg_replace('/^LD-/i', '', (string) $value);
+        $lead = $this->where('lead_id', $stripped)->first();
+        if ($lead) {
+            return $lead;
+        }
+
+        // Match on numeric portion
+        if (preg_match('/(\d+)/', (string) $value, $matches)) {
+            $lead = $this->where('number', (int) $matches[1])->first();
+            if ($lead) {
+                return $lead;
+            }
+        }
+
+        return parent::resolveRouteBinding($value, $field);
+    }
 }
