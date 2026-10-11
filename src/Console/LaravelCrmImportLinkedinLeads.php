@@ -60,7 +60,24 @@ class LaravelCrmImportLinkedinLeads extends Command
         $totalProfiles = count($profiles);
         $this->info("Found {$totalProfiles} profiles in dataset.");
 
-        $ownerId = (int) $this->option('user');
+        $userOption = $this->option('user');
+        if (is_numeric($userOption)) {
+            $user = DB::table('users')->where('id', (int) $userOption)->first();
+        } else {
+            $user = DB::table('users')
+                ->where('name', $userOption)
+                ->orWhere('email', $userOption)
+                ->first();
+        }
+
+        if (! $user) {
+            $this->error("User owner not found for identifier: '{$userOption}'");
+
+            return self::FAILURE;
+        }
+
+        $ownerId = (int) $user->id;
+        $this->info("Assigning leads to owner: {$user->name} (ID: {$ownerId})");
         $isDryRun = (bool) $this->option('dry-run');
 
         if ($isDryRun) {
