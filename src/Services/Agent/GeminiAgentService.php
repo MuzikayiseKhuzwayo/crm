@@ -83,6 +83,16 @@ class GeminiAgentService
 
             $modelParts = $candidate['content']['parts'] ?? [];
 
+            // Sanitize functionCall parts so empty args serialize as JSON object ({}) not array ([])
+            foreach ($modelParts as &$part) {
+                if (isset($part['functionCall'])) {
+                    if (empty($part['functionCall']['args'])) {
+                        $part['functionCall']['args'] = (object) [];
+                    }
+                }
+            }
+            unset($part);
+
             // Add model candidate to conversation history
             $contents[] = [
                 'role' => 'model',
@@ -122,7 +132,7 @@ class GeminiAgentService
                         [
                             'functionResponse' => [
                                 'name' => $fnName,
-                                'response' => [
+                                'response' => (object) [
                                     'result' => $executionResult,
                                 ],
                             ],
@@ -149,6 +159,7 @@ class GeminiAgentService
                 'create_task' => $this->tools->createTask($args),
                 'complete_task' => $this->tools->completeTask($args),
                 'update_lead_stage' => $this->tools->updateLeadStage($args),
+                'delete_lead' => $this->tools->deleteLead($args),
                 'get_lead_alerts' => $this->tools->getLeadAlerts(),
                 default => ['error' => "Unknown tool: {$name}"],
             };
@@ -174,6 +185,7 @@ DIRECTIVES & RULES:
 3. When asked to inspect or manage leads/tasks, always call the relevant CRM tools. Do not hallucinate CRM IDs or task states.
 4. When reporting lead alerts or overdue tasks, provide the Lead ID (e.g. LD-1042), Person/Company name, and clear actionable recommendations.
 5. If the user asks you to create a task, complete a task, or update a lead, execute the tool immediately and confirm with the updated status.
+6. If the user explicitly asks to delete, remove, or drop a lead (or confirms deletion), invoke the delete_lead tool directly and report what was deleted.
 PROMPT;
     }
 
@@ -261,6 +273,17 @@ PROMPT;
                         'lead_id' => ['type' => 'STRING', 'description' => 'The Lead ID or numeric ID'],
                         'stage' => ['type' => 'STRING', 'description' => 'Target stage name or stage ID'],
                         'relay_status' => ['type' => 'STRING', 'description' => 'Target relay status: active, standby, completed'],
+                    ],
+                    'required' => ['lead_id'],
+                ],
+            ],
+            [
+                'name' => 'delete_lead',
+                'description' => 'Delete or archive a lead by its Lead ID (e.g. LD-TFA-L1542). Also cleans up its pending tasks.',
+                'parameters' => [
+                    'type' => 'OBJECT',
+                    'properties' => [
+                        'lead_id' => ['type' => 'STRING', 'description' => 'The Lead ID (e.g. LD-TFA-L1542) or numeric ID to delete'],
                     ],
                     'required' => ['lead_id'],
                 ],

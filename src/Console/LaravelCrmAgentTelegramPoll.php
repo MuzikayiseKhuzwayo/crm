@@ -93,9 +93,20 @@ class LaravelCrmAgentTelegramPoll extends Command
 
         // Run Gemini agent turn with tools
         $this->comment('🤖 Reasoning & tool execution via Gemini 2.5 Flash...');
-        $response = $gemini->executeTurn($text);
+        $historyKey = "crm_agent_history_{$chatId}";
+        $history = cache()->get($historyKey, []);
+
+        $response = $gemini->executeTurn($text, $history);
 
         $telegram->sendMessage($chatId, $response);
+
+        $history[] = ['role' => 'user', 'parts' => [['text' => $text]]];
+        $history[] = ['role' => 'model', 'parts' => [['text' => $response]]];
+        if (count($history) > 8) {
+            $history = array_slice($history, -8);
+        }
+        cache()->put($historyKey, $history, now()->addHours(24));
+
         $this->info('✅ Response sent to Telegram.');
     }
 
@@ -118,7 +129,18 @@ class LaravelCrmAgentTelegramPoll extends Command
         };
 
         $this->line("[CALLBACK] {$data} from {$chatId}");
-        $response = $gemini->executeTurn($prompt);
+
+        $historyKey = "crm_agent_history_{$chatId}";
+        $history = cache()->get($historyKey, []);
+
+        $response = $gemini->executeTurn($prompt, $history);
         $telegram->sendMessage($chatId, $response);
+
+        $history[] = ['role' => 'user', 'parts' => [['text' => $prompt]]];
+        $history[] = ['role' => 'model', 'parts' => [['text' => $response]]];
+        if (count($history) > 8) {
+            $history = array_slice($history, -8);
+        }
+        cache()->put($historyKey, $history, now()->addHours(24));
     }
 }

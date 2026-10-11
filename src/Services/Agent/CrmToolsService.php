@@ -349,6 +349,43 @@ class CrmToolsService
     }
 
     /**
+     * Delete or soft-delete a lead and clean up its associated pending tasks.
+     */
+    public function deleteLead(array $args): array
+    {
+        $leadRef = $args['lead_id'] ?? null;
+        if (! $leadRef) {
+            return ['error' => 'lead_id is required'];
+        }
+
+        $lead = is_numeric($leadRef)
+            ? Lead::find($leadRef)
+            : Lead::where('lead_id', $leadRef)->first();
+
+        if (! $lead) {
+            return ['error' => "Lead {$leadRef} not found"];
+        }
+
+        $leadId = $lead->lead_id;
+        $title = $lead->title;
+
+        // Clean up pending tasks attached to this lead
+        Task::where(function ($q) use ($lead) {
+            $q->where('taskable_type', Lead::class)
+                ->orWhere('taskable_type', (new Lead)->getMorphClass());
+        })->where('taskable_id', $lead->id)->delete();
+
+        $lead->delete();
+
+        return [
+            'success' => true,
+            'lead_id' => $leadId,
+            'title' => $title,
+            'status' => 'deleted',
+        ];
+    }
+
+    /**
      * Scan and synthesize lead & task alerts for the Heartbeat.
      */
     public function getLeadAlerts(): array

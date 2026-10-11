@@ -32,12 +32,22 @@ class AgentTelegramWebhookController extends Controller
                         "• *What's the status of our CRM today?*\n".
                         "• *Show me overdue tasks*\n".
                         "• *Give me a summary of lead LD-4504*\n".
-                        '• *Mark task [id] as completed*';
+                        '• *Delete lead LD-TFA-L1542*';
 
                     $telegram->sendMessage($chatId, $welcome);
                 } else {
-                    $response = $gemini->executeTurn($text);
+                    $historyKey = "crm_agent_history_{$chatId}";
+                    $history = cache()->get($historyKey, []);
+
+                    $response = $gemini->executeTurn($text, $history);
                     $telegram->sendMessage($chatId, $response);
+
+                    $history[] = ['role' => 'user', 'parts' => [['text' => $text]]];
+                    $history[] = ['role' => 'model', 'parts' => [['text' => $response]]];
+                    if (count($history) > 8) {
+                        $history = array_slice($history, -8);
+                    }
+                    cache()->put($historyKey, $history, now()->addHours(24));
                 }
             }
         } elseif (isset($update['callback_query'])) {
@@ -57,8 +67,18 @@ class AgentTelegramWebhookController extends Controller
                     default => "User clicked action: {$data}. Check CRM status accordingly.",
                 };
 
-                $response = $gemini->executeTurn($prompt);
+                $historyKey = "crm_agent_history_{$chatId}";
+                $history = cache()->get($historyKey, []);
+
+                $response = $gemini->executeTurn($prompt, $history);
                 $telegram->sendMessage($chatId, $response);
+
+                $history[] = ['role' => 'user', 'parts' => [['text' => $prompt]]];
+                $history[] = ['role' => 'model', 'parts' => [['text' => $response]]];
+                if (count($history) > 8) {
+                    $history = array_slice($history, -8);
+                }
+                cache()->put($historyKey, $history, now()->addHours(24));
             }
         }
 
