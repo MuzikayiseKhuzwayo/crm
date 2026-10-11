@@ -16,6 +16,7 @@ use VentureDrake\LaravelCrm\Models\Lead;
 use VentureDrake\LaravelCrm\Models\Organization;
 use VentureDrake\LaravelCrm\Models\Person;
 use VentureDrake\LaravelCrm\Models\Task;
+use VentureDrake\LaravelCrm\Services\TaskService;
 use VentureDrake\LaravelCrm\Traits\ClearsProperties;
 use VentureDrake\LaravelCrm\Traits\ResetsPaginationWhenPropsChanges;
 
@@ -127,7 +128,20 @@ class TaskIndex extends Component
 
     public function leads(): Collection
     {
-        return Lead::orderBy('title')->get();
+        $prefix = config('laravel-crm.db_table_prefix');
+
+        return Lead::whereIn('id', function ($query) use ($prefix) {
+            $query->select('taskable_id')
+                ->from($prefix.'tasks')
+                ->where('taskable_type', Lead::class)
+                ->whereNull('deleted_at');
+        })
+            ->when(! empty($this->lead_id), function ($query) {
+                $query->orWhereIn('id', (array) $this->lead_id);
+            })
+            ->select(['id', 'title'])
+            ->orderBy('title')
+            ->get();
     }
 
     public function duePresets(): array
@@ -445,7 +459,7 @@ class TaskIndex extends Component
         if ($task = Task::find($id)) {
             $this->authorize('update', $task);
 
-            $taskService = app(\VentureDrake\LaravelCrm\Services\TaskService::class);
+            $taskService = app(TaskService::class);
             $taskService->rebaseDeadline($task, $days);
 
             $this->dispatch('task-updated');

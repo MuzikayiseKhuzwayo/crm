@@ -5,12 +5,13 @@ namespace VentureDrake\LaravelCrm\Livewire\Calls;
 use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
 use Livewire\Component;
 use Mary\Traits\Toast;
+use VentureDrake\LaravelCrm\Livewire\Traits\HasGuestOptions;
 use VentureDrake\LaravelCrm\Models\Call;
 use VentureDrake\LaravelCrm\Models\Person;
 
 class CallItem extends Component
 {
-    use AuthorizesRequests, Toast;
+    use AuthorizesRequests, HasGuestOptions, Toast;
 
     public Call $call;
 
@@ -132,7 +133,9 @@ class CallItem extends Component
     public function render()
     {
         return view('laravel-crm::livewire.calls.call-item', [
-            'persons' => Person::get()->map(fn ($p) => ['id' => $p->id, 'name' => $p->name]),
+            'persons' => $this->editing
+                ? $this->resolveGuestOptions($this->call->callable, $this->guests)
+                : [],
         ]);
     }
 }

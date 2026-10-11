@@ -5,12 +5,13 @@ namespace VentureDrake\LaravelCrm\Livewire\Meetings;
 use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
 use Livewire\Component;
 use Mary\Traits\Toast;
+use VentureDrake\LaravelCrm\Livewire\Traits\HasGuestOptions;
 use VentureDrake\LaravelCrm\Models\Meeting;
 use VentureDrake\LaravelCrm\Models\Person;
 
 class MeetingItem extends Component
 {
-    use AuthorizesRequests, Toast;
+    use AuthorizesRequests, HasGuestOptions, Toast;
 
     public Meeting $meeting;
 
@@ -132,7 +133,9 @@ class MeetingItem extends Component
     public function render()
     {
         return view('laravel-crm::livewire.meetings.meeting-item', [
-            'persons' => Person::get()->map(fn ($p) => ['id' => $p->id, 'name' => $p->name]),
+            'persons' => $this->editing
+                ? $this->resolveGuestOptions($this->meeting->meetingable, $this->guests)
+                : [],
         ]);
     }
 }

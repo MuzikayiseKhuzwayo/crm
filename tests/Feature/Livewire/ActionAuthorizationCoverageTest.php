@@ -253,9 +253,12 @@ function actionAuthzMethods(): array
     // both roots -- which is how everything inherited from vendor/ (Livewire\Component,
     // WithPagination, Mary\Traits\Toast) is dropped.
     $relativeTo = function (?string $file) use ($livewireDirs): ?string {
+        $file = $file ? str_replace('\\', '/', $file) : null;
+
         foreach ($livewireDirs as $livewireDir) {
-            if ($file && str_starts_with($file, $livewireDir.'/')) {
-                return str_replace($livewireDir.'/', '', $file);
+            $dir = str_replace('\\', '/', $livewireDir).'/';
+            if ($file && str_starts_with($file, $dir)) {
+                return str_replace($dir, '', $file);
             }
         }
 

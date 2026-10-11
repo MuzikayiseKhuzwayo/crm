@@ -6,12 +6,13 @@ use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
 use Livewire\Attributes\On;
 use Livewire\Component;
 use Mary\Traits\Toast;
+use VentureDrake\LaravelCrm\Livewire\Traits\HasGuestOptions;
 use VentureDrake\LaravelCrm\Models\Call;
 use VentureDrake\LaravelCrm\Models\Person;
 
 class CallRelated extends Component
 {
-    use AuthorizesRequests, Toast;
+    use AuthorizesRequests, HasGuestOptions, Toast;
 
     public $model = null;
 
@@ -160,7 +161,7 @@ class CallRelated extends Component
 
         return view('laravel-crm::livewire.calls.call-related', [
             'users' => \VentureDrake\LaravelCrm\Http\Helpers\SelectOptions\usersOptions(false),
-            'persons' => Person::get()->map(fn ($p) => ['id' => $p->id, 'name' => $p->name]),
+            'persons' => $this->resolveGuestOptions($this->model, $this->guests),
         ]);
     }
 }
