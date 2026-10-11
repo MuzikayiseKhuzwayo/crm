@@ -256,6 +256,7 @@ class LaravelCrmImportLinkedinLeads extends Command
                         'lead_source_id' => $leadSource?->id,
                         'lead_status_id' => 1,
                         'user_owner_id' => $ownerId,
+                        'user_assigned_id' => $ownerId,
                         'user_created_id' => $ownerId,
                         'linkedin' => $linkedinUrl,
                         'pipeline_id' => $pipeline?->id,
