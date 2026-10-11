@@ -23,6 +23,9 @@ use Livewire\Livewire;
 use VentureDrake\LaravelCrm\Console\Commands\IssueApiToken;
 use VentureDrake\LaravelCrm\Console\LaravelCrmAddressTypes;
 use VentureDrake\LaravelCrm\Console\LaravelCrmAddUser;
+use VentureDrake\LaravelCrm\Console\LaravelCrmAgentHeartbeat;
+use VentureDrake\LaravelCrm\Console\LaravelCrmAgentTelegramPoll;
+use VentureDrake\LaravelCrm\Console\LaravelCrmAgentTelegramWebhook;
 use VentureDrake\LaravelCrm\Console\LaravelCrmArchive;
 use VentureDrake\LaravelCrm\Console\LaravelCrmContactTypes;
 use VentureDrake\LaravelCrm\Console\LaravelCrmDecrypt;
@@ -31,8 +34,8 @@ use VentureDrake\LaravelCrm\Console\LaravelCrmEncrypt;
 use VentureDrake\LaravelCrm\Console\LaravelCrmFields;
 use VentureDrake\LaravelCrm\Console\LaravelCrmGeneratePlaybookTasks;
 use VentureDrake\LaravelCrm\Console\LaravelCrmImportLinkedinLeads;
-use VentureDrake\LaravelCrm\Console\LaravelCrmInstall;
 use VentureDrake\LaravelCrm\Console\LaravelCrmInitRelayBaskets;
+use VentureDrake\LaravelCrm\Console\LaravelCrmInstall;
 use VentureDrake\LaravelCrm\Console\LaravelCrmLabels;
 use VentureDrake\LaravelCrm\Console\LaravelCrmLeadSources;
 use VentureDrake\LaravelCrm\Console\LaravelCrmMonitorCheck;
@@ -51,6 +54,7 @@ use VentureDrake\LaravelCrm\Console\LaravelCrmUpdate;
 use VentureDrake\LaravelCrm\Console\LaravelCrmUpgrade;
 use VentureDrake\LaravelCrm\Console\LaravelCrmV2;
 use VentureDrake\LaravelCrm\Console\LaravelCrmXero;
+use VentureDrake\LaravelCrm\Http\Controllers\AgentTelegramWebhookController;
 use VentureDrake\LaravelCrm\Http\Livewire\Components\LiveCall;
 use VentureDrake\LaravelCrm\Http\Livewire\Components\LiveFile;
 use VentureDrake\LaravelCrm\Http\Livewire\Components\LiveLunch;
@@ -922,6 +926,9 @@ class LaravelCrmServiceProvider extends ServiceProvider
                 LaravelCrmInitRelayBaskets::class,
                 LaravelCrmGeneratePlaybookTasks::class,
                 IssueApiToken::class,
+                LaravelCrmAgentHeartbeat::class,
+                LaravelCrmAgentTelegramPoll::class,
+                LaravelCrmAgentTelegramWebhook::class,
             ]);
 
         }
@@ -1224,6 +1231,13 @@ class LaravelCrmServiceProvider extends ServiceProvider
                     ->daily()
                     ->withoutOverlapping();
 
+                if (config('laravel-crm.agent.gemini_api_key')) {
+                    $schedule->command('laravelcrm:agent-heartbeat')
+                        ->name('laravelCrmAgentHeartbeat')
+                        ->everyFifteenMinutes()
+                        ->withoutOverlapping();
+                }
+
                 if (config('xero.clientId') && config('xero.clientSecret')) {
                     $schedule->command('xero:keep-alive')
                         ->name('laravelCrmXeroKeepAlive')
@@ -1429,6 +1443,12 @@ class LaravelCrmServiceProvider extends ServiceProvider
             if (config('laravel-crm.user_interface')) {
                 $this->loadRoutesFrom(__DIR__.'/Http/email-tracking-routes.php');
             }
+        });
+
+        // Agent Telegram webhook route — outside `web` middleware (no CSRF/session)
+        Route::group(['domain' => null, 'prefix' => null, 'middleware' => []], function () {
+            Route::post('p/agent/telegram/webhook', [AgentTelegramWebhookController::class, 'handle'])
+                ->name('laravel-crm.agent.telegram.webhook');
         });
 
         // Public portal routes (signed-URL quote/invoice views) — registered

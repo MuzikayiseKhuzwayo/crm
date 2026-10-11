@@ -337,4 +337,22 @@ return [
         'settings',
     ],
 
+    /*
+    |--------------------------------------------------------------------------
+    | CRM Ambient Agent Configuration
+    |--------------------------------------------------------------------------
+    |
+    | Configuration for the autonomous CRM agent (Gemini inference + Telegram gateway).
+    |
+    */
+
+    'agent' => [
+        'gemini_api_key' => env('GEMINI_API_KEY'),
+        'gemini_model' => env('GEMINI_MODEL', 'gemini-2.5-flash'),
+        'telegram_bot_token' => env('TELEGRAM_BOT_TOKEN'),
+        'telegram_admin_chat_id' => env('TELEGRAM_ADMIN_CHAT_ID'),
+        'heartbeat_interval_minutes' => env('CRM_AGENT_HEARTBEAT_INTERVAL', 15),
+        'stale_lead_days' => env('CRM_AGENT_STALE_LEAD_DAYS', 3),
+    ],
+
 ];
