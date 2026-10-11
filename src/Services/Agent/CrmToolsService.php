@@ -5,6 +5,8 @@ namespace VentureDrake\LaravelCrm\Services\Agent;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\DB;
 use VentureDrake\LaravelCrm\Models\Lead;
+use VentureDrake\LaravelCrm\Models\Organization;
+use VentureDrake\LaravelCrm\Models\Person;
 use VentureDrake\LaravelCrm\Models\PipelineStage;
 use VentureDrake\LaravelCrm\Models\Task;
 use VentureDrake\LaravelCrm\Services\LeadStatusAutomationService;
@@ -16,6 +18,45 @@ class CrmToolsService
     public function __construct(LeadStatusAutomationService $leadAutomation)
     {
         $this->leadAutomation = $leadAutomation;
+    }
+
+    /**
+     * Resolve a User instance or user record from name, email, or numeric ID.
+     */
+    public function resolveUser(string|int|null $userRef): ?object
+    {
+        if (! $userRef) {
+            return null;
+        }
+
+        $userModel = config('auth.providers.users.model') ?? 'App\Models\User';
+        if (class_exists($userModel)) {
+            if (is_numeric($userRef)) {
+                $user = $userModel::find($userRef);
+                if ($user) {
+                    return $user;
+                }
+            }
+            $user = $userModel::where('name', 'like', "%{$userRef}%")
+                ->orWhere('email', 'like', "%{$userRef}%")
+                ->first();
+            if ($user) {
+                return $user;
+            }
+        }
+
+        // Direct DB fallback
+        if (is_numeric($userRef)) {
+            $user = DB::table('users')->where('id', $userRef)->first();
+            if ($user) {
+                return $user;
+            }
+        }
+
+        return DB::table('users')
+            ->where('name', 'like', "%{$userRef}%")
+            ->orWhere('email', 'like', "%{$userRef}%")
+            ->first();
     }
 
     /**
@@ -65,6 +106,8 @@ class CrmToolsService
     public function getCrmOverview(): array
     {
         $totalLeads = Lead::count();
+        $totalPeople = Person::count();
+        $totalOrganizations = Organization::count();
         $totalTasks = Task::count();
         $pendingTasks = Task::whereNull('completed_at')->count();
         $overdueTasks = Task::whereNull('completed_at')
@@ -88,22 +131,37 @@ class CrmToolsService
             ->pluck('total', 'relay_status')
             ->toArray();
 
+        $usersBreakdown = DB::table('users')->get(['id', 'name', 'email'])->map(function ($u) {
+            return [
+                'id' => $u->id,
+                'name' => $u->name,
+                'email' => $u->email,
+                'leads_owned' => Lead::where('user_owner_id', $u->id)->count(),
+                'leads_assigned' => Lead::where('user_assigned_id', $u->id)->count(),
+                'people_owned' => Person::where('user_owner_id', $u->id)->count(),
+                'organizations_owned' => Organization::where('user_owner_id', $u->id)->count(),
+            ];
+        })->toArray();
+
         return [
             'total_leads' => $totalLeads,
+            'total_contacts' => $totalPeople,
+            'total_organizations' => $totalOrganizations,
             'total_tasks' => $totalTasks,
             'pending_tasks' => $pendingTasks,
             'overdue_tasks' => $overdueTasks,
             'leads_by_pipeline_stage' => $leadsByStage,
             'leads_by_relay_status' => $leadsByRelay,
+            'users_ownership_breakdown' => $usersBreakdown,
         ];
     }
 
     /**
-     * Query leads by keyword, stage, relay status, year, or date range.
+     * Query leads by keyword, owner, assigned user, stage, relay status, organization, person, year, date range, or tasks.
      */
     public function queryLeads(array $args): array
     {
-        $query = Lead::with(['person', 'organization', 'pipelineStage']);
+        $query = Lead::with(['person', 'organization', 'pipelineStage', 'ownerUser', 'assignedToUser']);
 
         if (! empty($args['search'])) {
             $search = $args['search'];
@@ -111,6 +169,7 @@ class CrmToolsService
                 $q->where('title', 'like', "%{$search}%")
                     ->orWhere('lead_id', 'like', "%{$search}%")
                     ->orWhere('description', 'like', "%{$search}%")
+                    ->orWhere('linkedin', 'like', "%{$search}%")
                     ->orWhereHas('person', function ($pq) use ($search) {
                         $pq->where('first_name', 'like', "%{$search}%")
                             ->orWhere('last_name', 'like', "%{$search}%");
@@ -118,6 +177,43 @@ class CrmToolsService
                     ->orWhereHas('organization', function ($oq) use ($search) {
                         $oq->where('name', 'like', "%{$search}%");
                     });
+            });
+        }
+
+        if (! empty($args['owner'])) {
+            $user = $this->resolveUser($args['owner']);
+            if ($user) {
+                $query->where('user_owner_id', $user->id);
+            } elseif (is_numeric($args['owner'])) {
+                $query->where('user_owner_id', (int) $args['owner']);
+            } else {
+                $query->whereRaw('0 = 1');
+            }
+        }
+
+        if (! empty($args['assigned_to'])) {
+            $user = $this->resolveUser($args['assigned_to']);
+            if ($user) {
+                $query->where('user_assigned_id', $user->id);
+            } elseif (is_numeric($args['assigned_to'])) {
+                $query->where('user_assigned_id', (int) $args['assigned_to']);
+            } else {
+                $query->whereRaw('0 = 1');
+            }
+        }
+
+        if (! empty($args['organization'])) {
+            $orgTerm = $args['organization'];
+            $query->whereHas('organization', function ($oq) use ($orgTerm) {
+                $oq->where('name', 'like', "%{$orgTerm}%");
+            });
+        }
+
+        if (! empty($args['person'])) {
+            $personTerm = $args['person'];
+            $query->whereHas('person', function ($pq) use ($personTerm) {
+                $pq->where('first_name', 'like', "%{$personTerm}%")
+                    ->orWhere('last_name', 'like', "%{$personTerm}%");
             });
         }
 
@@ -149,6 +245,18 @@ class CrmToolsService
             $query->where('created_at', '>=', Carbon::parse($args['created_after'])->startOfDay());
         }
 
+        if (! empty($args['has_tasks'])) {
+            if ($args['has_tasks'] === 'yes') {
+                $query->has('tasks');
+            } elseif ($args['has_tasks'] === 'no') {
+                $query->doesntHave('tasks');
+            } elseif ($args['has_tasks'] === 'overdue') {
+                $query->whereHas('tasks', function ($tq) {
+                    $tq->whereNull('completed_at')->whereNotNull('due_at')->where('due_at', '<', Carbon::now());
+                });
+            }
+        }
+
         $totalMatching = (clone $query)->count();
         $limit = min((int) ($args['limit'] ?? 10), 100);
         $results = $query->latest()->limit($limit)->get();
@@ -162,6 +270,8 @@ class CrmToolsService
                 'organization' => $lead->organization ? $lead->organization->name : null,
                 'stage' => $lead->pipelineStage ? $lead->pipelineStage->name : null,
                 'relay_status' => $lead->relay_status,
+                'owner' => $lead->ownerUser?->name,
+                'assigned_to' => $lead->assignedToUser?->name,
                 'linkedin' => $lead->linkedin,
                 'created_at' => $lead->created_at?->toIso8601String(),
             ];
@@ -171,6 +281,213 @@ class CrmToolsService
             'total_matching' => $totalMatching,
             'returned_count' => count($leads),
             'leads' => $leads,
+        ];
+    }
+
+    /**
+     * Query contacts (people) by keyword, owner, organization, year, date range, or lead association.
+     */
+    public function queryContacts(array $args): array
+    {
+        $query = Person::with(['organization', 'ownerUser', 'emails', 'phones']);
+
+        if (! empty($args['search'])) {
+            $search = $args['search'];
+            $query->where(function ($q) use ($search) {
+                $q->where('first_name', 'like', "%{$search}%")
+                    ->orWhere('last_name', 'like', "%{$search}%")
+                    ->orWhere('title', 'like', "%{$search}%")
+                    ->orWhere('linkedin', 'like', "%{$search}%")
+                    ->orWhereHas('organization', function ($oq) use ($search) {
+                        $oq->where('name', 'like', "%{$search}%");
+                    })
+                    ->orWhereHas('emails', function ($eq) use ($search) {
+                        $eq->where('address', 'like', "%{$search}%");
+                    })
+                    ->orWhereHas('phones', function ($pq) use ($search) {
+                        $pq->where('number', 'like', "%{$search}%");
+                    });
+            });
+        }
+
+        if (! empty($args['owner'])) {
+            $user = $this->resolveUser($args['owner']);
+            if ($user) {
+                $query->where('user_owner_id', $user->id);
+            } elseif (is_numeric($args['owner'])) {
+                $query->where('user_owner_id', (int) $args['owner']);
+            } else {
+                $query->whereRaw('0 = 1');
+            }
+        }
+
+        if (! empty($args['organization'])) {
+            $orgTerm = $args['organization'];
+            $query->whereHas('organization', function ($oq) use ($orgTerm) {
+                $oq->where('name', 'like', "%{$orgTerm}%");
+            });
+        }
+
+        if (! empty($args['year'])) {
+            $query->whereYear('created_at', (int) $args['year']);
+        }
+
+        if (! empty($args['created_before'])) {
+            $query->where('created_at', '<=', Carbon::parse($args['created_before'])->endOfDay());
+        }
+
+        if (! empty($args['created_after'])) {
+            $query->where('created_at', '>=', Carbon::parse($args['created_after'])->startOfDay());
+        }
+
+        if (! empty($args['has_leads'])) {
+            if ($args['has_leads'] === 'yes') {
+                $query->has('leads');
+            } elseif ($args['has_leads'] === 'no') {
+                $query->doesntHave('leads');
+            }
+        }
+
+        $totalMatching = (clone $query)->count();
+        $limit = min((int) ($args['limit'] ?? 10), 100);
+        $results = $query->latest()->limit($limit)->get();
+
+        $contacts = $results->map(function ($person) {
+            return [
+                'id' => $person->id,
+                'name' => $person->name,
+                'job_title' => $person->title,
+                'organization' => $person->organization?->name,
+                'owner' => $person->ownerUser?->name,
+                'email' => $person->getPrimaryEmail()?->address,
+                'phone' => $person->getPrimaryPhone()?->number,
+                'linkedin' => $person->linkedin,
+                'leads_count' => $person->leads()->count(),
+                'created_at' => $person->created_at?->toIso8601String(),
+            ];
+        })->toArray();
+
+        return [
+            'total_matching' => $totalMatching,
+            'returned_count' => count($contacts),
+            'contacts' => $contacts,
+        ];
+    }
+
+    /**
+     * Retrieve full details of a specific contact/person.
+     */
+    public function getContactDetails(array $args): array
+    {
+        $ref = $args['contact_id'] ?? $args['name'] ?? null;
+        if (! $ref) {
+            return ['error' => 'contact_id or name is required'];
+        }
+
+        $person = null;
+        if (is_numeric($ref)) {
+            $person = Person::find($ref);
+        }
+
+        if (! $person) {
+            $person = Person::where('first_name', 'like', "%{$ref}%")
+                ->orWhere('last_name', 'like', "%{$ref}%")
+                ->orWhereRaw("CONCAT(first_name, ' ', last_name) LIKE ?", ["%{$ref}%"])
+                ->first();
+        }
+
+        if (! $person) {
+            return ['error' => "Contact {$ref} not found."];
+        }
+
+        $person->load(['organization', 'ownerUser', 'emails', 'phones', 'addresses', 'leads.pipelineStage']);
+
+        return [
+            'id' => $person->id,
+            'name' => $person->name,
+            'job_title' => $person->title,
+            'organization' => $person->organization?->name,
+            'owner' => $person->ownerUser?->name,
+            'emails' => $person->emails->pluck('address')->toArray(),
+            'phones' => $person->phones->pluck('number')->toArray(),
+            'addresses' => $person->addresses->map(fn ($a) => $a->address)->toArray(),
+            'linkedin' => $person->linkedin,
+            'leads' => $person->leads->map(function ($l) {
+                return [
+                    'id' => $l->id,
+                    'lead_id' => $l->lead_id,
+                    'title' => $l->title,
+                    'stage' => $l->pipelineStage?->name,
+                    'relay_status' => $l->relay_status,
+                ];
+            })->toArray(),
+            'created_at' => $person->created_at?->toIso8601String(),
+        ];
+    }
+
+    /**
+     * Query organizations by keyword, owner, year, date range.
+     */
+    public function queryOrganizations(array $args): array
+    {
+        $query = Organization::with(['ownerUser']);
+
+        if (! empty($args['search'])) {
+            $search = $args['search'];
+            $query->where(function ($q) use ($search) {
+                $q->where('name', 'like', "%{$search}%")
+                    ->orWhere('domain', 'like', "%{$search}%")
+                    ->orWhere('website_url', 'like', "%{$search}%")
+                    ->orWhere('linkedin', 'like', "%{$search}%")
+                    ->orWhere('description', 'like', "%{$search}%");
+            });
+        }
+
+        if (! empty($args['owner'])) {
+            $user = $this->resolveUser($args['owner']);
+            if ($user) {
+                $query->where('user_owner_id', $user->id);
+            } elseif (is_numeric($args['owner'])) {
+                $query->where('user_owner_id', (int) $args['owner']);
+            } else {
+                $query->whereRaw('0 = 1');
+            }
+        }
+
+        if (! empty($args['year'])) {
+            $query->whereYear('created_at', (int) $args['year']);
+        }
+
+        if (! empty($args['created_before'])) {
+            $query->where('created_at', '<=', Carbon::parse($args['created_before'])->endOfDay());
+        }
+
+        if (! empty($args['created_after'])) {
+            $query->where('created_at', '>=', Carbon::parse($args['created_after'])->startOfDay());
+        }
+
+        $totalMatching = (clone $query)->count();
+        $limit = min((int) ($args['limit'] ?? 10), 100);
+        $results = $query->latest()->limit($limit)->get();
+
+        $orgs = $results->map(function ($org) {
+            return [
+                'id' => $org->id,
+                'name' => $org->name,
+                'owner' => $org->ownerUser?->name,
+                'domain' => $org->domain,
+                'website' => $org->website_url,
+                'linkedin' => $org->linkedin,
+                'people_count' => $org->people()->count(),
+                'leads_count' => Lead::where('organization_id', $org->id)->count(),
+                'created_at' => $org->created_at?->toIso8601String(),
+            ];
+        })->toArray();
+
+        return [
+            'total_matching' => $totalMatching,
+            'returned_count' => count($orgs),
+            'organizations' => $orgs,
         ];
     }
 
@@ -190,7 +507,7 @@ class CrmToolsService
             return ['error' => "Lead {$idOrRef} not found"];
         }
 
-        $lead->load(['person.emails', 'person.phones', 'organization', 'pipelineStage']);
+        $lead->load(['person.emails', 'person.phones', 'organization', 'pipelineStage', 'ownerUser', 'assignedToUser']);
 
         $tasks = Task::where(function ($q) use ($lead) {
             $q->where('taskable_type', Lead::class)->where('taskable_id', $lead->id);
@@ -211,6 +528,8 @@ class CrmToolsService
             'description' => $lead->description,
             'stage' => $lead->pipelineStage ? $lead->pipelineStage->name : null,
             'relay_status' => $lead->relay_status,
+            'owner' => $lead->ownerUser?->name,
+            'assigned_to' => $lead->assignedToUser?->name,
             'linkedin' => $lead->linkedin,
             'person' => $lead->person ? [
                 'name' => $lead->person->name,
@@ -223,11 +542,11 @@ class CrmToolsService
     }
 
     /**
-     * Query tasks by filter (overdue, due_today, pending, completed, all), year, or date range.
+     * Query tasks by filter (overdue, due_today, pending, completed, all), owner, assigned user, year, or date range.
      */
     public function queryTasks(array $args): array
     {
-        $query = Task::query();
+        $query = Task::with(['ownerUser', 'assignedToUser']);
 
         $filter = $args['filter'] ?? null;
 
@@ -242,6 +561,36 @@ class CrmToolsService
             $query->whereNull('completed_at');
         } elseif ($filter === 'completed') {
             $query->whereNotNull('completed_at');
+        }
+
+        if (! empty($args['search'])) {
+            $search = $args['search'];
+            $query->where(function ($q) use ($search) {
+                $q->where('name', 'like', "%{$search}%")
+                    ->orWhere('description', 'like', "%{$search}%");
+            });
+        }
+
+        if (! empty($args['owner'])) {
+            $user = $this->resolveUser($args['owner']);
+            if ($user) {
+                $query->where('user_owner_id', $user->id);
+            } elseif (is_numeric($args['owner'])) {
+                $query->where('user_owner_id', (int) $args['owner']);
+            } else {
+                $query->whereRaw('0 = 1');
+            }
+        }
+
+        if (! empty($args['assigned_to'])) {
+            $user = $this->resolveUser($args['assigned_to']);
+            if ($user) {
+                $query->where('user_assigned_id', $user->id);
+            } elseif (is_numeric($args['assigned_to'])) {
+                $query->where('user_assigned_id', (int) $args['assigned_to']);
+            } else {
+                $query->whereRaw('0 = 1');
+            }
         }
 
         if (! empty($args['year'])) {
@@ -289,6 +638,8 @@ class CrmToolsService
                 'completed' => (bool) $task->completed_at,
                 'completed_at' => $task->completed_at?->toIso8601String(),
                 'created_at' => $task->created_at?->toIso8601String(),
+                'owner' => $task->ownerUser?->name,
+                'assigned_to' => $task->assignedToUser?->name,
                 'linked_lead' => $linkedLead,
             ];
         })->toArray();

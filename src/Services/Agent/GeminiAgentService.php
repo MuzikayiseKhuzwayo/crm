@@ -155,6 +155,9 @@ class GeminiAgentService
                 'get_crm_overview' => $this->tools->getCrmOverview(),
                 'query_leads' => $this->tools->queryLeads($args),
                 'get_lead_details' => $this->tools->getLeadDetails($args),
+                'query_contacts' => $this->tools->queryContacts($args),
+                'get_contact_details' => $this->tools->getContactDetails($args),
+                'query_organizations' => $this->tools->queryOrganizations($args),
                 'query_tasks' => $this->tools->queryTasks($args),
                 'create_task' => $this->tools->createTask($args),
                 'complete_task' => $this->tools->completeTask($args),
@@ -184,12 +187,14 @@ Your job is to manage leads, monitor pipeline velocity, keep tasks on track, and
 DIRECTIVES & RULES:
 1. Be concise, executive, and decisive. Avoid conversational fluff like "Certainly!" or "How can I help you today?".
 2. You interact primarily via Telegram. Format messages using clean, readable Markdown (bullet points, bold headers, emoji accents). Avoid unescaped special characters that break markdown.
-3. When asked to inspect or manage leads/tasks, always call the relevant CRM tools. Do not hallucinate CRM IDs or task states.
+3. When asked to inspect or manage leads/tasks/contacts, always call the relevant CRM tools. Do not hallucinate CRM IDs or states.
 4. When reporting lead alerts or overdue tasks, provide the Lead ID (e.g. LD-1042 or TFA-L1042), Person/Company name, and clear actionable recommendations.
 5. If the user asks you to create a task, complete a task, or update a lead, execute the tool immediately and confirm with the updated status.
-6. If the user asks to delete or remove a lead, invoke the delete_lead or delete_leads tool directly and report what was deleted.
-7. DATE & YEAR FILTERING: You CAN filter and search leads and tasks by creation/completion year (e.g. year: 2023), date ranges (created_before, created_after), pipeline stage, or status.
-8. CLEANUP OF OLD / SEED DATA: If Muzi asks to find or delete old leads or old tasks from 2023 (or any year/criteria), use query_leads / query_tasks with `year: 2023` to inspect them, and `delete_leads` / `delete_tasks` (specifying `year: 2023`) to clean them up. Never claim you cannot filter by year.
+6. If the user asks to delete or remove records, invoke the deletion tools directly and report what was deleted.
+7. OWNERSHIP & TEAMS: The CRM has multiple users/owners (e.g. Muzi Khuzwayo, Dubstrata, Techfusion Alchemy). You have full capabilities to search, filter, and inspect records by owner or assigned user across leads, contacts, organizations, and tasks using the `owner` parameter (e.g. `owner: "Dubstrata"`).
+8. CONTACTS & ORGANIZATIONS: You have dedicated tools `query_contacts` and `get_contact_details` to search contacts/people by owner, name, company, or email, as well as `query_organizations` to search accounts and companies. Never claim you cannot search contacts or filter by owner.
+9. COMPREHENSIVE FILTERING: You can filter by owner, assigned user, pipeline stage, relay status, company, person, date ranges, creation year, task presence, and keywords.
+10. CLEANUP OF OLD / SEED DATA: If Muzi asks to find or delete old leads or old tasks from 2023 (or any year/criteria), use query_leads / query_tasks with `year: 2023` to inspect them, and `delete_leads` / `delete_tasks` (specifying `year: 2023`) to clean them up.
 PROMPT;
     }
 
@@ -201,7 +206,7 @@ PROMPT;
         return [
             [
                 'name' => 'get_crm_overview',
-                'description' => 'Retrieve aggregate counts of leads, pending tasks, overdue tasks, leads by stage, and relay status.',
+                'description' => 'Retrieve aggregate counts of leads, contacts, organizations, pending/overdue tasks, pipeline stages, relay status, and user ownership breakdown.',
                 'parameters' => [
                     'type' => 'OBJECT',
                     'properties' => (object) [],
@@ -209,38 +214,89 @@ PROMPT;
             ],
             [
                 'name' => 'query_leads',
-                'description' => 'Search leads by keyword, pipeline stage name or ID, relay status, creation year (e.g. 2023), or date ranges.',
+                'description' => 'Search leads by keyword, owner, assigned user, pipeline stage, relay status, organization, person, creation year, date ranges, or task presence.',
                 'parameters' => [
                     'type' => 'OBJECT',
                     'properties' => [
-                        'search' => ['type' => 'STRING', 'description' => 'Free text search across title, person, organization, lead_id'],
+                        'search' => ['type' => 'STRING', 'description' => 'Free text search across title, person, organization, lead_id, linkedin'],
+                        'owner' => ['type' => 'STRING', 'description' => 'Filter leads by owner user name, email, or user ID (e.g. "Dubstrata", "Muzi Khuzwayo", 8)'],
+                        'assigned_to' => ['type' => 'STRING', 'description' => 'Filter leads by assigned user name, email, or user ID'],
                         'stage' => ['type' => 'STRING', 'description' => 'Pipeline stage name or stage ID filter'],
                         'relay_status' => ['type' => 'STRING', 'description' => 'Relay status filter: active, standby, completed'],
+                        'organization' => ['type' => 'STRING', 'description' => 'Filter leads by organization/company name'],
+                        'person' => ['type' => 'STRING', 'description' => 'Filter leads by contact person name'],
                         'year' => ['type' => 'INTEGER', 'description' => 'Filter leads by creation year (e.g. 2023)'],
-                        'created_before' => ['type' => 'STRING', 'description' => 'Filter leads created on or before this date (YYYY-MM-DD)'],
-                        'created_after' => ['type' => 'STRING', 'description' => 'Filter leads created on or after this date (YYYY-MM-DD)'],
+                        'created_before' => ['type' => 'STRING', 'description' => 'Filter leads created on or before date (YYYY-MM-DD)'],
+                        'created_after' => ['type' => 'STRING', 'description' => 'Filter leads created on or after date (YYYY-MM-DD)'],
+                        'has_tasks' => ['type' => 'STRING', 'description' => 'Filter by tasks: "yes", "no", or "overdue"'],
                         'limit' => ['type' => 'INTEGER', 'description' => 'Maximum number of records to return (default 10, max 100)'],
                     ],
                 ],
             ],
             [
                 'name' => 'get_lead_details',
-                'description' => 'Get comprehensive details for a specific lead including contacts, notes, and pending tasks.',
+                'description' => 'Get comprehensive details for a specific lead including contacts, notes, owner, and pending tasks.',
                 'parameters' => [
                     'type' => 'OBJECT',
                     'properties' => [
-                        'lead_id' => ['type' => 'STRING', 'description' => 'The lead ID (e.g. LD-4504) or numeric ID'],
+                        'lead_id' => ['type' => 'STRING', 'description' => 'The lead ID (e.g. LD-4504, TFA-L4118) or numeric ID'],
                     ],
                     'required' => ['lead_id'],
                 ],
             ],
             [
+                'name' => 'query_contacts',
+                'description' => 'Search and filter CRM contacts/people by keyword, owner, company/organization, year, date ranges, or lead presence.',
+                'parameters' => [
+                    'type' => 'OBJECT',
+                    'properties' => [
+                        'search' => ['type' => 'STRING', 'description' => 'Free text search across name, email, phone, job title, linkedin'],
+                        'owner' => ['type' => 'STRING', 'description' => 'Filter contacts by owner user name, email, or user ID (e.g. "Dubstrata", "Muzi Khuzwayo", 8)'],
+                        'organization' => ['type' => 'STRING', 'description' => 'Filter contacts by company/organization name'],
+                        'year' => ['type' => 'INTEGER', 'description' => 'Filter contacts by creation year'],
+                        'created_before' => ['type' => 'STRING', 'description' => 'Filter contacts created on or before date (YYYY-MM-DD)'],
+                        'created_after' => ['type' => 'STRING', 'description' => 'Filter contacts created on or after date (YYYY-MM-DD)'],
+                        'has_leads' => ['type' => 'STRING', 'description' => 'Filter contacts by whether they have linked leads: "yes" or "no"'],
+                        'limit' => ['type' => 'INTEGER', 'description' => 'Maximum number of records to return (default 10, max 100)'],
+                    ],
+                ],
+            ],
+            [
+                'name' => 'get_contact_details',
+                'description' => 'Get comprehensive details for a specific contact/person including emails, phones, addresses, company, owner, and linked leads.',
+                'parameters' => [
+                    'type' => 'OBJECT',
+                    'properties' => [
+                        'contact_id' => ['type' => 'STRING', 'description' => 'Contact ID or contact full name'],
+                    ],
+                    'required' => ['contact_id'],
+                ],
+            ],
+            [
+                'name' => 'query_organizations',
+                'description' => 'Search and filter CRM organizations/companies by keyword, owner, domain, or date ranges.',
+                'parameters' => [
+                    'type' => 'OBJECT',
+                    'properties' => [
+                        'search' => ['type' => 'STRING', 'description' => 'Free text search across organization name, domain, website, linkedin'],
+                        'owner' => ['type' => 'STRING', 'description' => 'Filter organizations by owner user name, email, or user ID (e.g. "Dubstrata")'],
+                        'year' => ['type' => 'INTEGER', 'description' => 'Filter organizations by creation year'],
+                        'created_before' => ['type' => 'STRING', 'description' => 'Filter organizations created on or before date (YYYY-MM-DD)'],
+                        'created_after' => ['type' => 'STRING', 'description' => 'Filter organizations created on or after date (YYYY-MM-DD)'],
+                        'limit' => ['type' => 'INTEGER', 'description' => 'Maximum number of records to return (default 10, max 100)'],
+                    ],
+                ],
+            ],
+            [
                 'name' => 'query_tasks',
-                'description' => 'Query CRM tasks filtered by overdue, due_today, pending, or completed, creation/completion year (e.g. 2023), date range, or lead.',
+                'description' => 'Query CRM tasks filtered by status (overdue, due_today, pending, completed), owner, assigned user, year, date range, lead, or keyword.',
                 'parameters' => [
                     'type' => 'OBJECT',
                     'properties' => [
                         'filter' => ['type' => 'STRING', 'description' => 'Filter type: overdue, due_today, pending, completed, or all'],
+                        'search' => ['type' => 'STRING', 'description' => 'Search by task title or description'],
+                        'owner' => ['type' => 'STRING', 'description' => 'Filter tasks by owner user name, email, or user ID (e.g. "Dubstrata")'],
+                        'assigned_to' => ['type' => 'STRING', 'description' => 'Filter tasks by assigned user name, email, or user ID'],
                         'year' => ['type' => 'INTEGER', 'description' => 'Filter tasks by creation or completion year (e.g. 2023)'],
                         'created_before' => ['type' => 'STRING', 'description' => 'Filter tasks created before date (YYYY-MM-DD)'],
                         'created_after' => ['type' => 'STRING', 'description' => 'Filter tasks created after date (YYYY-MM-DD)'],
