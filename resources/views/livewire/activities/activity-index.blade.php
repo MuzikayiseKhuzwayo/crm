@@ -2,7 +2,7 @@
     <x-mary-card separator>
         @foreach($this->activities as $activity)
             @php
-                $userName = $activity->causeable->name ?? $activity->recordable?->createdByUser?->name ?? null;
+                $userName = ($activity->causeable_type && $activity->causeable) ? $activity->causeable->name : ($activity->recordable?->createdByUser?->name ?? null);
                 $activityType = $activity->recordable_type ? strtolower(class_basename($activity->recordable_type)) : null;
                 $isTaskActivity = ($activity->timelineable instanceof \VentureDrake\LaravelCrm\Models\Task 
                     || $activity->timelineable_type === \VentureDrake\LaravelCrm\Models\Task::class 

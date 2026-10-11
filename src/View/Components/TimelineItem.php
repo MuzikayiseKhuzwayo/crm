@@ -5,6 +5,7 @@ namespace VentureDrake\LaravelCrm\View\Components;
 use Closure;
 use Illuminate\Contracts\View\View;
 use Illuminate\View\Component;
+use VentureDrake\LaravelCrm\Models\Task;
 
 class TimelineItem extends Component
 {
@@ -49,7 +50,7 @@ class TimelineItem extends Component
             return null;
         }
 
-        if ($this->activity->recordable && method_exists($this->activity->recordable, 'noteable') && $this->activity->recordable->noteable instanceof \VentureDrake\LaravelCrm\Models\Task) {
+        if ($this->activity->recordable && method_exists($this->activity->recordable, 'noteable') && $this->activity->recordable->noteable instanceof Task) {
             return $this->activity->recordable->noteable;
         }
 
@@ -93,7 +94,7 @@ class TimelineItem extends Component
             return null;
         }
 
-        if ($this->activity->causeable && method_exists($this->activity->causeable, 'name')) {
+        if ($this->activity->causeable_type && $this->activity->causeable && method_exists($this->activity->causeable, 'name')) {
             return $this->activity->causeable;
         }
 

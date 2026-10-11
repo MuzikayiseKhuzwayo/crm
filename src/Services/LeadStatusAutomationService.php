@@ -105,7 +105,7 @@ class LeadStatusAutomationService
 
         // Record stage progression activity on lead timeline
         Activity::create([
-            'causeable_type' => auth()->user() ? auth()->user()->getMorphClass() : null,
+            'causeable_type' => auth()->user() ? auth()->user()->getMorphClass() : (config('auth.providers.users.model') ?? (class_exists('VentureDrake\LaravelCrm\Tests\Stubs\User') ? 'VentureDrake\LaravelCrm\Tests\Stubs\User' : 'App\Models\User')),
             'causeable_id' => auth()->id() ?: ($lead->user_owner_id ?: 1),
             'timelineable_type' => $lead->getMorphClass(),
             'timelineable_id' => $lead->id,

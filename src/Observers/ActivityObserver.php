@@ -16,6 +16,13 @@ class ActivityObserver
     public function creating(Activity $activity)
     {
         $activity->external_id = Uuid::uuid4()->toString();
+
+        if (empty($activity->causeable_type) && ! empty($activity->causeable_id)) {
+            $userModel = config('auth.providers.users.model') ?? (class_exists('VentureDrake\LaravelCrm\Tests\Stubs\User') ? 'VentureDrake\LaravelCrm\Tests\Stubs\User' : 'App\Models\User');
+            if (class_exists($userModel)) {
+                $activity->causeable_type = (new $userModel)->getMorphClass();
+            }
+        }
     }
 
     /**

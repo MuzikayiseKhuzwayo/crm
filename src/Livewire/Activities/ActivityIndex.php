@@ -62,7 +62,7 @@ class ActivityIndex extends Component
         }
 
         if (count($activityIds) > 0) {
-            return Activity::whereIn('id', $activityIds)->latest()->get();
+            return Activity::with(['causeable', 'timelineable', 'recordable'])->whereIn('id', $activityIds)->latest()->get();
         }
 
         return [];

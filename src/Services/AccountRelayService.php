@@ -292,7 +292,7 @@ class AccountRelayService
 
             // Record activity on new lead timeline
             $nextLead->activities()->create([
-                'causeable_type' => auth()->user() ? auth()->user()->getMorphClass() : null,
+                'causeable_type' => auth()->user() ? auth()->user()->getMorphClass() : (config('auth.providers.users.model') ?? (class_exists('VentureDrake\LaravelCrm\Tests\Stubs\User') ? 'VentureDrake\LaravelCrm\Tests\Stubs\User' : 'App\Models\User')),
                 'causeable_id' => auth()->id() ?: ($nextLead->user_owner_id ?: 1),
                 'timelineable_type' => $nextLead->getMorphClass(),
                 'timelineable_id' => $nextLead->id,

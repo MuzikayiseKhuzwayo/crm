@@ -357,7 +357,7 @@
                         <div class="min-w-0 flex-1">
                             <div class="text-sm space-x-1">
                                 {{-- User Link --}}
-                                @if($activity->causeable)
+                                @if($activity->causeable_type && $activity->causeable)
                                     <a href="{{ route('laravel-crm.users.show', $activity->causeable) }}" class="font-bold link link-hover link-primary">
                                         {{ $activity->causeable->name }}
                                     </a>

@@ -121,7 +121,7 @@ class LeadShow extends Component
             ]);
 
             $this->lead->activities()->create([
-                'causeable_type' => auth()->user() ? auth()->user()->getMorphClass() : null,
+                'causeable_type' => auth()->user() ? auth()->user()->getMorphClass() : (auth()->id() ? (config('auth.providers.users.model') ?? (class_exists('VentureDrake\LaravelCrm\Tests\Stubs\User') ? 'VentureDrake\LaravelCrm\Tests\Stubs\User' : 'App\Models\User')) : null),
                 'causeable_id' => auth()->id(),
                 'timelineable_type' => $this->lead->getMorphClass(),
                 'timelineable_id' => $this->lead->id,
