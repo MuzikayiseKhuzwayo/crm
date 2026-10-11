@@ -19,6 +19,47 @@ class CrmToolsService
     }
 
     /**
+     * Resolve a Lead instance flexibly from lead_id (e.g. LD-TFA-L1542, TFA-L1542, 1542), ID, or external_id.
+     */
+    public function resolveLead(string|int|null $leadRef): ?Lead
+    {
+        if (! $leadRef) {
+            return null;
+        }
+
+        if (is_numeric($leadRef)) {
+            $lead = Lead::find($leadRef);
+            if ($lead) {
+                return $lead;
+            }
+        }
+
+        // Direct match on lead_id or external_id
+        $lead = Lead::where('lead_id', $leadRef)->orWhere('external_id', $leadRef)->first();
+        if ($lead) {
+            return $lead;
+        }
+
+        // Match with stripped LD- prefix (e.g. LD-TFA-L1542 -> TFA-L1542)
+        $stripped = preg_replace('/^LD-/i', '', (string) $leadRef);
+        $lead = Lead::where('lead_id', $stripped)->first();
+        if ($lead) {
+            return $lead;
+        }
+
+        // Match on numeric portion (e.g. 1542)
+        if (preg_match('/(\d+)/', (string) $leadRef, $matches)) {
+            $number = (int) $matches[1];
+            $lead = Lead::where('number', $number)->first();
+            if ($lead) {
+                return $lead;
+            }
+        }
+
+        return null;
+    }
+
+    /**
      * Get CRM overview metrics.
      */
     public function getCrmOverview(): array
@@ -124,9 +165,7 @@ class CrmToolsService
             return ['error' => 'lead_id is required'];
         }
 
-        $lead = is_numeric($idOrRef)
-            ? Lead::find($idOrRef)
-            : Lead::where('lead_id', $idOrRef)->orWhere('external_id', $idOrRef)->first();
+        $lead = $this->resolveLead($idOrRef);
 
         if (! $lead) {
             return ['error' => "Lead {$idOrRef} not found"];
@@ -232,9 +271,7 @@ class CrmToolsService
         $taskableId = null;
 
         if (! empty($args['lead_id'])) {
-            $lead = is_numeric($args['lead_id'])
-                ? Lead::find($args['lead_id'])
-                : Lead::where('lead_id', $args['lead_id'])->first();
+            $lead = $this->resolveLead($args['lead_id']);
 
             if ($lead) {
                 $taskableType = Lead::class;
@@ -308,9 +345,7 @@ class CrmToolsService
             return ['error' => 'lead_id is required'];
         }
 
-        $lead = is_numeric($leadRef)
-            ? Lead::find($leadRef)
-            : Lead::where('lead_id', $leadRef)->first();
+        $lead = $this->resolveLead($leadRef);
 
         if (! $lead) {
             return ['error' => "Lead {$leadRef} not found"];
@@ -358,9 +393,7 @@ class CrmToolsService
             return ['error' => 'lead_id is required'];
         }
 
-        $lead = is_numeric($leadRef)
-            ? Lead::find($leadRef)
-            : Lead::where('lead_id', $leadRef)->first();
+        $lead = $this->resolveLead($leadRef);
 
         if (! $lead) {
             return ['error' => "Lead {$leadRef} not found"];
