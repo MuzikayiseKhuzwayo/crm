@@ -103,7 +103,7 @@ class CrmToolsService
      */
     public function queryLeads(array $args): array
     {
-        $query = Lead::with(['person', 'organisation', 'pipelineStage']);
+        $query = Lead::with(['person', 'organization', 'pipelineStage']);
 
         if (! empty($args['search'])) {
             $search = $args['search'];
@@ -115,7 +115,7 @@ class CrmToolsService
                         $pq->where('first_name', 'like', "%{$search}%")
                             ->orWhere('last_name', 'like', "%{$search}%");
                     })
-                    ->orWhereHas('organisation', function ($oq) use ($search) {
+                    ->orWhereHas('organization', function ($oq) use ($search) {
                         $oq->where('name', 'like', "%{$search}%");
                     });
             });
@@ -159,7 +159,7 @@ class CrmToolsService
                 'lead_id' => $lead->lead_id,
                 'title' => $lead->title,
                 'person' => $lead->person ? $lead->person->name : null,
-                'organization' => $lead->organisation ? $lead->organisation->name : null,
+                'organization' => $lead->organization ? $lead->organization->name : null,
                 'stage' => $lead->pipelineStage ? $lead->pipelineStage->name : null,
                 'relay_status' => $lead->relay_status,
                 'linkedin' => $lead->linkedin,
@@ -190,7 +190,7 @@ class CrmToolsService
             return ['error' => "Lead {$idOrRef} not found"];
         }
 
-        $lead->load(['person.emails', 'person.phones', 'organisation', 'pipelineStage']);
+        $lead->load(['person.emails', 'person.phones', 'organization', 'pipelineStage']);
 
         $tasks = Task::where(function ($q) use ($lead) {
             $q->where('taskable_type', Lead::class)->where('taskable_id', $lead->id);
@@ -217,7 +217,7 @@ class CrmToolsService
                 'emails' => $lead->person->emails->pluck('address')->toArray(),
                 'phones' => $lead->person->phones->pluck('number')->toArray(),
             ] : null,
-            'organization' => $lead->organisation ? $lead->organisation->name : null,
+            'organization' => $lead->organization ? $lead->organization->name : null,
             'tasks' => $tasks->toArray(),
         ];
     }
