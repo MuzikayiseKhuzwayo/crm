@@ -160,6 +160,8 @@ class GeminiAgentService
                 'complete_task' => $this->tools->completeTask($args),
                 'update_lead_stage' => $this->tools->updateLeadStage($args),
                 'delete_lead' => $this->tools->deleteLead($args),
+                'delete_leads' => $this->tools->deleteLeads($args),
+                'delete_tasks' => $this->tools->deleteTasks($args),
                 'get_lead_alerts' => $this->tools->getLeadAlerts(),
                 default => ['error' => "Unknown tool: {$name}"],
             };
@@ -183,9 +185,11 @@ DIRECTIVES & RULES:
 1. Be concise, executive, and decisive. Avoid conversational fluff like "Certainly!" or "How can I help you today?".
 2. You interact primarily via Telegram. Format messages using clean, readable Markdown (bullet points, bold headers, emoji accents). Avoid unescaped special characters that break markdown.
 3. When asked to inspect or manage leads/tasks, always call the relevant CRM tools. Do not hallucinate CRM IDs or task states.
-4. When reporting lead alerts or overdue tasks, provide the Lead ID (e.g. LD-1042), Person/Company name, and clear actionable recommendations.
+4. When reporting lead alerts or overdue tasks, provide the Lead ID (e.g. LD-1042 or TFA-L1042), Person/Company name, and clear actionable recommendations.
 5. If the user asks you to create a task, complete a task, or update a lead, execute the tool immediately and confirm with the updated status.
-6. If the user explicitly asks to delete, remove, or drop a lead (or confirms deletion), invoke the delete_lead tool directly and report what was deleted.
+6. If the user asks to delete or remove a lead, invoke the delete_lead or delete_leads tool directly and report what was deleted.
+7. DATE & YEAR FILTERING: You CAN filter and search leads and tasks by creation/completion year (e.g. year: 2023), date ranges (created_before, created_after), pipeline stage, or status.
+8. CLEANUP OF OLD / SEED DATA: If Muzi asks to find or delete old leads or old tasks from 2023 (or any year/criteria), use query_leads / query_tasks with `year: 2023` to inspect them, and `delete_leads` / `delete_tasks` (specifying `year: 2023`) to clean them up. Never claim you cannot filter by year.
 PROMPT;
     }
 
@@ -205,14 +209,17 @@ PROMPT;
             ],
             [
                 'name' => 'query_leads',
-                'description' => 'Search leads by keyword, pipeline stage name or ID, or relay status.',
+                'description' => 'Search leads by keyword, pipeline stage name or ID, relay status, creation year (e.g. 2023), or date ranges.',
                 'parameters' => [
                     'type' => 'OBJECT',
                     'properties' => [
                         'search' => ['type' => 'STRING', 'description' => 'Free text search across title, person, organization, lead_id'],
                         'stage' => ['type' => 'STRING', 'description' => 'Pipeline stage name or stage ID filter'],
                         'relay_status' => ['type' => 'STRING', 'description' => 'Relay status filter: active, standby, completed'],
-                        'limit' => ['type' => 'INTEGER', 'description' => 'Maximum number of records to return (default 5, max 20)'],
+                        'year' => ['type' => 'INTEGER', 'description' => 'Filter leads by creation year (e.g. 2023)'],
+                        'created_before' => ['type' => 'STRING', 'description' => 'Filter leads created on or before this date (YYYY-MM-DD)'],
+                        'created_after' => ['type' => 'STRING', 'description' => 'Filter leads created on or after this date (YYYY-MM-DD)'],
+                        'limit' => ['type' => 'INTEGER', 'description' => 'Maximum number of records to return (default 10, max 100)'],
                     ],
                 ],
             ],
@@ -229,13 +236,16 @@ PROMPT;
             ],
             [
                 'name' => 'query_tasks',
-                'description' => 'Query CRM tasks filtered by overdue, due_today, pending, or completed, optionally for a specific lead.',
+                'description' => 'Query CRM tasks filtered by overdue, due_today, pending, or completed, creation/completion year (e.g. 2023), date range, or lead.',
                 'parameters' => [
                     'type' => 'OBJECT',
                     'properties' => [
-                        'filter' => ['type' => 'STRING', 'description' => 'Filter type: overdue, due_today, pending, completed'],
+                        'filter' => ['type' => 'STRING', 'description' => 'Filter type: overdue, due_today, pending, completed, or all'],
+                        'year' => ['type' => 'INTEGER', 'description' => 'Filter tasks by creation or completion year (e.g. 2023)'],
+                        'created_before' => ['type' => 'STRING', 'description' => 'Filter tasks created before date (YYYY-MM-DD)'],
+                        'created_after' => ['type' => 'STRING', 'description' => 'Filter tasks created after date (YYYY-MM-DD)'],
                         'lead_id' => ['type' => 'STRING', 'description' => 'Optional lead reference to filter tasks by'],
-                        'limit' => ['type' => 'INTEGER', 'description' => 'Max tasks to retrieve (default 10)'],
+                        'limit' => ['type' => 'INTEGER', 'description' => 'Max tasks to retrieve (default 10, max 100)'],
                     ],
                 ],
             ],
@@ -279,13 +289,46 @@ PROMPT;
             ],
             [
                 'name' => 'delete_lead',
-                'description' => 'Delete or archive a lead by its Lead ID (e.g. LD-TFA-L1542). Also cleans up its pending tasks.',
+                'description' => 'Delete or archive a single lead by its Lead ID (e.g. LD-TFA-L1542). Also cleans up its pending tasks.',
                 'parameters' => [
                     'type' => 'OBJECT',
                     'properties' => [
                         'lead_id' => ['type' => 'STRING', 'description' => 'The Lead ID (e.g. LD-TFA-L1542) or numeric ID to delete'],
                     ],
                     'required' => ['lead_id'],
+                ],
+            ],
+            [
+                'name' => 'delete_leads',
+                'description' => 'Bulk delete leads by list of lead IDs, year (e.g. 2023), or before_date. Automatically deletes all tasks attached to those leads.',
+                'parameters' => [
+                    'type' => 'OBJECT',
+                    'properties' => [
+                        'lead_ids' => [
+                            'type' => 'ARRAY',
+                            'items' => ['type' => 'STRING'],
+                            'description' => 'Array of lead IDs or references to delete',
+                        ],
+                        'year' => ['type' => 'INTEGER', 'description' => 'Bulk delete all leads created in this year (e.g. 2023)'],
+                        'before_date' => ['type' => 'STRING', 'description' => 'Bulk delete all leads created on or before date (YYYY-MM-DD)'],
+                    ],
+                ],
+            ],
+            [
+                'name' => 'delete_tasks',
+                'description' => 'Bulk delete tasks by task_ids list, year (e.g. 2023), before_date, or status filter (completed, pending, all).',
+                'parameters' => [
+                    'type' => 'OBJECT',
+                    'properties' => [
+                        'task_ids' => [
+                            'type' => 'ARRAY',
+                            'items' => ['type' => 'INTEGER'],
+                            'description' => 'Array of task IDs to delete',
+                        ],
+                        'year' => ['type' => 'INTEGER', 'description' => 'Delete tasks from this year (e.g. 2023)'],
+                        'filter' => ['type' => 'STRING', 'description' => 'Filter by status: completed, pending, or all (default all)'],
+                        'before_date' => ['type' => 'STRING', 'description' => 'Delete tasks created on or before date (YYYY-MM-DD)'],
+                    ],
                 ],
             ],
             [

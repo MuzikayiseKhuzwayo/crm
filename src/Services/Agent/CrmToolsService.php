@@ -99,7 +99,7 @@ class CrmToolsService
     }
 
     /**
-     * Query leads by keyword, stage, relay status.
+     * Query leads by keyword, stage, relay status, year, or date range.
      */
     public function queryLeads(array $args): array
     {
@@ -137,10 +137,23 @@ class CrmToolsService
             $query->where('relay_status', $args['relay_status']);
         }
 
-        $limit = min($args['limit'] ?? 5, 20);
+        if (! empty($args['year'])) {
+            $query->whereYear('created_at', (int) $args['year']);
+        }
+
+        if (! empty($args['created_before'])) {
+            $query->where('created_at', '<=', Carbon::parse($args['created_before'])->endOfDay());
+        }
+
+        if (! empty($args['created_after'])) {
+            $query->where('created_at', '>=', Carbon::parse($args['created_after'])->startOfDay());
+        }
+
+        $totalMatching = (clone $query)->count();
+        $limit = min((int) ($args['limit'] ?? 10), 100);
         $results = $query->latest()->limit($limit)->get();
 
-        return $results->map(function ($lead) {
+        $leads = $results->map(function ($lead) {
             return [
                 'id' => $lead->id,
                 'lead_id' => $lead->lead_id,
@@ -153,6 +166,12 @@ class CrmToolsService
                 'created_at' => $lead->created_at?->toIso8601String(),
             ];
         })->toArray();
+
+        return [
+            'total_matching' => $totalMatching,
+            'returned_count' => count($leads),
+            'leads' => $leads,
+        ];
     }
 
     /**
@@ -204,13 +223,13 @@ class CrmToolsService
     }
 
     /**
-     * Query tasks by filter (overdue, due_today, pending, completed).
+     * Query tasks by filter (overdue, due_today, pending, completed, all), year, or date range.
      */
     public function queryTasks(array $args): array
     {
         $query = Task::query();
 
-        $filter = $args['filter'] ?? 'pending';
+        $filter = $args['filter'] ?? null;
 
         if ($filter === 'overdue') {
             $query->whereNull('completed_at')
@@ -225,18 +244,34 @@ class CrmToolsService
             $query->whereNotNull('completed_at');
         }
 
+        if (! empty($args['year'])) {
+            $year = (int) $args['year'];
+            $query->where(function ($q) use ($year) {
+                $q->whereYear('created_at', $year)
+                    ->orWhereYear('completed_at', $year);
+            });
+        }
+
+        if (! empty($args['created_before'])) {
+            $query->where('created_at', '<=', Carbon::parse($args['created_before'])->endOfDay());
+        }
+
+        if (! empty($args['created_after'])) {
+            $query->where('created_at', '>=', Carbon::parse($args['created_after'])->startOfDay());
+        }
+
         if (! empty($args['lead_id'])) {
-            $leadId = $args['lead_id'];
-            $lead = is_numeric($leadId) ? Lead::find($leadId) : Lead::where('lead_id', $leadId)->first();
+            $lead = $this->resolveLead($args['lead_id']);
             if ($lead) {
                 $query->where('taskable_type', Lead::class)->where('taskable_id', $lead->id);
             }
         }
 
-        $limit = min($args['limit'] ?? 10, 30);
+        $totalMatching = (clone $query)->count();
+        $limit = min((int) ($args['limit'] ?? 10), 100);
         $tasks = $query->orderBy('due_at', 'asc')->limit($limit)->get();
 
-        return $tasks->map(function ($task) {
+        $taskList = $tasks->map(function ($task) {
             $linkedLead = null;
             if ($task->taskable instanceof Lead) {
                 $linkedLead = [
@@ -252,9 +287,17 @@ class CrmToolsService
                 'description' => $task->description,
                 'due_at' => $task->due_at?->toIso8601String(),
                 'completed' => (bool) $task->completed_at,
+                'completed_at' => $task->completed_at?->toIso8601String(),
+                'created_at' => $task->created_at?->toIso8601String(),
                 'linked_lead' => $linkedLead,
             ];
         })->toArray();
+
+        return [
+            'total_matching' => $totalMatching,
+            'returned_count' => count($taskList),
+            'tasks' => $taskList,
+        ];
     }
 
     /**
@@ -415,6 +458,112 @@ class CrmToolsService
             'lead_id' => $leadId,
             'title' => $title,
             'status' => 'deleted',
+        ];
+    }
+
+    /**
+     * Bulk delete tasks by specific task IDs, year (e.g. 2023), before_date, or filter.
+     */
+    public function deleteTasks(array $args): array
+    {
+        $query = Task::query();
+
+        if (! empty($args['task_ids'])) {
+            $ids = is_array($args['task_ids']) ? $args['task_ids'] : [$args['task_ids']];
+            $query->whereIn('id', $ids);
+        } elseif (! empty($args['year'])) {
+            $year = (int) $args['year'];
+            $query->where(function ($q) use ($year) {
+                $q->whereYear('created_at', $year)
+                    ->orWhereYear('completed_at', $year);
+            });
+
+            if (! empty($args['filter']) && $args['filter'] === 'completed') {
+                $query->whereNotNull('completed_at');
+            } elseif (! empty($args['filter']) && $args['filter'] === 'pending') {
+                $query->whereNull('completed_at');
+            }
+        } elseif (! empty($args['before_date'])) {
+            $query->where('created_at', '<=', Carbon::parse($args['before_date'])->endOfDay());
+        } else {
+            return ['error' => 'Must provide task_ids, year, or before_date to delete tasks.'];
+        }
+
+        $count = $query->count();
+        if ($count === 0) {
+            return [
+                'success' => true,
+                'deleted_count' => 0,
+                'message' => 'No matching tasks found to delete.',
+            ];
+        }
+
+        $query->delete();
+
+        return [
+            'success' => true,
+            'deleted_count' => $count,
+            'message' => "Successfully deleted {$count} task(s).",
+        ];
+    }
+
+    /**
+     * Bulk delete leads by specific lead IDs, year (e.g. 2023), or before_date.
+     * Automatically deletes all tasks attached to those leads.
+     */
+    public function deleteLeads(array $args): array
+    {
+        $query = Lead::query();
+
+        if (! empty($args['lead_ids'])) {
+            $resolvedIds = [];
+            $leadRefs = is_array($args['lead_ids']) ? $args['lead_ids'] : [$args['lead_ids']];
+            foreach ($leadRefs as $ref) {
+                $lead = $this->resolveLead($ref);
+                if ($lead) {
+                    $resolvedIds[] = $lead->id;
+                }
+            }
+            if (empty($resolvedIds)) {
+                return ['error' => 'None of the provided lead IDs could be resolved in the CRM.'];
+            }
+            $query->whereIn('id', $resolvedIds);
+        } elseif (! empty($args['year'])) {
+            $query->whereYear('created_at', (int) $args['year']);
+        } elseif (! empty($args['before_date'])) {
+            $query->where('created_at', '<=', Carbon::parse($args['before_date'])->endOfDay());
+        } else {
+            return ['error' => 'Must provide lead_ids, year, or before_date to delete leads.'];
+        }
+
+        $leads = $query->get();
+        $count = $leads->count();
+
+        if ($count === 0) {
+            return [
+                'success' => true,
+                'deleted_count' => 0,
+                'message' => 'No matching leads found to delete.',
+            ];
+        }
+
+        $deletedLeadIds = $leads->pluck('lead_id')->filter()->values()->toArray();
+        $internalIds = $leads->pluck('id')->toArray();
+
+        // Clean up tasks attached to these leads
+        Task::where(function ($q) {
+            $q->where('taskable_type', Lead::class)
+                ->orWhere('taskable_type', (new Lead)->getMorphClass());
+        })->whereIn('taskable_id', $internalIds)->delete();
+
+        // Delete leads
+        Lead::whereIn('id', $internalIds)->delete();
+
+        return [
+            'success' => true,
+            'deleted_count' => $count,
+            'deleted_lead_ids' => array_slice($deletedLeadIds, 0, 20),
+            'message' => "Successfully deleted {$count} lead(s) and their attached tasks.",
         ];
     }
 
