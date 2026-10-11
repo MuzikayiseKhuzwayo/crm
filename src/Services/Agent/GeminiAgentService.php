@@ -201,6 +201,10 @@ Example lead format:
 Example contact format:
 • [Jonathan C.](https://crm.techfusion-alchemy.xyz/crm/people/3039) (Gresham Investment Management)
 Never omit the URL when presenting lists of leads, contacts, or organizations.
+12. LINKEDIN FILTERING & OVERDUE DELETION: You can filter leads, contacts, and organizations by the presence or absence of a LinkedIn link using `has_linkedin: "yes"` or `has_linkedin: "no"`.
+• When asked to find or inspect overdue leads lacking LinkedIn links, call `query_leads` with `has_tasks: "overdue"` and `has_linkedin: "no"`.
+• When asked to delete overdue leads without LinkedIn links (or any filtered subset), call `delete_leads` with `has_tasks: "overdue"` and `has_linkedin: "no"`.
+• Never claim that you cannot filter or delete overdue leads lacking LinkedIn links in an automated step! You have the full tools to query and delete them directly.
 PROMPT;
     }
 
@@ -235,6 +239,7 @@ PROMPT;
                         'created_before' => ['type' => 'STRING', 'description' => 'Filter leads created on or before date (YYYY-MM-DD)'],
                         'created_after' => ['type' => 'STRING', 'description' => 'Filter leads created on or after date (YYYY-MM-DD)'],
                         'has_tasks' => ['type' => 'STRING', 'description' => 'Filter by tasks: "yes", "no", or "overdue"'],
+                        'has_linkedin' => ['type' => 'STRING', 'description' => 'Filter by LinkedIn presence: "yes" or "no"'],
                         'limit' => ['type' => 'INTEGER', 'description' => 'Maximum number of records to return (default 10, max 100)'],
                     ],
                 ],
@@ -263,6 +268,7 @@ PROMPT;
                         'created_before' => ['type' => 'STRING', 'description' => 'Filter contacts created on or before date (YYYY-MM-DD)'],
                         'created_after' => ['type' => 'STRING', 'description' => 'Filter contacts created on or after date (YYYY-MM-DD)'],
                         'has_leads' => ['type' => 'STRING', 'description' => 'Filter contacts by whether they have linked leads: "yes" or "no"'],
+                        'has_linkedin' => ['type' => 'STRING', 'description' => 'Filter contacts by LinkedIn profile presence: "yes" or "no"'],
                         'limit' => ['type' => 'INTEGER', 'description' => 'Maximum number of records to return (default 10, max 100)'],
                     ],
                 ],
@@ -289,6 +295,7 @@ PROMPT;
                         'year' => ['type' => 'INTEGER', 'description' => 'Filter organizations by creation year'],
                         'created_before' => ['type' => 'STRING', 'description' => 'Filter organizations created on or before date (YYYY-MM-DD)'],
                         'created_after' => ['type' => 'STRING', 'description' => 'Filter organizations created on or after date (YYYY-MM-DD)'],
+                        'has_linkedin' => ['type' => 'STRING', 'description' => 'Filter organizations by LinkedIn page presence: "yes" or "no"'],
                         'limit' => ['type' => 'INTEGER', 'description' => 'Maximum number of records to return (default 10, max 100)'],
                     ],
                 ],
@@ -362,7 +369,7 @@ PROMPT;
             ],
             [
                 'name' => 'delete_leads',
-                'description' => 'Bulk delete leads by list of lead IDs, year (e.g. 2023), or before_date. Automatically deletes all tasks attached to those leads.',
+                'description' => 'Bulk delete leads by list of lead IDs, or filter criteria (tasks status, linkedin status, owner, year, before_date). Automatically deletes all tasks attached to those leads.',
                 'parameters' => [
                     'type' => 'OBJECT',
                     'properties' => [
@@ -371,8 +378,12 @@ PROMPT;
                             'items' => ['type' => 'STRING'],
                             'description' => 'Array of lead IDs or references to delete',
                         ],
+                        'has_tasks' => ['type' => 'STRING', 'description' => 'Filter leads to delete by task presence: "yes", "no", or "overdue"'],
+                        'has_linkedin' => ['type' => 'STRING', 'description' => 'Filter leads to delete by LinkedIn presence: "yes" or "no"'],
+                        'owner' => ['type' => 'STRING', 'description' => 'Filter leads to delete by owner user name, email, or ID'],
                         'year' => ['type' => 'INTEGER', 'description' => 'Bulk delete all leads created in this year (e.g. 2023)'],
                         'before_date' => ['type' => 'STRING', 'description' => 'Bulk delete all leads created on or before date (YYYY-MM-DD)'],
+                        'limit' => ['type' => 'INTEGER', 'description' => 'Optional maximum number of matching leads to delete'],
                     ],
                 ],
             ],

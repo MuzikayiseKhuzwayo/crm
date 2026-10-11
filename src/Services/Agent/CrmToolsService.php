@@ -296,6 +296,27 @@ class CrmToolsService
             }
         }
 
+        if (! empty($args['has_linkedin'])) {
+            if ($args['has_linkedin'] === 'yes') {
+                $query->where(function ($q) {
+                    $q->where(function ($lq) {
+                        $lq->whereNotNull('linkedin')->where('linkedin', '!=', '');
+                    })->orWhereHas('person', function ($pq) {
+                        $pq->whereNotNull('linkedin')->where('linkedin', '!=', '');
+                    });
+                });
+            } elseif ($args['has_linkedin'] === 'no') {
+                $query->where(function ($q) {
+                    $q->whereNull('linkedin')->orWhere('linkedin', '=', '');
+                })->where(function ($q) {
+                    $q->whereDoesntHave('person')
+                        ->orWhereHas('person', function ($pq) {
+                            $pq->whereNull('linkedin')->orWhere('linkedin', '=', '');
+                        });
+                });
+            }
+        }
+
         $totalMatching = (clone $query)->count();
         $limit = min((int) ($args['limit'] ?? 10), 100);
         $results = $query->latest()->limit($limit)->get();
@@ -385,6 +406,16 @@ class CrmToolsService
                 $query->has('leads');
             } elseif ($args['has_leads'] === 'no') {
                 $query->doesntHave('leads');
+            }
+        }
+
+        if (! empty($args['has_linkedin'])) {
+            if ($args['has_linkedin'] === 'yes') {
+                $query->whereNotNull('linkedin')->where('linkedin', '!=', '');
+            } elseif ($args['has_linkedin'] === 'no') {
+                $query->where(function ($q) {
+                    $q->whereNull('linkedin')->orWhere('linkedin', '=', '');
+                });
             }
         }
 
@@ -507,6 +538,16 @@ class CrmToolsService
 
         if (! empty($args['created_after'])) {
             $query->where('created_at', '>=', Carbon::parse($args['created_after'])->startOfDay());
+        }
+
+        if (! empty($args['has_linkedin'])) {
+            if ($args['has_linkedin'] === 'yes') {
+                $query->whereNotNull('linkedin')->where('linkedin', '!=', '');
+            } elseif ($args['has_linkedin'] === 'no') {
+                $query->where(function ($q) {
+                    $q->whereNull('linkedin')->orWhere('linkedin', '=', '');
+                });
+            }
         }
 
         $totalMatching = (clone $query)->count();
@@ -925,15 +966,76 @@ class CrmToolsService
                 return ['error' => 'None of the provided lead IDs could be resolved in the CRM.'];
             }
             $query->whereIn('id', $resolvedIds);
-        } elseif (! empty($args['year'])) {
-            $query->whereYear('created_at', (int) $args['year']);
-        } elseif (! empty($args['before_date'])) {
-            $query->where('created_at', '<=', Carbon::parse($args['before_date'])->endOfDay());
         } else {
-            return ['error' => 'Must provide lead_ids, year, or before_date to delete leads.'];
+            $hasFilter = false;
+
+            if (! empty($args['year'])) {
+                $query->whereYear('created_at', (int) $args['year']);
+                $hasFilter = true;
+            }
+
+            if (! empty($args['before_date'])) {
+                $query->where('created_at', '<=', Carbon::parse($args['before_date'])->endOfDay());
+                $hasFilter = true;
+            }
+
+            if (! empty($args['owner'])) {
+                $user = $this->resolveUser($args['owner']);
+                if ($user) {
+                    $query->where('user_owner_id', $user->id);
+                } elseif (is_numeric($args['owner'])) {
+                    $query->where('user_owner_id', (int) $args['owner']);
+                } else {
+                    $query->whereRaw('0 = 1');
+                }
+                $hasFilter = true;
+            }
+
+            if (! empty($args['has_tasks'])) {
+                if ($args['has_tasks'] === 'yes') {
+                    $query->has('tasks');
+                } elseif ($args['has_tasks'] === 'no') {
+                    $query->doesntHave('tasks');
+                } elseif ($args['has_tasks'] === 'overdue') {
+                    $query->whereHas('tasks', function ($tq) {
+                        $tq->whereNull('completed_at')->whereNotNull('due_at')->where('due_at', '<', Carbon::now());
+                    });
+                }
+                $hasFilter = true;
+            }
+
+            if (! empty($args['has_linkedin'])) {
+                if ($args['has_linkedin'] === 'yes') {
+                    $query->where(function ($q) {
+                        $q->where(function ($lq) {
+                            $lq->whereNotNull('linkedin')->where('linkedin', '!=', '');
+                        })->orWhereHas('person', function ($pq) {
+                            $pq->whereNotNull('linkedin')->where('linkedin', '!=', '');
+                        });
+                    });
+                } elseif ($args['has_linkedin'] === 'no') {
+                    $query->where(function ($q) {
+                        $q->whereNull('linkedin')->orWhere('linkedin', '=', '');
+                    })->where(function ($q) {
+                        $q->whereDoesntHave('person')
+                            ->orWhereHas('person', function ($pq) {
+                                $pq->whereNull('linkedin')->orWhere('linkedin', '=', '');
+                            });
+                    });
+                }
+                $hasFilter = true;
+            }
+
+            if (! $hasFilter) {
+                return ['error' => 'Must provide lead_ids, or filter criteria (year, before_date, has_tasks, has_linkedin, owner) to delete leads.'];
+            }
         }
 
-        $leads = $query->get();
+        if (! empty($args['limit'])) {
+            $leads = $query->limit((int) $args['limit'])->get();
+        } else {
+            $leads = $query->get();
+        }
         $count = $leads->count();
 
         if ($count === 0) {
