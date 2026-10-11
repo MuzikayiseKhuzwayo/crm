@@ -530,6 +530,7 @@ class TestSchema
             $table->unsignedBigInteger('user_updated_id')->nullable();
             $table->unsignedBigInteger('user_deleted_id')->nullable();
             $table->unsignedBigInteger('user_restored_id')->nullable();
+            $table->unsignedBigInteger('user_owner_id')->nullable();
             $table->unsignedBigInteger('user_assigned_id')->nullable();
             $table->unsignedBigInteger('team_id')->nullable();
             $table->timestamps();

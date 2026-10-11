@@ -469,6 +469,49 @@
                     @endforeach
                 </div>
             </div>
+
+            {{-- 4. POST-EVALUATION & CONTRACT CONVERSION (SALES MOTIONS V2 SEC 7) --}}
+            <div class="space-y-3 pt-3 border-t border-base-200">
+                <div class="flex items-center justify-between">
+                    <h4 class="font-bold text-sm uppercase tracking-wider text-base-content/80 flex items-center gap-1.5">
+                        <x-mary-icon name="o-check-badge" class="w-4 h-4 text-success" />
+                        4. Post-Evaluation & Contract Conversion (Sandbox SOW & Enterprise Contract)
+                    </h4>
+                    <span class="text-xs text-base-content/60">Closing the $15k-$35k Sandbox & $120k-$240k Annual Contract</span>
+                </div>
+
+                <div class="grid md:grid-cols-2 gap-3">
+                    @foreach(['scenario_3_1', 'technical_sync_debrief', 'sandbox_sow', 'cro_clearance', 'production_contract', 'onboarding_production'] as $key)
+                        @if(isset($pb['templates'][$key]))
+                            @php
+                                $tmpl = $pb['templates'][$key];
+                            @endphp
+                            <div class="p-3 rounded-xl border border-base-300 bg-base-100 flex flex-col justify-between gap-3 text-xs">
+                                <div class="space-y-1.5">
+                                    <div class="flex items-center justify-between gap-1">
+                                        <span class="font-bold">{{ $tmpl['angle_label'] }}</span>
+                                        <x-mary-badge :value="'+'.$tmpl['due_in_days'].'d delay'" class="badge-neutral text-white badge-xs" />
+                                    </div>
+                                    <div class="p-2 rounded bg-base-200/60 font-mono text-[11px] leading-relaxed whitespace-pre-line text-base-content/90 select-all" id="tmpl-{{ $key }}-{{ $lead->id }}">
+{{ $tmpl['body'] }}
+                                    </div>
+                                </div>
+                                <div class="flex items-center justify-between pt-2 border-t border-base-200 text-[11px]">
+                                    <span class="text-base-content/60">Target: {{ $tmpl['target_stage'] }}</span>
+                                    <div class="flex items-center gap-1">
+                                        <button type="button" 
+                                                onclick="navigator.clipboard.writeText(document.getElementById('tmpl-{{ $key }}-{{ $lead->id }}').innerText.trim()); alert('Copied to clipboard!')" 
+                                                class="btn btn-xs btn-outline">
+                                            Copy
+                                        </button>
+                                        <x-mary-button label="+ Task" wire:click="createStageTask('{{ $key }}')" class="btn-xs btn-primary text-white" spinner="createStageTask" />
+                                    </div>
+                                </div>
+                            </div>
+                        @endif
+                    @endforeach
+                </div>
+            </div>
         </div>
 
         <x-slot:actions>

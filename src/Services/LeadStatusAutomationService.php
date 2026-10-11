@@ -14,9 +14,10 @@ use VentureDrake\LaravelCrm\Models\Task;
 class LeadStatusAutomationService
 {
     /**
-     * Handle automated lead stage and status updates when a task is completed.
+     * Handle automated lead stage and status updates when a task is completed,
+     * and auto-create and assign subsequent sales playbook tasks.
      */
-    public function handleTaskCompleted(Task $task): ?Lead
+    public function handleTaskCompleted(Task $task, bool $autoCreateTasks = true): ?Lead
     {
         $lead = $this->resolveLeadFromTask($task);
 
@@ -24,7 +25,13 @@ class LeadStatusAutomationService
             return null;
         }
 
-        return $this->updateLeadStatusFromTask($lead, $task);
+        $lead = $this->updateLeadStatusFromTask($lead, $task) ?: $lead;
+
+        if ($autoCreateTasks) {
+            app(SalesPlaybookService::class)->autoCreateNextTasksForLead($lead, $task);
+        }
+
+        return $lead->fresh();
     }
 
     /**

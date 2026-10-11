@@ -71,6 +71,12 @@ class LeadShow extends Component
             'scenario_4', 'follow_up', 'nudge' => 'scenario_4',
             'scenario_5', 'disconnect' => 'scenario_5',
             'schedule_call', 'call', 'call_transition' => 'call_transition',
+            'scenario_3_1', 'eval_review', 'post_eval' => 'scenario_3_1',
+            'technical_sync', 'debrief' => 'technical_sync_debrief',
+            'sandbox_sow', 'sow' => 'sandbox_sow',
+            'cro', 'cro_clearance' => 'cro_clearance',
+            'production_contract', 'contract' => 'production_contract',
+            'onboarding', 'onboarding_production' => 'onboarding_production',
             default => $type,
         };
 

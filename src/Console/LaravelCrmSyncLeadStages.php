@@ -18,6 +18,7 @@ class LaravelCrmSyncLeadStages extends Command
      */
     protected $signature = 'laravelcrm:sync-lead-stages 
                             {--lead= : Specific Lead ID or external_id to sync}
+                            {--create-tasks : Also auto-create and assign next playbook tasks for each completed task}
                             {--dry-run : Preview changes without persisting to database}';
 
     /**
@@ -96,7 +97,7 @@ class LaravelCrmSyncLeadStages extends Command
                         }
                     }
                 } else {
-                    $automationService->handleTaskCompleted($task);
+                    $automationService->handleTaskCompleted($task, (bool) $this->option('create-tasks'));
                     $lead->refresh();
                 }
             }
