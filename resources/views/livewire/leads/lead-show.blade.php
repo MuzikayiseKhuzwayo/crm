@@ -112,13 +112,14 @@
             @php
                 $pb = $this->playbook;
                 $recommendedKey = $pb['recommended_angle'];
-                $recommendedTemplate = $pb['templates'][$recommendedKey];
+                $recommendedTemplate = $pb['templates'][$recommendedKey] ?? reset($pb['templates']);
+                $isTechfusion = ($pb['brand'] ?? '') === 'techfusion';
             @endphp
             <div class="pt-3 border-t border-base-200 flex flex-col md:flex-row md:items-center justify-between gap-3">
                 <div class="flex flex-wrap items-center gap-2">
                     <span class="font-bold uppercase tracking-wider text-xs flex items-center gap-1.5 text-base-content/80">
                         <x-mary-icon name="o-sparkles" class="w-4 h-4 text-warning shrink-0" />
-                        Sales Playbook V2:
+                        {{ $pb['brand_label'] }} Playbook:
                     </span>
                     <x-mary-badge :value="'🎯 Auto-Detected: '.$recommendedTemplate['angle_label']" class="badge-warning text-neutral-900 font-bold text-xs" />
                 </div>
@@ -131,27 +132,51 @@
                         class="btn-xs btn-primary text-white" 
                         spinner="createStageTask" 
                     />
-                    <x-mary-button 
-                        label="+ Scenario 1 (Audit)" 
-                        wire:click="createStageTask('scenario_1')" 
-                        icon="o-document-text" 
-                        class="btn-xs btn-outline btn-info" 
-                        spinner="createStageTask" 
-                    />
-                    <x-mary-button 
-                        label="+ Scenario 2 (Offer Kit)" 
-                        wire:click="createStageTask('scenario_2')" 
-                        icon="o-beaker" 
-                        class="btn-xs btn-outline btn-secondary" 
-                        spinner="createStageTask" 
-                    />
-                    <x-mary-button 
-                        label="+ 15-Min Sync Call" 
-                        wire:click="createStageTask('call_transition')" 
-                        icon="o-phone" 
-                        class="btn-xs btn-outline btn-warning" 
-                        spinner="createStageTask" 
-                    />
+                    @if($isTechfusion)
+                        <x-mary-button 
+                            label="+ Scenario 1 (Case Study)" 
+                            wire:click="createStageTask('tfa_scenario_1')" 
+                            icon="o-document-text" 
+                            class="btn-xs btn-outline btn-info" 
+                            spinner="createStageTask" 
+                        />
+                        <x-mary-button 
+                            label="+ Blueprint & Reliability" 
+                            wire:click="createStageTask('tfa_scenario_3_1')" 
+                            icon="o-beaker" 
+                            class="btn-xs btn-outline btn-secondary" 
+                            spinner="createStageTask" 
+                        />
+                        <x-mary-button 
+                            label="+ 30-Min Whiteboard Call" 
+                            wire:click="createStageTask('tfa_call_transition')" 
+                            icon="o-phone" 
+                            class="btn-xs btn-outline btn-warning" 
+                            spinner="createStageTask" 
+                        />
+                    @else
+                        <x-mary-button 
+                            label="+ Scenario 1 (Audit)" 
+                            wire:click="createStageTask('scenario_1')" 
+                            icon="o-document-text" 
+                            class="btn-xs btn-outline btn-info" 
+                            spinner="createStageTask" 
+                        />
+                        <x-mary-button 
+                            label="+ Scenario 2 (Offer Kit)" 
+                            wire:click="createStageTask('scenario_2')" 
+                            icon="o-beaker" 
+                            class="btn-xs btn-outline btn-secondary" 
+                            spinner="createStageTask" 
+                        />
+                        <x-mary-button 
+                            label="+ 15-Min Sync Call" 
+                            wire:click="createStageTask('call_transition')" 
+                            icon="o-phone" 
+                            class="btn-xs btn-outline btn-warning" 
+                            spinner="createStageTask" 
+                        />
+                    @endif
                     <x-mary-button 
                         label="Playbook & Objections ({{ count($pb['templates']) }})" 
                         onclick="modalPlaybook{{ $lead->id }}.showModal()" 
@@ -337,11 +362,15 @@
                 <div class="space-y-1">
                     <div class="flex flex-wrap items-center gap-2">
                         <x-mary-icon name="o-bolt" class="w-6 h-6 text-warning" />
-                        <h3 class="text-lg font-bold">Institutional Sales Playbook V2</h3>
-                        <x-mary-badge value="DUB-REV-SALES-MOTIONS-V2-002" class="badge-neutral text-white text-xs" />
+                        <h3 class="text-lg font-bold">{{ $pb['name'] }}</h3>
+                        <x-mary-badge :value="$pb['id']" class="badge-neutral text-white text-xs font-mono" />
+                        <x-mary-badge :value="$pb['brand_label']" class="badge-primary text-white text-xs font-bold" />
                     </div>
                     <p class="text-xs text-base-content/70">
-                        <strong>Guiding Principle:</strong> Peer Engineer to Peer Quant. No exclamation marks, no sales tropes, direct code/data fulfillment.
+                        <strong>Target Audience:</strong> {{ $pb['target_audience'] }}
+                    </p>
+                    <p class="text-xs text-base-content/70">
+                        <strong>Guiding Principle:</strong> {{ $pb['guiding_principle'] }}
                     </p>
                     <p class="text-xs text-primary font-medium">
                         Prospect: <strong>{{ $this->lead->person?->name ?: $this->lead->title }}</strong> · Organization: <strong>{{ $this->lead->organization?->name ?: 'Not linked' }}</strong>
@@ -349,169 +378,347 @@
                 </div>
             </div>
 
-            {{-- 1. LINKEDIN CONNECTION NOTES --}}
-            <div class="space-y-3">
-                <div class="flex items-center justify-between">
-                    <h4 class="font-bold text-sm uppercase tracking-wider text-base-content/80 flex items-center gap-1.5">
-                        <x-mary-icon name="o-link" class="w-4 h-4 text-primary" />
-                        1. LinkedIn Connection Notes (&lt; 300 Characters)
-                    </h4>
-                    <span class="text-xs text-base-content/60">Strictly character-capped, peer-to-peer open ended</span>
+            @if($isTechfusion)
+                {{-- TECHFUSION AUTOMATA: 1. LINKEDIN CONNECTION NOTES --}}
+                <div class="space-y-3">
+                    <div class="flex items-center justify-between">
+                        <h4 class="font-bold text-sm uppercase tracking-wider text-base-content/80 flex items-center gap-1.5">
+                            <x-mary-icon name="o-link" class="w-4 h-4 text-primary" />
+                            1. LinkedIn Connection Notes (&lt; 300 Characters)
+                        </h4>
+                        <span class="text-xs text-base-content/60">Strictly character-capped, engineer-to-operator tone</span>
+                    </div>
+
+                    <div class="grid md:grid-cols-2 gap-3">
+                        @foreach(['tfa_connection_angle_a', 'tfa_connection_angle_b', 'tfa_connection_angle_c', 'tfa_connection_angle_d'] as $key)
+                            @if(isset($pb['templates'][$key]))
+                                @php
+                                    $tmpl = $pb['templates'][$key];
+                                @endphp
+                                <div class="p-3 rounded-xl border {{ $tmpl['is_recommended'] ? 'border-warning/80 bg-warning/5 ring-1 ring-warning/30' : 'border-base-300 bg-base-100' }} flex flex-col justify-between gap-3 text-xs">
+                                    <div class="space-y-1.5">
+                                        <div class="flex items-center justify-between gap-1">
+                                            <span class="font-bold">{{ $tmpl['angle_label'] }}</span>
+                                            @if($tmpl['is_recommended'])
+                                                <x-mary-badge value="RECOMMENDED" class="badge-warning text-neutral-900 badge-xs font-bold" />
+                                            @endif
+                                        </div>
+                                        <div class="p-2 rounded bg-base-200/60 font-mono text-[11px] leading-relaxed text-base-content/90 select-all" id="tmpl-{{ $key }}-{{ $lead->id }}">
+                                            {{ $tmpl['body'] }}
+                                        </div>
+                                    </div>
+                                    <div class="flex items-center justify-between pt-2 border-t border-base-200 text-[11px]">
+                                        <span class="font-mono {{ $tmpl['is_valid_length'] ? 'text-success' : 'text-error font-bold' }}">
+                                            {{ $tmpl['char_count'] }} / 300 chars
+                                        </span>
+                                        <div class="flex items-center gap-1">
+                                            <button type="button" 
+                                                    onclick="navigator.clipboard.writeText(document.getElementById('tmpl-{{ $key }}-{{ $lead->id }}').innerText.trim()); alert('Copied to clipboard!')" 
+                                                    class="btn btn-xs btn-outline">
+                                                Copy
+                                            </button>
+                                            <x-mary-button label="+ Task" wire:click="createStageTask('{{ $key }}')" class="btn-xs btn-primary text-white" spinner="createStageTask" />
+                                        </div>
+                                    </div>
+                                </div>
+                            @endif
+                        @endforeach
+                    </div>
                 </div>
 
-                <div class="grid md:grid-cols-3 gap-3">
-                    @foreach(['connection_angle_a', 'connection_angle_b', 'connection_angle_c'] as $key)
-                        @php
-                            $tmpl = $pb['templates'][$key];
-                        @endphp
-                        <div class="p-3 rounded-xl border {{ $tmpl['is_recommended'] ? 'border-warning/80 bg-warning/5 ring-1 ring-warning/30' : 'border-base-300 bg-base-100' }} flex flex-col justify-between gap-3 text-xs">
-                            <div class="space-y-1.5">
-                                <div class="flex items-center justify-between gap-1">
-                                    <span class="font-bold">{{ $tmpl['angle_label'] }}</span>
-                                    @if($tmpl['is_recommended'])
-                                        <x-mary-badge value="RECOMMENDED" class="badge-warning text-neutral-900 badge-xs font-bold" />
-                                    @endif
-                                </div>
-                                <div class="p-2 rounded bg-base-200/60 font-mono text-[11px] leading-relaxed text-base-content/90 select-all" id="tmpl-{{ $key }}-{{ $lead->id }}">
-                                    {{ $tmpl['body'] }}
-                                </div>
-                            </div>
-                            <div class="flex items-center justify-between pt-2 border-t border-base-200 text-[11px]">
-                                <span class="font-mono {{ $tmpl['is_valid_length'] ? 'text-success' : 'text-error font-bold' }}">
-                                    {{ $tmpl['char_count'] }} / 300 chars
-                                </span>
-                                <div class="flex items-center gap-1">
-                                    <button type="button" 
-                                            onclick="navigator.clipboard.writeText(document.getElementById('tmpl-{{ $key }}-{{ $lead->id }}').innerText.trim()); alert('Copied to clipboard!')" 
-                                            class="btn btn-xs btn-outline">
-                                        Copy
-                                    </button>
-                                    <x-mary-button label="+ Task" wire:click="createStageTask('{{ $key }}')" class="btn-xs btn-primary text-white" spinner="createStageTask" />
-                                </div>
-                            </div>
-                        </div>
-                    @endforeach
-                </div>
-            </div>
+                {{-- TECHFUSION AUTOMATA: 2. CONVERSATIONAL CADENCE / SCENARIOS --}}
+                <div class="space-y-3 pt-3 border-t border-base-200">
+                    <div class="flex items-center justify-between">
+                        <h4 class="font-bold text-sm uppercase tracking-wider text-base-content/80 flex items-center gap-1.5">
+                            <x-mary-icon name="o-chat-bubble-left-right" class="w-4 h-4 text-info" />
+                            2. Conversational Flow (Event-Driven Steps)
+                        </h4>
+                        <span class="text-xs text-base-content/60">Triggered by prospect behavior & case studies</span>
+                    </div>
 
-            {{-- 2. CONVERSATIONAL CADENCE / SCENARIOS --}}
-            <div class="space-y-3 pt-3 border-t border-base-200">
-                <div class="flex items-center justify-between">
-                    <h4 class="font-bold text-sm uppercase tracking-wider text-base-content/80 flex items-center gap-1.5">
-                        <x-mary-icon name="o-chat-bubble-left-right" class="w-4 h-4 text-info" />
-                        2. Conversational Flow (Event-Driven Steps)
-                    </h4>
-                    <span class="text-xs text-base-content/60">Triggered by prospect behavior, not arbitrary calendars</span>
-                </div>
-
-                <div class="grid md:grid-cols-2 gap-3">
-                    @foreach(['scenario_1', 'scenario_2', 'scenario_3', 'scenario_4', 'scenario_5', 'call_transition'] as $key)
-                        @php
-                            $tmpl = $pb['templates'][$key];
-                        @endphp
-                        <div class="p-3 rounded-xl border border-base-300 bg-base-100 flex flex-col justify-between gap-3 text-xs">
-                            <div class="space-y-1.5">
-                                <div class="flex items-center justify-between gap-1">
-                                    <span class="font-bold">{{ $tmpl['angle_label'] }}</span>
-                                    <x-mary-badge :value="'+'.$tmpl['due_in_days'].'d delay'" class="badge-neutral text-white badge-xs" />
-                                </div>
-                                <div class="p-2 rounded bg-base-200/60 font-mono text-[11px] leading-relaxed whitespace-pre-line text-base-content/90 select-all" id="tmpl-{{ $key }}-{{ $lead->id }}">
+                    <div class="grid md:grid-cols-2 gap-3">
+                        @foreach(['tfa_scenario_1', 'tfa_scenario_2', 'tfa_scenario_3', 'tfa_scenario_3_1', 'tfa_scenario_3_2', 'tfa_scenario_4', 'tfa_scenario_5', 'tfa_call_transition'] as $key)
+                            @if(isset($pb['templates'][$key]))
+                                @php
+                                    $tmpl = $pb['templates'][$key];
+                                @endphp
+                                <div class="p-3 rounded-xl border border-base-300 bg-base-100 flex flex-col justify-between gap-3 text-xs">
+                                    <div class="space-y-1.5">
+                                        <div class="flex items-center justify-between gap-1">
+                                            <span class="font-bold">{{ $tmpl['angle_label'] }}</span>
+                                            <x-mary-badge :value="'+'.$tmpl['due_in_days'].'d delay'" class="badge-neutral text-white badge-xs" />
+                                        </div>
+                                        <div class="p-2 rounded bg-base-200/60 font-mono text-[11px] leading-relaxed whitespace-pre-line text-base-content/90 select-all" id="tmpl-{{ $key }}-{{ $lead->id }}">
 {{ $tmpl['body'] }}
+                                        </div>
+                                    </div>
+                                    <div class="flex items-center justify-between pt-2 border-t border-base-200 text-[11px]">
+                                        <span class="text-base-content/60">Target: {{ $tmpl['target_stage'] }}</span>
+                                        <div class="flex items-center gap-1">
+                                            <button type="button" 
+                                                    onclick="navigator.clipboard.writeText(document.getElementById('tmpl-{{ $key }}-{{ $lead->id }}').innerText.trim()); alert('Copied to clipboard!')" 
+                                                    class="btn btn-xs btn-outline">
+                                                Copy
+                                            </button>
+                                            <x-mary-button label="+ Task" wire:click="createStageTask('{{ $key }}')" class="btn-xs btn-primary text-white" spinner="createStageTask" />
+                                        </div>
+                                    </div>
                                 </div>
-                            </div>
-                            <div class="flex items-center justify-between pt-2 border-t border-base-200 text-[11px]">
-                                <span class="text-base-content/60">Target: {{ $tmpl['target_stage'] }}</span>
-                                <div class="flex items-center gap-1">
-                                    <button type="button" 
-                                            onclick="navigator.clipboard.writeText(document.getElementById('tmpl-{{ $key }}-{{ $lead->id }}').innerText.trim()); alert('Copied to clipboard!')" 
-                                            class="btn btn-xs btn-outline">
-                                        Copy
-                                    </button>
-                                    <x-mary-button label="+ Task" wire:click="createStageTask('{{ $key }}')" class="btn-xs btn-primary text-white" spinner="createStageTask" />
-                                </div>
-                            </div>
-                        </div>
-                    @endforeach
-                </div>
-            </div>
-
-            {{-- 3. INSTITUTIONAL OBJECTION HANDLING --}}
-            <div class="space-y-3 pt-3 border-t border-base-200">
-                <div class="flex items-center justify-between">
-                    <h4 class="font-bold text-sm uppercase tracking-wider text-base-content/80 flex items-center gap-1.5">
-                        <x-mary-icon name="o-shield-check" class="w-4 h-4 text-secondary" />
-                        3. Institutional Objection Handling (Unflappable & Technical)
-                    </h4>
-                    <span class="text-xs text-base-content/60">Peer engineer rebuttal scripts</span>
+                            @endif
+                        @endforeach
+                    </div>
                 </div>
 
-                <div class="space-y-2.5">
-                    @foreach(['objection_inhouse', 'objection_wash_trading', 'objection_pricing', 'objection_equities', 'objection_lookahead'] as $key)
-                        @php
-                            $tmpl = $pb['templates'][$key];
-                        @endphp
-                        <div class="p-3 rounded-xl border border-base-300 bg-base-100 space-y-2 text-xs">
-                            <div class="flex items-center justify-between gap-1">
-                                <span class="font-bold text-primary">{{ $tmpl['angle_label'] }}</span>
-                                <div class="flex items-center gap-1">
-                                    <button type="button" 
-                                            onclick="navigator.clipboard.writeText(document.getElementById('tmpl-{{ $key }}-{{ $lead->id }}').innerText.trim()); alert('Copied objection response to clipboard!')" 
-                                            class="btn btn-xs btn-outline">
-                                        Copy Response
-                                    </button>
-                                    <x-mary-button label="+ Task" wire:click="createStageTask('{{ $key }}')" class="btn-xs btn-secondary text-white" spinner="createStageTask" />
-                                </div>
-                            </div>
-                            <div class="p-2.5 rounded bg-base-200/60 font-mono text-[11px] leading-relaxed text-base-content/90 select-all" id="tmpl-{{ $key }}-{{ $lead->id }}">
-                                {{ $tmpl['body'] }}
-                            </div>
-                        </div>
-                    @endforeach
-                </div>
-            </div>
+                {{-- TECHFUSION AUTOMATA: 3. OPERATOR OBJECTION HANDLING --}}
+                <div class="space-y-3 pt-3 border-t border-base-200">
+                    <div class="flex items-center justify-between">
+                        <h4 class="font-bold text-sm uppercase tracking-wider text-base-content/80 flex items-center gap-1.5">
+                            <x-mary-icon name="o-shield-check" class="w-4 h-4 text-secondary" />
+                            3. Operator Objection Handling (Deterministic & Technical)
+                        </h4>
+                        <span class="text-xs text-base-content/60">Overcoming Zapier fragility, LLM hallucination & POPIA compliance</span>
+                    </div>
 
-            {{-- 4. POST-EVALUATION & CONTRACT CONVERSION (SALES MOTIONS V2 SEC 7) --}}
-            <div class="space-y-3 pt-3 border-t border-base-200">
-                <div class="flex items-center justify-between">
-                    <h4 class="font-bold text-sm uppercase tracking-wider text-base-content/80 flex items-center gap-1.5">
-                        <x-mary-icon name="o-check-badge" class="w-4 h-4 text-success" />
-                        4. Post-Evaluation & Contract Conversion (Sandbox SOW & Enterprise Contract)
-                    </h4>
-                    <span class="text-xs text-base-content/60">Closing the $15k-$35k Sandbox & $120k-$240k Annual Contract</span>
-                </div>
-
-                <div class="grid md:grid-cols-2 gap-3">
-                    @foreach(['scenario_3_1', 'technical_sync_debrief', 'sandbox_sow', 'cro_clearance', 'production_contract', 'onboarding_production'] as $key)
-                        @if(isset($pb['templates'][$key]))
-                            @php
-                                $tmpl = $pb['templates'][$key];
-                            @endphp
-                            <div class="p-3 rounded-xl border border-base-300 bg-base-100 flex flex-col justify-between gap-3 text-xs">
-                                <div class="space-y-1.5">
+                    <div class="space-y-2.5">
+                        @foreach(['tfa_objection_zapier', 'tfa_objection_hallucination', 'tfa_objection_pricing', 'tfa_objection_popia_gdpr', 'tfa_objection_security', 'tfa_objection_internal_eng', 'tfa_objection_whatsapp_reliability', 'tfa_objection_saas_lockin'] as $key)
+                            @if(isset($pb['templates'][$key]))
+                                @php
+                                    $tmpl = $pb['templates'][$key];
+                                @endphp
+                                <div class="p-3 rounded-xl border border-base-300 bg-base-100 space-y-2 text-xs">
                                     <div class="flex items-center justify-between gap-1">
-                                        <span class="font-bold">{{ $tmpl['angle_label'] }}</span>
-                                        <x-mary-badge :value="'+'.$tmpl['due_in_days'].'d delay'" class="badge-neutral text-white badge-xs" />
+                                        <span class="font-bold text-primary">{{ $tmpl['angle_label'] }}</span>
+                                        <div class="flex items-center gap-1">
+                                            <button type="button" 
+                                                    onclick="navigator.clipboard.writeText(document.getElementById('tmpl-{{ $key }}-{{ $lead->id }}').innerText.trim()); alert('Copied objection response to clipboard!')" 
+                                                    class="btn btn-xs btn-outline">
+                                                Copy Response
+                                            </button>
+                                            <x-mary-button label="+ Task" wire:click="createStageTask('{{ $key }}')" class="btn-xs btn-secondary text-white" spinner="createStageTask" />
+                                        </div>
                                     </div>
-                                    <div class="p-2 rounded bg-base-200/60 font-mono text-[11px] leading-relaxed whitespace-pre-line text-base-content/90 select-all" id="tmpl-{{ $key }}-{{ $lead->id }}">
-{{ $tmpl['body'] }}
-                                    </div>
-                                </div>
-                                <div class="flex items-center justify-between pt-2 border-t border-base-200 text-[11px]">
-                                    <span class="text-base-content/60">Target: {{ $tmpl['target_stage'] }}</span>
-                                    <div class="flex items-center gap-1">
-                                        <button type="button" 
-                                                onclick="navigator.clipboard.writeText(document.getElementById('tmpl-{{ $key }}-{{ $lead->id }}').innerText.trim()); alert('Copied to clipboard!')" 
-                                                class="btn btn-xs btn-outline">
-                                            Copy
-                                        </button>
-                                        <x-mary-button label="+ Task" wire:click="createStageTask('{{ $key }}')" class="btn-xs btn-primary text-white" spinner="createStageTask" />
+                                    <div class="p-2.5 rounded bg-base-200/60 font-mono text-[11px] leading-relaxed text-base-content/90 select-all" id="tmpl-{{ $key }}-{{ $lead->id }}">
+                                        {{ $tmpl['body'] }}
                                     </div>
                                 </div>
-                            </div>
-                        @endif
-                    @endforeach
+                            @endif
+                        @endforeach
+                    </div>
                 </div>
-            </div>
+
+                {{-- TECHFUSION AUTOMATA: 4. 5-DAY PILOT SOW & SPRINT CUTOVER --}}
+                <div class="space-y-3 pt-3 border-t border-base-200">
+                    <div class="flex items-center justify-between">
+                        <h4 class="font-bold text-sm uppercase tracking-wider text-base-content/80 flex items-center gap-1.5">
+                            <x-mary-icon name="o-check-badge" class="w-4 h-4 text-success" />
+                            4. Paid Pilot Sprint SOW & Production Cutover (R15,000 / $850 to Core Build)
+                        </h4>
+                        <span class="text-xs text-base-content/60">5-Day Sprint Cutover with 100% Rollover Credit & 14-Day Warranty</span>
+                    </div>
+
+                    <div class="grid md:grid-cols-2 gap-3">
+                        @foreach(['tfa_architecture_session', 'tfa_pilot_sow', 'tfa_sprint_handover', 'tfa_core_conversion'] as $key)
+                            @if(isset($pb['templates'][$key]))
+                                @php
+                                    $tmpl = $pb['templates'][$key];
+                                @endphp
+                                <div class="p-3 rounded-xl border border-base-300 bg-base-100 flex flex-col justify-between gap-3 text-xs">
+                                    <div class="space-y-1.5">
+                                        <div class="flex items-center justify-between gap-1">
+                                            <span class="font-bold">{{ $tmpl['angle_label'] }}</span>
+                                            <x-mary-badge :value="'+'.$tmpl['due_in_days'].'d delay'" class="badge-neutral text-white badge-xs" />
+                                        </div>
+                                        <div class="p-2 rounded bg-base-200/60 font-mono text-[11px] leading-relaxed whitespace-pre-line text-base-content/90 select-all" id="tmpl-{{ $key }}-{{ $lead->id }}">
+{{ $tmpl['body'] }}
+                                        </div>
+                                    </div>
+                                    <div class="flex items-center justify-between pt-2 border-t border-base-200 text-[11px]">
+                                        <span class="text-base-content/60">Target: {{ $tmpl['target_stage'] }}</span>
+                                        <div class="flex items-center gap-1">
+                                            <button type="button" 
+                                                    onclick="navigator.clipboard.writeText(document.getElementById('tmpl-{{ $key }}-{{ $lead->id }}').innerText.trim()); alert('Copied to clipboard!')" 
+                                                    class="btn btn-xs btn-outline">
+                                                Copy
+                                            </button>
+                                            <x-mary-button label="+ Task" wire:click="createStageTask('{{ $key }}')" class="btn-xs btn-primary text-white" spinner="createStageTask" />
+                                        </div>
+                                    </div>
+                                </div>
+                            @endif
+                        @endforeach
+                    </div>
+                </div>
+            @else
+                {{-- DUBSTRATA: 1. LINKEDIN CONNECTION NOTES --}}
+                <div class="space-y-3">
+                    <div class="flex items-center justify-between">
+                        <h4 class="font-bold text-sm uppercase tracking-wider text-base-content/80 flex items-center gap-1.5">
+                            <x-mary-icon name="o-link" class="w-4 h-4 text-primary" />
+                            1. LinkedIn Connection Notes (&lt; 300 Characters)
+                        </h4>
+                        <span class="text-xs text-base-content/60">Strictly character-capped, peer-to-peer open ended</span>
+                    </div>
+
+                    <div class="grid md:grid-cols-3 gap-3">
+                        @foreach(['connection_angle_a', 'connection_angle_b', 'connection_angle_c'] as $key)
+                            @if(isset($pb['templates'][$key]))
+                                @php
+                                    $tmpl = $pb['templates'][$key];
+                                @endphp
+                                <div class="p-3 rounded-xl border {{ $tmpl['is_recommended'] ? 'border-warning/80 bg-warning/5 ring-1 ring-warning/30' : 'border-base-300 bg-base-100' }} flex flex-col justify-between gap-3 text-xs">
+                                    <div class="space-y-1.5">
+                                        <div class="flex items-center justify-between gap-1">
+                                            <span class="font-bold">{{ $tmpl['angle_label'] }}</span>
+                                            @if($tmpl['is_recommended'])
+                                                <x-mary-badge value="RECOMMENDED" class="badge-warning text-neutral-900 badge-xs font-bold" />
+                                            @endif
+                                        </div>
+                                        <div class="p-2 rounded bg-base-200/60 font-mono text-[11px] leading-relaxed text-base-content/90 select-all" id="tmpl-{{ $key }}-{{ $lead->id }}">
+                                            {{ $tmpl['body'] }}
+                                        </div>
+                                    </div>
+                                    <div class="flex items-center justify-between pt-2 border-t border-base-200 text-[11px]">
+                                        <span class="font-mono {{ $tmpl['is_valid_length'] ? 'text-success' : 'text-error font-bold' }}">
+                                            {{ $tmpl['char_count'] }} / 300 chars
+                                        </span>
+                                        <div class="flex items-center gap-1">
+                                            <button type="button" 
+                                                    onclick="navigator.clipboard.writeText(document.getElementById('tmpl-{{ $key }}-{{ $lead->id }}').innerText.trim()); alert('Copied to clipboard!')" 
+                                                    class="btn btn-xs btn-outline">
+                                                Copy
+                                            </button>
+                                            <x-mary-button label="+ Task" wire:click="createStageTask('{{ $key }}')" class="btn-xs btn-primary text-white" spinner="createStageTask" />
+                                        </div>
+                                    </div>
+                                </div>
+                            @endif
+                        @endforeach
+                    </div>
+                </div>
+
+                {{-- DUBSTRATA: 2. CONVERSATIONAL CADENCE / SCENARIOS --}}
+                <div class="space-y-3 pt-3 border-t border-base-200">
+                    <div class="flex items-center justify-between">
+                        <h4 class="font-bold text-sm uppercase tracking-wider text-base-content/80 flex items-center gap-1.5">
+                            <x-mary-icon name="o-chat-bubble-left-right" class="w-4 h-4 text-info" />
+                            2. Conversational Flow (Event-Driven Steps)
+                        </h4>
+                        <span class="text-xs text-base-content/60">Triggered by prospect behavior, not arbitrary calendars</span>
+                    </div>
+
+                    <div class="grid md:grid-cols-2 gap-3">
+                        @foreach(['scenario_1', 'scenario_2', 'scenario_3', 'scenario_4', 'scenario_5', 'call_transition'] as $key)
+                            @if(isset($pb['templates'][$key]))
+                                @php
+                                    $tmpl = $pb['templates'][$key];
+                                @endphp
+                                <div class="p-3 rounded-xl border border-base-300 bg-base-100 flex flex-col justify-between gap-3 text-xs">
+                                    <div class="space-y-1.5">
+                                        <div class="flex items-center justify-between gap-1">
+                                            <span class="font-bold">{{ $tmpl['angle_label'] }}</span>
+                                            <x-mary-badge :value="'+'.$tmpl['due_in_days'].'d delay'" class="badge-neutral text-white badge-xs" />
+                                        </div>
+                                        <div class="p-2 rounded bg-base-200/60 font-mono text-[11px] leading-relaxed whitespace-pre-line text-base-content/90 select-all" id="tmpl-{{ $key }}-{{ $lead->id }}">
+{{ $tmpl['body'] }}
+                                        </div>
+                                    </div>
+                                    <div class="flex items-center justify-between pt-2 border-t border-base-200 text-[11px]">
+                                        <span class="text-base-content/60">Target: {{ $tmpl['target_stage'] }}</span>
+                                        <div class="flex items-center gap-1">
+                                            <button type="button" 
+                                                    onclick="navigator.clipboard.writeText(document.getElementById('tmpl-{{ $key }}-{{ $lead->id }}').innerText.trim()); alert('Copied to clipboard!')" 
+                                                    class="btn btn-xs btn-outline">
+                                                Copy
+                                            </button>
+                                            <x-mary-button label="+ Task" wire:click="createStageTask('{{ $key }}')" class="btn-xs btn-primary text-white" spinner="createStageTask" />
+                                        </div>
+                                    </div>
+                                </div>
+                            @endif
+                        @endforeach
+                    </div>
+                </div>
+
+                {{-- DUBSTRATA: 3. INSTITUTIONAL OBJECTION HANDLING --}}
+                <div class="space-y-3 pt-3 border-t border-base-200">
+                    <div class="flex items-center justify-between">
+                        <h4 class="font-bold text-sm uppercase tracking-wider text-base-content/80 flex items-center gap-1.5">
+                            <x-mary-icon name="o-shield-check" class="w-4 h-4 text-secondary" />
+                            3. Institutional Objection Handling (Unflappable & Technical)
+                        </h4>
+                        <span class="text-xs text-base-content/60">Peer engineer rebuttal scripts</span>
+                    </div>
+
+                    <div class="space-y-2.5">
+                        @foreach(['objection_inhouse', 'objection_wash_trading', 'objection_pricing', 'objection_equities', 'objection_lookahead'] as $key)
+                            @if(isset($pb['templates'][$key]))
+                                @php
+                                    $tmpl = $pb['templates'][$key];
+                                @endphp
+                                <div class="p-3 rounded-xl border border-base-300 bg-base-100 space-y-2 text-xs">
+                                    <div class="flex items-center justify-between gap-1">
+                                        <span class="font-bold text-primary">{{ $tmpl['angle_label'] }}</span>
+                                        <div class="flex items-center gap-1">
+                                            <button type="button" 
+                                                    onclick="navigator.clipboard.writeText(document.getElementById('tmpl-{{ $key }}-{{ $lead->id }}').innerText.trim()); alert('Copied objection response to clipboard!')" 
+                                                    class="btn btn-xs btn-outline">
+                                                Copy Response
+                                            </button>
+                                            <x-mary-button label="+ Task" wire:click="createStageTask('{{ $key }}')" class="btn-xs btn-secondary text-white" spinner="createStageTask" />
+                                        </div>
+                                    </div>
+                                    <div class="p-2.5 rounded bg-base-200/60 font-mono text-[11px] leading-relaxed text-base-content/90 select-all" id="tmpl-{{ $key }}-{{ $lead->id }}">
+                                        {{ $tmpl['body'] }}
+                                    </div>
+                                </div>
+                            @endif
+                        @endforeach
+                    </div>
+                </div>
+
+                {{-- DUBSTRATA: 4. POST-EVALUATION & CONTRACT CONVERSION (SALES MOTIONS V2 SEC 7) --}}
+                <div class="space-y-3 pt-3 border-t border-base-200">
+                    <div class="flex items-center justify-between">
+                        <h4 class="font-bold text-sm uppercase tracking-wider text-base-content/80 flex items-center gap-1.5">
+                            <x-mary-icon name="o-check-badge" class="w-4 h-4 text-success" />
+                            4. Post-Evaluation & Contract Conversion (Sandbox SOW & Enterprise Contract)
+                        </h4>
+                        <span class="text-xs text-base-content/60">Closing the $15k-$35k Sandbox & $120k-$240k Annual Contract</span>
+                    </div>
+
+                    <div class="grid md:grid-cols-2 gap-3">
+                        @foreach(['scenario_3_1', 'technical_sync_debrief', 'sandbox_sow', 'cro_clearance', 'production_contract', 'onboarding_production'] as $key)
+                            @if(isset($pb['templates'][$key]))
+                                @php
+                                    $tmpl = $pb['templates'][$key];
+                                @endphp
+                                <div class="p-3 rounded-xl border border-base-300 bg-base-100 flex flex-col justify-between gap-3 text-xs">
+                                    <div class="space-y-1.5">
+                                        <div class="flex items-center justify-between gap-1">
+                                            <span class="font-bold">{{ $tmpl['angle_label'] }}</span>
+                                            <x-mary-badge :value="'+'.$tmpl['due_in_days'].'d delay'" class="badge-neutral text-white badge-xs" />
+                                        </div>
+                                        <div class="p-2 rounded bg-base-200/60 font-mono text-[11px] leading-relaxed whitespace-pre-line text-base-content/90 select-all" id="tmpl-{{ $key }}-{{ $lead->id }}">
+{{ $tmpl['body'] }}
+                                        </div>
+                                    </div>
+                                    <div class="flex items-center justify-between pt-2 border-t border-base-200 text-[11px]">
+                                        <span class="text-base-content/60">Target: {{ $tmpl['target_stage'] }}</span>
+                                        <div class="flex items-center gap-1">
+                                            <button type="button" 
+                                                    onclick="navigator.clipboard.writeText(document.getElementById('tmpl-{{ $key }}-{{ $lead->id }}').innerText.trim()); alert('Copied to clipboard!')" 
+                                                    class="btn btn-xs btn-outline">
+                                                Copy
+                                            </button>
+                                            <x-mary-button label="+ Task" wire:click="createStageTask('{{ $key }}')" class="btn-xs btn-primary text-white" spinner="createStageTask" />
+                                        </div>
+                                    </div>
+                                </div>
+                            @endif
+                        @endforeach
+                    </div>
+                </div>
+            @endif
         </div>
 
         <x-slot:actions>

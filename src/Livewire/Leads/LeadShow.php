@@ -58,25 +58,28 @@ class LeadShow extends Component
     public function createStageTask(string $type): void
     {
         $playbookService = app(SalesPlaybookService::class);
+        $brand = $playbookService->detectBrand($this->lead);
+        $isTechfusion = ($brand === SalesPlaybookService::BRAND_TECHFUSION);
 
-        // Map short alias to template key
+        // Map short alias to template key depending on brand
         $templateKey = match ($type) {
             'connection_request', 'connect' => $playbookService->detectRecommendedAngle($this->lead),
-            'angle_a' => 'connection_angle_a',
-            'angle_b' => 'connection_angle_b',
-            'angle_c' => 'connection_angle_c',
-            'intro_dm', 'scenario_1' => 'scenario_1',
-            'scenario_2', 'offer_kit' => 'scenario_2',
-            'scenario_3', 'send_kit' => 'scenario_3',
-            'scenario_4', 'follow_up', 'nudge' => 'scenario_4',
-            'scenario_5', 'disconnect' => 'scenario_5',
-            'schedule_call', 'call', 'call_transition' => 'call_transition',
-            'scenario_3_1', 'eval_review', 'post_eval' => 'scenario_3_1',
-            'technical_sync', 'debrief' => 'technical_sync_debrief',
-            'sandbox_sow', 'sow' => 'sandbox_sow',
-            'cro', 'cro_clearance' => 'cro_clearance',
-            'production_contract', 'contract' => 'production_contract',
-            'onboarding', 'onboarding_production' => 'onboarding_production',
+            'angle_a' => $isTechfusion ? 'tfa_connection_angle_a' : 'connection_angle_a',
+            'angle_b' => $isTechfusion ? 'tfa_connection_angle_b' : 'connection_angle_b',
+            'angle_c' => $isTechfusion ? 'tfa_connection_angle_c' : 'connection_angle_c',
+            'angle_d' => 'tfa_connection_angle_d',
+            'intro_dm', 'scenario_1' => $isTechfusion ? 'tfa_scenario_1' : 'scenario_1',
+            'scenario_2', 'offer_kit' => $isTechfusion ? 'tfa_scenario_2' : 'scenario_2',
+            'scenario_3', 'send_kit' => $isTechfusion ? 'tfa_scenario_3' : 'scenario_3',
+            'scenario_4', 'follow_up', 'nudge' => $isTechfusion ? 'tfa_scenario_4' : 'scenario_4',
+            'scenario_5', 'disconnect' => $isTechfusion ? 'tfa_scenario_5' : 'scenario_5',
+            'schedule_call', 'call', 'call_transition' => $isTechfusion ? 'tfa_call_transition' : 'call_transition',
+            'scenario_3_1', 'eval_review', 'post_eval' => $isTechfusion ? 'tfa_scenario_3_1' : 'scenario_3_1',
+            'technical_sync', 'debrief', 'architecture_session' => $isTechfusion ? 'tfa_architecture_session' : 'technical_sync_debrief',
+            'sandbox_sow', 'sow', 'pilot_sow' => $isTechfusion ? 'tfa_pilot_sow' : 'sandbox_sow',
+            'cro', 'cro_clearance', 'sprint_handover' => $isTechfusion ? 'tfa_sprint_handover' : 'cro_clearance',
+            'production_contract', 'contract', 'core_conversion' => $isTechfusion ? 'tfa_core_conversion' : 'production_contract',
+            'onboarding', 'onboarding_production' => $isTechfusion ? 'tfa_sprint_handover' : 'onboarding_production',
             default => $type,
         };
 
@@ -139,8 +142,11 @@ class LeadShow extends Component
     public function getPlaybookProperty(): array
     {
         $playbookService = app(SalesPlaybookService::class);
+        $brand = $playbookService->detectBrand($this->lead);
+        $isTechfusion = ($brand === SalesPlaybookService::BRAND_TECHFUSION);
+
         $recommendedAngle = $playbookService->detectRecommendedAngle($this->lead);
-        $templates = $playbookService->getTemplates();
+        $templates = $playbookService->getTemplatesForBrand($brand);
 
         $rendered = [];
         foreach ($templates as $key => $tmpl) {
@@ -151,10 +157,12 @@ class LeadShow extends Component
         }
 
         return [
-            'id' => SalesPlaybookService::PLAYBOOK_ID,
-            'name' => SalesPlaybookService::PLAYBOOK_NAME,
-            'target_audience' => SalesPlaybookService::TARGET_AUDIENCE,
-            'guiding_principle' => SalesPlaybookService::GUIDING_PRINCIPLE,
+            'brand' => $brand,
+            'brand_label' => $isTechfusion ? 'Techfusion Automata' : 'Dubstrata',
+            'id' => $isTechfusion ? SalesPlaybookService::PLAYBOOK_TFA_ID : SalesPlaybookService::PLAYBOOK_ID,
+            'name' => $isTechfusion ? SalesPlaybookService::PLAYBOOK_TFA_NAME : SalesPlaybookService::PLAYBOOK_NAME,
+            'target_audience' => $isTechfusion ? SalesPlaybookService::TARGET_AUDIENCE_TFA : SalesPlaybookService::TARGET_AUDIENCE,
+            'guiding_principle' => $isTechfusion ? SalesPlaybookService::GUIDING_PRINCIPLE_TFA : SalesPlaybookService::GUIDING_PRINCIPLE,
             'recommended_angle' => $recommendedAngle,
             'templates' => $rendered,
         ];

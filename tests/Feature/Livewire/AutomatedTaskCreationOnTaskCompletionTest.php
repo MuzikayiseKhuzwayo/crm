@@ -358,3 +358,314 @@ it('auto-creates Scenario 5 Disconnect task when Scenario 4 Nudge task is comple
         ->and($disconnectTask->description)->toContain('leave your inbox alone')
         ->and($disconnectTask->user_assigned_id)->toBe($this->user->id);
 });
+
+it('auto-creates Techfusion Automata Scenario 1 and Scenario 4 tasks when connection request task is completed for a Techfusion lead', function () {
+    $tfaUser = User::create(['name' => 'Techfusion Alchemy', 'email' => 'operations@techfusion-alchemy.xyz']);
+    $stage1 = $this->stages->firstWhere('order', 1);
+
+    $lead = Lead::create([
+        'external_id' => Uuid::uuid4()->toString(),
+        'title' => 'Nexus Logistics - Head of Operations',
+        'pipeline_id' => $this->pipeline->id,
+        'pipeline_stage_id' => $stage1->id,
+        'user_owner_id' => $tfaUser->id,
+        'user_assigned_id' => $tfaUser->id,
+    ]);
+
+    $connectionTask = Task::create([
+        'external_id' => Uuid::uuid4()->toString(),
+        'name' => 'Send a Connection Request and get accepted',
+        'taskable_type' => Lead::class,
+        'taskable_id' => $lead->id,
+        'due_at' => now()->addDays(1),
+        'user_owner_id' => $tfaUser->id,
+        'user_assigned_id' => $tfaUser->id,
+    ]);
+
+    $connectionTask->update(['completed_at' => now()]);
+
+    $tasks = Task::where('taskable_type', $lead->getMorphClass())
+        ->where('taskable_id', $lead->id)
+        ->get();
+
+    $scenario1 = $tasks->firstWhere('name', 'Playbook Scenario 1: Accept in Silence (Logistics / Document Intake Case Study)');
+    $scenario4 = $tasks->firstWhere('name', 'Playbook Scenario 4: Mid-Cadence Speed-to-Lead Nudge');
+
+    expect($scenario1)->not->toBeNull()
+        ->and($scenario1->user_assigned_id)->toBe($tfaUser->id)
+        ->and($scenario1->description)->toContain('techfusion-alchemy.xyz')
+        ->and($scenario1->completed_at)->toBeNull();
+    expect(str_contains($scenario1->description, '!'))->toBeFalse();
+
+    expect($scenario4)->not->toBeNull()
+        ->and($scenario4->user_assigned_id)->toBe($tfaUser->id)
+        ->and($scenario4->description)->toContain('sub-45s response times')
+        ->and($scenario4->completed_at)->toBeNull();
+    expect(str_contains($scenario4->description, '!'))->toBeFalse();
+});
+
+it('auto-creates Techfusion Architecture Blueprint and 30-Min Whiteboard Call when Techfusion Scenario 1 is completed', function () {
+    $tfaUser = User::create(['name' => 'Techfusion Ops', 'email' => 'muzi@techfusion-alchemy.xyz']);
+    $stage2 = $this->stages->firstWhere('order', 2);
+
+    $lead = Lead::create([
+        'external_id' => Uuid::uuid4()->toString(),
+        'title' => 'Summit Freight - Operations Director',
+        'pipeline_id' => $this->pipeline->id,
+        'pipeline_stage_id' => $stage2->id,
+        'user_owner_id' => $tfaUser->id,
+        'user_assigned_id' => $tfaUser->id,
+    ]);
+
+    $scenario1Task = Task::create([
+        'external_id' => Uuid::uuid4()->toString(),
+        'name' => 'Playbook Scenario 1: Accept in Silence (Logistics / Document Intake Case Study)',
+        'taskable_type' => Lead::class,
+        'taskable_id' => $lead->id,
+        'due_at' => now()->addDays(2),
+        'user_owner_id' => $tfaUser->id,
+        'user_assigned_id' => $tfaUser->id,
+    ]);
+
+    $scenario1Task->update(['completed_at' => now()]);
+
+    $tasks = Task::where('taskable_type', $lead->getMorphClass())
+        ->where('taskable_id', $lead->id)
+        ->get();
+
+    $blueprint = $tasks->firstWhere('name', 'Playbook Scenario 3.1: Deliver Architecture Blueprint (5 Stages)');
+    $whiteboard = $tasks->firstWhere('name', 'Playbook Call Transition: Propose 30-Min Architecture Whiteboard Session');
+
+    expect($blueprint)->not->toBeNull()
+        ->and($blueprint->description)->toContain('techfusion-alchemy.xyz#architecture')
+        ->and($blueprint->user_assigned_id)->toBe($tfaUser->id);
+    expect(str_contains($blueprint->description, '!'))->toBeFalse();
+
+    expect($whiteboard)->not->toBeNull()
+        ->and($whiteboard->description)->toContain('30-minute technical architecture session')
+        ->and($whiteboard->user_assigned_id)->toBe($tfaUser->id);
+    expect(str_contains($whiteboard->description, '!'))->toBeFalse();
+});
+
+it('auto-creates Techfusion Paid Pilot Sprint Offer and Whiteboard Session when Blueprint is completed', function () {
+    $tfaUser = User::create(['name' => 'Techfusion Systems', 'email' => 'dev@techfusion-alchemy.xyz']);
+    $stage3 = $this->stages->firstWhere('order', 3);
+
+    $lead = Lead::create([
+        'external_id' => Uuid::uuid4()->toString(),
+        'title' => 'Apex B2B - Founder & CEO',
+        'pipeline_id' => $this->pipeline->id,
+        'pipeline_stage_id' => $stage3->id,
+        'user_owner_id' => $tfaUser->id,
+        'user_assigned_id' => $tfaUser->id,
+    ]);
+
+    $blueprintTask = Task::create([
+        'external_id' => Uuid::uuid4()->toString(),
+        'name' => 'Playbook Scenario 3.1: Deliver Architecture Blueprint (5 Stages)',
+        'taskable_type' => Lead::class,
+        'taskable_id' => $lead->id,
+        'due_at' => now()->addDay(),
+        'user_owner_id' => $tfaUser->id,
+        'user_assigned_id' => $tfaUser->id,
+    ]);
+
+    $blueprintTask->update(['completed_at' => now()]);
+
+    $tasks = Task::where('taskable_type', $lead->getMorphClass())
+        ->where('taskable_id', $lead->id)
+        ->get();
+
+    $pilotOffer = $tasks->firstWhere('name', 'Playbook Scenario 3.2: Offer 5-Day Paid Pilot Sprint (R15,000 / $850)');
+    $whiteboardSession = $tasks->firstWhere('name', 'Playbook Call: 30-Minute Whiteboard Session & Custom Flowchart');
+
+    expect($pilotOffer)->not->toBeNull()
+        ->and($pilotOffer->description)->toContain('R15,000 / ~$850')
+        ->and($pilotOffer->description)->toContain('14-day defect warranty')
+        ->and($pilotOffer->user_assigned_id)->toBe($tfaUser->id);
+
+    expect($whiteboardSession)->not->toBeNull()
+        ->and($whiteboardSession->description)->toContain('Cost-of-Toil')
+        ->and($whiteboardSession->user_assigned_id)->toBe($tfaUser->id);
+});
+
+it('auto-creates Techfusion 5-Day Paid Pilot Sprint SOW when Whiteboard call is completed', function () {
+    $tfaUser = User::create(['name' => 'Techfusion Lead', 'email' => 'lead@techfusion-alchemy.xyz']);
+    $stage4 = $this->stages->firstWhere('order', 4);
+
+    $lead = Lead::create([
+        'external_id' => Uuid::uuid4()->toString(),
+        'title' => 'Vanguard Supply - COO',
+        'pipeline_id' => $this->pipeline->id,
+        'pipeline_stage_id' => $stage4->id,
+        'user_owner_id' => $tfaUser->id,
+        'user_assigned_id' => $tfaUser->id,
+    ]);
+
+    $callTask = Task::create([
+        'external_id' => Uuid::uuid4()->toString(),
+        'name' => 'Playbook Call: 30-Minute Whiteboard Session & Custom Flowchart',
+        'taskable_type' => Lead::class,
+        'taskable_id' => $lead->id,
+        'due_at' => now()->addDays(2),
+        'user_owner_id' => $tfaUser->id,
+        'user_assigned_id' => $tfaUser->id,
+    ]);
+
+    $callTask->update(['completed_at' => now()]);
+
+    $tasks = Task::where('taskable_type', $lead->getMorphClass())
+        ->where('taskable_id', $lead->id)
+        ->get();
+
+    $sowTask = $tasks->firstWhere('name', 'Playbook SOW: Deliver 5-Day Paid Pilot Sprint SOW (R15,000 / $850) & Mutual NDA');
+
+    expect($sowTask)->not->toBeNull()
+        ->and($sowTask->description)->toContain('R15,000 (~$850)')
+        ->and($sowTask->description)->toContain('100% rollover credit clause')
+        ->and($sowTask->user_assigned_id)->toBe($tfaUser->id);
+});
+
+it('auto-creates Techfusion 5-Day Sprint Handover task when Pilot SOW task is completed', function () {
+    $tfaUser = User::create(['name' => 'Techfusion Architect', 'email' => 'ops@techfusion-alchemy.xyz']);
+    $stage5 = $this->stages->firstWhere('order', 5);
+
+    $lead = Lead::create([
+        'external_id' => Uuid::uuid4()->toString(),
+        'title' => 'Prime Distribution - Logistics VP',
+        'pipeline_id' => $this->pipeline->id,
+        'pipeline_stage_id' => $stage5->id,
+        'user_owner_id' => $tfaUser->id,
+        'user_assigned_id' => $tfaUser->id,
+    ]);
+
+    $sowTask = Task::create([
+        'external_id' => Uuid::uuid4()->toString(),
+        'name' => 'Playbook SOW: Deliver 5-Day Paid Pilot Sprint SOW (R15,000 / $850) & Mutual NDA',
+        'taskable_type' => Lead::class,
+        'taskable_id' => $lead->id,
+        'due_at' => now()->addDays(2),
+        'user_owner_id' => $tfaUser->id,
+        'user_assigned_id' => $tfaUser->id,
+    ]);
+
+    $sowTask->update(['completed_at' => now()]);
+
+    $tasks = Task::where('taskable_type', $lead->getMorphClass())
+        ->where('taskable_id', $lead->id)
+        ->get();
+
+    $sprintHandover = $tasks->firstWhere('name', 'Playbook Sprint: Deploy 5-Day Sprint Handover & 14-Day Delivery Warranty');
+
+    expect($sprintHandover)->not->toBeNull()
+        ->and($sprintHandover->description)->toContain('CPA Sec 54/56 zero-charge bug remediation')
+        ->and($sprintHandover->description)->toContain('Day 10 Operational Review')
+        ->and($sprintHandover->user_assigned_id)->toBe($tfaUser->id);
+});
+
+it('auto-creates Techfusion Core Pipeline Conversion task when Sprint Handover task is completed', function () {
+    $tfaUser = User::create(['name' => 'Techfusion Senior', 'email' => 'growth@techfusion-alchemy.xyz']);
+    $stage6 = $this->stages->firstWhere('order', 6);
+
+    $lead = Lead::create([
+        'external_id' => Uuid::uuid4()->toString(),
+        'title' => 'Horizon Retail - Managing Director',
+        'pipeline_id' => $this->pipeline->id,
+        'pipeline_stage_id' => $stage6->id,
+        'user_owner_id' => $tfaUser->id,
+        'user_assigned_id' => $tfaUser->id,
+    ]);
+
+    $sprintTask = Task::create([
+        'external_id' => Uuid::uuid4()->toString(),
+        'name' => 'Playbook Sprint: Deploy 5-Day Sprint Handover & 14-Day Delivery Warranty',
+        'taskable_type' => Lead::class,
+        'taskable_id' => $lead->id,
+        'due_at' => now()->addDays(5),
+        'user_owner_id' => $tfaUser->id,
+        'user_assigned_id' => $tfaUser->id,
+    ]);
+
+    $sprintTask->update(['completed_at' => now()]);
+
+    $tasks = Task::where('taskable_type', $lead->getMorphClass())
+        ->where('taskable_id', $lead->id)
+        ->get();
+
+    $coreConversion = $tasks->firstWhere('name', 'Playbook Contract: Convert to Core Pipeline Build (R50,000+ / $2,800+) or Fractional Lead');
+
+    expect($coreConversion)->not->toBeNull()
+        ->and($coreConversion->description)->toContain('Core Pipeline Expansion Roadmap')
+        ->and($coreConversion->description)->toContain('Fractional Automation Lead retainer')
+        ->and($coreConversion->user_assigned_id)->toBe($tfaUser->id);
+});
+
+it('strictly isolates Dubstrata tasks from Techfusion tasks based on lead ownership', function () {
+    $dubUser = User::create(['name' => 'Dubstrata Team', 'email' => 'muzi@dubstrata.com']);
+    $tfaUser = User::create(['name' => 'Techfusion Alchemy', 'email' => 'operations@techfusion-alchemy.xyz']);
+    $stage1 = $this->stages->firstWhere('order', 1);
+
+    $dubLead = Lead::create([
+        'external_id' => Uuid::uuid4()->toString(),
+        'title' => 'Millennium - Macro Trader',
+        'pipeline_id' => $this->pipeline->id,
+        'pipeline_stage_id' => $stage1->id,
+        'user_owner_id' => $dubUser->id,
+        'user_assigned_id' => $dubUser->id,
+    ]);
+
+    $tfaLead = Lead::create([
+        'external_id' => Uuid::uuid4()->toString(),
+        'title' => 'CargoNet - COO',
+        'pipeline_id' => $this->pipeline->id,
+        'pipeline_stage_id' => $stage1->id,
+        'user_owner_id' => $tfaUser->id,
+        'user_assigned_id' => $tfaUser->id,
+    ]);
+
+    $dubTask = Task::create([
+        'external_id' => Uuid::uuid4()->toString(),
+        'name' => 'Send a Connection Request and get accepted',
+        'taskable_type' => Lead::class,
+        'taskable_id' => $dubLead->id,
+        'due_at' => now()->addDay(),
+        'user_owner_id' => $dubUser->id,
+        'user_assigned_id' => $dubUser->id,
+    ]);
+
+    $tfaTask = Task::create([
+        'external_id' => Uuid::uuid4()->toString(),
+        'name' => 'Send a Connection Request and get accepted',
+        'taskable_type' => Lead::class,
+        'taskable_id' => $tfaLead->id,
+        'due_at' => now()->addDay(),
+        'user_owner_id' => $tfaUser->id,
+        'user_assigned_id' => $tfaUser->id,
+    ]);
+
+    $dubTask->update(['completed_at' => now()]);
+    $tfaTask->update(['completed_at' => now()]);
+
+    $dubTasks = Task::where('taskable_type', $dubLead->getMorphClass())->where('taskable_id', $dubLead->id)->get();
+    $tfaTasks = Task::where('taskable_type', $tfaLead->getMorphClass())->where('taskable_id', $tfaLead->id)->get();
+
+    // Dubstrata check: strictly quant, zero Techfusion words
+    foreach ($dubTasks as $t) {
+        $desc = (string) ($t->description ?? '');
+        expect($t->name)->not->toContain('Speed-to-Lead')
+            ->and($t->name)->not->toContain('R15,000')
+            ->and($t->name)->not->toContain('Techfusion');
+        expect(str_contains($desc, 'techfusion-alchemy.xyz'))->toBeFalse();
+        expect(str_contains($desc, '!'))->toBeFalse();
+    }
+
+    // Techfusion check: strictly operator, zero Dubstrata words
+    foreach ($tfaTasks as $t) {
+        $desc = (string) ($t->description ?? '');
+        expect($t->name)->not->toContain('Canary')
+            ->and($t->name)->not->toContain('HRX Terminal')
+            ->and($t->name)->not->toContain('Dubstrata');
+        expect(str_contains($desc, 'dubstrata.com'))->toBeFalse();
+        expect(str_contains($desc, '!'))->toBeFalse();
+    }
+});
