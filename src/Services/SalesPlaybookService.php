@@ -41,6 +41,18 @@ class SalesPlaybookService
 
     public const GUIDING_PRINCIPLE = self::GUIDING_PRINCIPLE_DUBSTRATA;
 
+    public const PLAYBOOK_TFA_ID = self::PLAYBOOK_ID_TECHFUSION;
+
+    public const PLAYBOOK_TFA_NAME = self::PLAYBOOK_NAME_TECHFUSION;
+
+    public const TARGET_AUDIENCE_TFA = self::TARGET_AUDIENCE_TECHFUSION;
+
+    public const GUIDING_PRINCIPLE_TFA = self::GUIDING_PRINCIPLE_TECHFUSION;
+
+    public const PLAYBOOK_ID_TFA = self::PLAYBOOK_ID_TECHFUSION;
+
+    public const PLAYBOOK_NAME_TFA = self::PLAYBOOK_NAME_TECHFUSION;
+
     /**
      * Get templates for a specific brand or combined repository.
      */

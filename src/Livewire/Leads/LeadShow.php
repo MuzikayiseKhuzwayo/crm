@@ -159,10 +159,10 @@ class LeadShow extends Component
         return [
             'brand' => $brand,
             'brand_label' => $isTechfusion ? 'Techfusion Automata' : 'Dubstrata',
-            'id' => $isTechfusion ? SalesPlaybookService::PLAYBOOK_TFA_ID : SalesPlaybookService::PLAYBOOK_ID,
-            'name' => $isTechfusion ? SalesPlaybookService::PLAYBOOK_TFA_NAME : SalesPlaybookService::PLAYBOOK_NAME,
-            'target_audience' => $isTechfusion ? SalesPlaybookService::TARGET_AUDIENCE_TFA : SalesPlaybookService::TARGET_AUDIENCE,
-            'guiding_principle' => $isTechfusion ? SalesPlaybookService::GUIDING_PRINCIPLE_TFA : SalesPlaybookService::GUIDING_PRINCIPLE,
+            'id' => $playbookService->getPlaybookId($brand),
+            'name' => $playbookService->getPlaybookName($brand),
+            'target_audience' => $playbookService->getTargetAudience($brand),
+            'guiding_principle' => $playbookService->getGuidingPrinciple($brand),
             'recommended_angle' => $recommendedAngle,
             'templates' => $rendered,
         ];

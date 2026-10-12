@@ -162,3 +162,35 @@ it('batch generates personalized playbook tasks via console command', function (
         ->and($task->name)->toBe('LinkedIn Note: Angle C (Quant Devs / Data Infra)')
         ->and($task->description)->toContain('Hi Alexander');
 });
+
+it('resolves Techfusion Automata playbook metadata correctly on LeadShow without undefined constants', function () {
+    $tfaUser = User::create([
+        'name' => 'Techfusion Operator',
+        'email' => 'operator@techfusion.xyz',
+    ]);
+
+    $tfaLead = Lead::create([
+        'external_id' => Uuid::uuid4()->toString(),
+        'title' => 'DigiTax - CEO & Co-founder',
+        'description' => "Headline: Technologist and Entrepreneur\nCurrent Role: CEO & Co-founder at DigiTax",
+        'pipeline_id' => $this->pipeline->id,
+        'pipeline_stage_id' => $this->stages->first()->id,
+        'user_owner_id' => $tfaUser->id,
+    ]);
+
+    $component = Livewire::test(LeadShow::class, ['lead' => $tfaLead]);
+    $playbook = $component->get('playbook');
+
+    expect($playbook['brand'])->toBe(SalesPlaybookService::BRAND_TECHFUSION)
+        ->and($playbook['brand_label'])->toBe('Techfusion Automata')
+        ->and($playbook['id'])->toBe(SalesPlaybookService::PLAYBOOK_ID_TECHFUSION)
+        ->and($playbook['name'])->toBe(SalesPlaybookService::PLAYBOOK_NAME_TECHFUSION)
+        ->and($playbook['target_audience'])->toBe(SalesPlaybookService::TARGET_AUDIENCE_TECHFUSION)
+        ->and($playbook['guiding_principle'])->toBe(SalesPlaybookService::GUIDING_PRINCIPLE_TECHFUSION);
+
+    // Verify backwards-compatibility constant aliases
+    expect(SalesPlaybookService::PLAYBOOK_TFA_ID)->toBe(SalesPlaybookService::PLAYBOOK_ID_TECHFUSION)
+        ->and(SalesPlaybookService::PLAYBOOK_TFA_NAME)->toBe(SalesPlaybookService::PLAYBOOK_NAME_TECHFUSION)
+        ->and(SalesPlaybookService::TARGET_AUDIENCE_TFA)->toBe(SalesPlaybookService::TARGET_AUDIENCE_TECHFUSION)
+        ->and(SalesPlaybookService::GUIDING_PRINCIPLE_TFA)->toBe(SalesPlaybookService::GUIDING_PRINCIPLE_TECHFUSION);
+});
