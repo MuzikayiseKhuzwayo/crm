@@ -112,12 +112,12 @@ class LaravelCrmSetupLeadPipeline extends Command
             ->whereNotIn('id', $canonicalStageIds)
             ->get();
 
-        $closedLostStage = PipelineStage::where('pipeline_id', $pipeline->id)->where('order', 7)->first();
+        $coldProspectStage = PipelineStage::where('pipeline_id', $pipeline->id)->where('order', 1)->first();
         foreach ($extraStages as $extra) {
-            if ($closedLostStage) {
+            if ($coldProspectStage) {
                 Lead::where('pipeline_stage_id', $extra->id)->update([
-                    'pipeline_stage_id' => $closedLostStage->id,
-                    'pipeline_stage_order' => $closedLostStage->order,
+                    'pipeline_stage_id' => $coldProspectStage->id,
+                    'pipeline_stage_order' => $coldProspectStage->order,
                 ]);
             }
             $extra->delete();
