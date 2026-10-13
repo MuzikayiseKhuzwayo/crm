@@ -126,7 +126,7 @@ class SalesPlaybookService
                 'name' => 'Playbook Scenario 1: Accept in Silence (Audit Paper)',
                 'due_in_days' => 2,
                 'max_chars' => null,
-                'target_stage' => 'Connected / DM Sent',
+                'target_stage' => 'Engaged / Qualified',
                 'body' => "Thanks for connecting, {first_name}.\n\nSaw your desk's focus on {focus_area}. We recently finished our out-of-sample forward evaluation on GCP, testing whether prediction market microstructure and causal graph states add orthogonal signal to price models once lookahead bias is eliminated.\n\nWrote up the methodology and data structure here if you're interested: dubstrata.com/research\n\nCurious if your team has explored prediction market data or if the noise/wash-trading has kept you away?",
             ],
             'scenario_2' => [
@@ -366,7 +366,7 @@ class SalesPlaybookService
                 'name' => 'Playbook Scenario 1: Accept in Silence (Logistics / Document Intake Case Study)',
                 'due_in_days' => 2,
                 'max_chars' => null,
-                'target_stage' => 'Connected / DM Sent',
+                'target_stage' => 'Engaged / Qualified',
                 'body' => "Thanks for connecting, {first_name}.\n\nSaw your operational focus at {firm_name}. We recently deployed an automated intake pipeline for an international logistics client ([Dave Leng / Ulysses Group]) that parses messy supplier POs and syncs them directly into their database with zero manual keying—saving roughly 15 hours a week.\n\nMapped out the architecture flow and error-handling schema here if you're interested: techfusion-alchemy.xyz#solutions\n\nCurious if your team is currently handling document intake and CRM syncing manually, or if you already have custom scripts running?",
             ],
             'tfa_scenario_2' => [

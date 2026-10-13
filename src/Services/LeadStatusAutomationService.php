@@ -90,8 +90,11 @@ class LeadStatusAutomationService
         $targetRank = $stages->search(fn ($s) => $s->id == $targetStage->id);
 
         if ($currentRank !== false && $targetRank !== false && $targetRank <= $currentRank) {
-            // Lead is already at or past this stage
-            return $lead;
+            $targetStageName = strtolower($targetStage->name ?? '');
+            if (! str_contains($targetStageName, 'lost') && ! str_contains($targetStageName, 'disconnect')) {
+                // Lead is already at or past this stage
+                return $lead;
+            }
         }
 
         $oldStageName = $lead->pipelineStage?->name ?? 'None';
@@ -123,58 +126,156 @@ class LeadStatusAutomationService
      */
     public function determineTargetStage(Task $task, $stages, Lead $lead): ?PipelineStage
     {
-        $taskName = strtolower($task->name ?? '');
+        $taskName = strtolower(trim($task->name ?? ''));
 
-        // 1. Stage 6: Closed Won
+        // A. Match directly against Sales Playbook templates
+        $playbookService = app(SalesPlaybookService::class);
+        $templates = $playbookService->getTemplates();
+
+        foreach ($templates as $tmpl) {
+            $tmplName = strtolower(trim($tmpl['name'] ?? ''));
+            if ($tmplName && ($taskName === $tmplName || str_contains($taskName, $tmplName))) {
+                $targetStageName = $tmpl['target_stage'] ?? null;
+                if ($targetStageName) {
+                    $matched = $this->findStageByTargetName($stages, $targetStageName);
+                    if ($matched) {
+                        return $matched;
+                    }
+                }
+            }
+        }
+
+        // B. Keyword-based matching mapped to Sales Motions
+
+        // 1. Stage 7: Closed Lost
         if ($this->matchesKeywords($taskName, [
-            'closed won', 'deal won', 'close deal', 'final approval',
-            'sign contract', 'contract signed', 'license activation',
-            'payment received', 'closed',
+            'graceful disconnect', 'disconnect', 'scenario 5', 'closed lost', 'lost',
+            'not interested', 'unsubscribed', 'unresponsive', 'disqualified',
+        ])) {
+            return $this->findStageMatching($stages, ['closed lost', 'lost'], 7)
+                ?: $stages->last();
+        }
+
+        // 2. Stage 6: Closed Won
+        if ($this->matchesKeywords($taskName, [
+            'closed won', 'deal won', 'close deal', 'annual enterprise production contract',
+            'production contract', 'sprint handover', 'core conversion', 'core pipeline conversion',
+            'delivery warranty', 'final approval', 'sign contract', 'contract signed',
+            'license activation', 'payment received', 'closed',
         ])) {
             return $this->findStageMatching($stages, ['closed won', 'won'], 6)
                 ?: $stages->last();
         }
 
-        // 2. Stage 5: Proposal Sent
+        // 3. Stage 5: Proposal Sent
         if ($this->matchesKeywords($taskName, [
             'proposal', 'send proposal', 'prepare & send', 'send formal proposal',
-            'quote', 'send quote', 'contract terms', 'review contract', 'send proposal document',
+            'pilot sprint sow', 'sandbox sow', 'paid sandbox', 'paid pilot', 'sow',
+            'cro clearance', 'hrx terminal', 'quote', 'send quote', 'contract terms',
+            'review contract', 'send proposal document', 'pricing discussion', 'call to discuss pricing',
         ])) {
-            return $this->findStageMatching($stages, ['proposal', 'contract sent', 'quote'], 5);
+            return $this->findStageMatching($stages, ['proposal sent', 'proposal', 'contract sent', 'quote'], 5);
         }
 
-        // 3. Stage 4: Call Scheduled / Presentation
+        // 4. Stage 4: Call Scheduled
         if ($this->matchesKeywords($taskName, [
+            'call transition', 'technical sync', 'architecture whiteboard', 'whiteboard session',
             'schedule call', 'schedule discovery', 'schedule pitch', 'schedule demo',
             'schedule meeting', 'book call', 'book calendar', 'presentation scheduled',
-            'schedule product demo',
+            'schedule product demo', 'calendar invite', 'meeting debrief', 'canary demo',
         ])) {
-            return $this->findStageMatching($stages, ['call scheduled', 'presentation', 'appointment scheduled', 'scheduled'], 4);
+            return $this->findStageMatching($stages, ['call scheduled', 'call', 'presentation', 'scheduled'], 4);
         }
 
-        // 4. Stage 3: Engaged / Qualified / Meeting Conducted
+        // 5. Stage 3: Engaged / Qualified / Outreach Follow-up
         if ($this->matchesKeywords($taskName, [
+            'scenario 1', 'accept in silence', 'audit paper', 'case study',
+            'scenario 2', 'kit offer', 'data engineering', 'data plumbing', 'loom teardown',
+            'scenario 3', 'evaluation kit', 'quant_evaluation_kit', 'deliver evaluation kit',
+            'architecture blueprint', 'canary paper-trader', 'deletion gain', 'paid pilot sprint',
+            'scenario 4', 'nudge', 'mid-cadence',
+            'objection', 'in-house', 'sybil clustering', 'zero lookahead', 'zapier', 'hallucination', 'popia',
             'conduct discovery', 'discovery meeting', 'discovery call', 'qualif',
-            'engage', 'review meeting', 'collect feedback', 'onboarding call',
-            'quarterly review', 'pricing discussion',
+            'engage', 'review meeting', 'collect feedback', 'gather requirements', 'technical requirements',
+            'onboarding call', 'quarterly review',
         ])) {
-            return $this->findStageMatching($stages, ['engaged', 'qualified', 'decision maker', 'meeting'], 3);
+            return $this->findStageMatching($stages, ['engaged / qualified', 'engaged', 'qualified', 'decision maker', 'meeting'], 3);
         }
 
-        // 5. Stage 2: Connected / DM Sent / Outreach
+        // 6. Stage 2: Connected / DM Sent
+        // Initial connection request or connection note
         if ($this->matchesKeywords($taskName, [
-            'connection request', 'connect', 'introductory dm', 'send a dm',
-            'send an offer dm', ' dm', 'outreach', 'first contact',
-            'contacted', 'contact this man', 'send intro',
+            'connection request', 'connection note', 'connect with prospect', 'send a connection',
+            'angle a', 'angle b', 'angle c', 'angle d', 'linkedin note', 'outreach', 'first contact',
+            'contacted', 'contact this man', 'send intro', 'intro note', 'initial connection', 'connect',
         ])) {
-            return $this->findStageMatching($stages, ['connected', 'dm sent', 'contacted', 'appointment scheduled'], 2);
+            return $this->findStageMatching($stages, ['connected / dm sent', 'connected', 'dm sent', 'contacted'], 2);
         }
 
-        // 6. Generic Task completion fallback:
-        // If lead is in initial cold stage (Stage 1 / order 1 / rank 0) or unassigned, advance to Stage 2
+        // 7. Introductory DM / Offer DM task handling:
+        if ($this->matchesKeywords($taskName, [
+            'introductory dm', 'send an introductory dm', 'intro dm', 'offer dm', 'send an offer dm', 'send a dm',
+        ])) {
+            // If lead is already at Connected / DM Sent or higher, completing the DM moves/keeps them in Engaged / Qualified
+            $currentRank = $stages->search(fn ($s) => $s->id == $lead->pipeline_stage_id);
+            if ($currentRank !== false && $currentRank >= 1) {
+                return $this->findStageMatching($stages, ['engaged / qualified', 'engaged', 'qualified'], 3);
+            }
+
+            // If still cold, initial DM completes initial outreach -> Connected / DM Sent
+            return $this->findStageMatching($stages, ['connected / dm sent', 'connected', 'dm sent', 'contacted'], 2);
+        }
+
+        // 8. Generic Task completion fallback:
         $currentRank = $stages->search(fn ($s) => $s->id == $lead->pipeline_stage_id);
         if ($currentRank === 0 || $currentRank === false) {
-            return $stages->get(1) ?: $stages->firstWhere('order', 2);
+            // Cold Prospect -> Connected / DM Sent
+            return $this->findStageMatching($stages, ['connected / dm sent', 'connected', 'dm sent', 'contacted'], 2);
+        }
+
+        if ($currentRank === 1) {
+            // Connected / DM Sent -> Engaged / Qualified
+            return $this->findStageMatching($stages, ['engaged / qualified', 'engaged', 'qualified'], 3);
+        }
+
+        return null;
+    }
+
+    /**
+     * Resolve target stage from named playbook stage.
+     *
+     * @param  Collection<int, PipelineStage>  $stages
+     */
+    protected function findStageByTargetName($stages, string $targetStageName): ?PipelineStage
+    {
+        $normalized = strtolower(trim($targetStageName));
+
+        if (str_contains($normalized, 'lost') || str_contains($normalized, 'disconnect')) {
+            return $this->findStageMatching($stages, ['closed lost', 'lost'], 7) ?: $stages->last();
+        }
+
+        if (str_contains($normalized, 'won')) {
+            return $this->findStageMatching($stages, ['closed won', 'won'], 6);
+        }
+
+        if (str_contains($normalized, 'proposal')) {
+            return $this->findStageMatching($stages, ['proposal sent', 'proposal', 'contract sent', 'quote'], 5);
+        }
+
+        if (str_contains($normalized, 'call') || str_contains($normalized, 'scheduled')) {
+            return $this->findStageMatching($stages, ['call scheduled', 'call', 'presentation', 'scheduled'], 4);
+        }
+
+        if (str_contains($normalized, 'engaged') || str_contains($normalized, 'qualif')) {
+            return $this->findStageMatching($stages, ['engaged / qualified', 'engaged', 'qualified'], 3);
+        }
+
+        if (str_contains($normalized, 'connected') || str_contains($normalized, 'dm sent')) {
+            return $this->findStageMatching($stages, ['connected / dm sent', 'connected', 'dm sent', 'contacted'], 2);
+        }
+
+        if (str_contains($normalized, 'cold') || str_contains($normalized, 'new')) {
+            return $this->findStageMatching($stages, ['cold prospect', 'cold', 'new'], 1);
         }
 
         return null;
@@ -202,10 +303,10 @@ class LeadStatusAutomationService
     protected function findStageMatching($stages, array $nameKeywords, int $targetOrder): ?PipelineStage
     {
         // First try to match by name
-        foreach ($stages as $stage) {
-            $stageName = strtolower($stage->name ?? '');
-            foreach ($nameKeywords as $kw) {
-                if (str_contains($stageName, $kw)) {
+        foreach ($nameKeywords as $kw) {
+            foreach ($stages as $stage) {
+                $stageName = strtolower($stage->name ?? '');
+                if (str_contains($stageName, strtolower($kw))) {
                     return $stage;
                 }
             }

@@ -5,7 +5,6 @@ use Ramsey\Uuid\Uuid;
 use VentureDrake\LaravelCrm\Livewire\Leads\LeadShow;
 use VentureDrake\LaravelCrm\Models\Lead;
 use VentureDrake\LaravelCrm\Models\Pipeline;
-use VentureDrake\LaravelCrm\Models\PipelineStage;
 use VentureDrake\LaravelCrm\Models\Task;
 use VentureDrake\LaravelCrm\Tests\Stubs\User;
 
@@ -44,7 +43,10 @@ it('updates lead pipeline stage and creates stage-specific automated tasks', fun
 
     $task = Task::where('taskable_type', get_class($lead))
         ->where('taskable_id', $lead->id)
-        ->where('name', 'LIKE', '%Schedule Discovery%')
+        ->where(function ($q) {
+            $q->where('name', 'LIKE', '%Call%')
+                ->orWhere('name', 'LIKE', '%Technical Sync%');
+        })
         ->first();
 
     expect($task)->not->toBeNull()

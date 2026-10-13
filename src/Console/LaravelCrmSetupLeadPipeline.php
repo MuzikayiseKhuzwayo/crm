@@ -46,49 +46,81 @@ class LaravelCrmSetupLeadPipeline extends Command
         $stages = [
             1 => [
                 'name' => 'Cold Prospect',
-                'hex' => '64748b',
+                'color' => '64748b',
             ],
             2 => [
                 'name' => 'Connected / DM Sent',
-                'hex' => '0284c7',
+                'color' => '0284c7',
             ],
             3 => [
                 'name' => 'Engaged / Qualified',
-                'hex' => '8b5cf6',
+                'color' => '8b5cf6',
             ],
             4 => [
                 'name' => 'Call Scheduled',
-                'hex' => 'f59e0b',
+                'color' => 'f59e0b',
             ],
             5 => [
                 'name' => 'Proposal Sent',
-                'hex' => 'ec4899',
+                'color' => 'ec4899',
             ],
             6 => [
                 'name' => 'Closed Won',
-                'hex' => '10b981',
+                'color' => '10b981',
+            ],
+            7 => [
+                'name' => 'Closed Lost',
+                'color' => 'ef4444',
             ],
         ];
 
+        $existingStages = PipelineStage::where('pipeline_id', $pipeline->id)
+            ->orderBy('order', 'asc')
+            ->orderBy('id', 'asc')
+            ->get();
+
+        $canonicalStageIds = [];
+
         foreach ($stages as $order => $stageData) {
-            $stage = PipelineStage::where('pipeline_id', $pipeline->id)
-                ->where('order', $order)
-                ->first();
+            $stage = $existingStages->firstWhere('order', $order);
+
+            if (! $stage && isset($existingStages[$order - 1])) {
+                $stage = $existingStages[$order - 1];
+            }
 
             if ($stage) {
                 $stage->update([
                     'name' => $stageData['name'],
-                    'hex' => $stageData['hex'],
+                    'order' => $order,
+                    'color' => $stageData['color'],
                 ]);
             } else {
-                PipelineStage::create([
+                $stage = PipelineStage::create([
                     'external_id' => Uuid::uuid4()->toString(),
                     'pipeline_id' => $pipeline->id,
                     'name' => $stageData['name'],
-                    'hex' => $stageData['hex'],
+                    'color' => $stageData['color'],
                     'order' => $order,
                 ]);
             }
+
+            $canonicalStageIds[] = $stage->id;
+        }
+
+        // Clean up or remap any extra stages beyond the canonical 7 stages
+        $extraStages = PipelineStage::where('pipeline_id', $pipeline->id)
+            ->whereNotIn('id', $canonicalStageIds)
+            ->get();
+
+        $closedLostStage = PipelineStage::where('pipeline_id', $pipeline->id)->where('order', 7)->first();
+        foreach ($extraStages as $extra) {
+            if ($closedLostStage) {
+                Lead::where('pipeline_stage_id', $extra->id)->update([
+                    'pipeline_stage_id' => $closedLostStage->id,
+                    'pipeline_stage_order' => $closedLostStage->order,
+                ]);
+            }
+            $extra->delete();
         }
 
         $this->info('Lead Pipeline Stages aligned successfully:');
