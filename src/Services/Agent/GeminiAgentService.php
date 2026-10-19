@@ -122,7 +122,7 @@ class GeminiAgentService
             // Execute each function call and append function responses
             foreach ($functionCalls as $fn) {
                 $fnName = $fn['name'];
-                $fnArgs = $fn['args'] ?? [];
+                $fnArgs = is_array($fn['args'] ?? null) ? $fn['args'] : (array) ($fn['args'] ?? []);
 
                 $executionResult = $this->dispatchTool($fnName, $fnArgs);
 
