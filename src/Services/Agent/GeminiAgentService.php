@@ -166,6 +166,8 @@ class GeminiAgentService
                 'delete_leads' => $this->tools->deleteLeads($args),
                 'delete_tasks' => $this->tools->deleteTasks($args),
                 'get_lead_alerts' => $this->tools->getLeadAlerts(),
+                'get_notification_settings' => $this->tools->getNotificationSettings(),
+                'update_notification_settings' => $this->tools->updateNotificationSettings($args),
                 default => ['error' => "Unknown tool: {$name}"],
             };
         } catch (\Throwable $e) {
@@ -180,7 +182,12 @@ class GeminiAgentService
      */
     protected function buildSystemInstruction(): string
     {
-        return <<<'PROMPT'
+        $state = $this->tools->getNotificationState();
+        $modeKey = $state['mode'] ?? 'balanced';
+        $modeMeta = CrmToolsService::PROACTIVITY_MODES[$modeKey] ?? CrmToolsService::PROACTIVITY_MODES['balanced'];
+        $proactivityDirective = $modeMeta['directive'];
+
+        $basePrompt = <<<'PROMPT'
 You are the autonomous CRM Chief of Staff and Operator for Muzi Khuzwayo at Techfusion / Alchemy CRM.
 Your job is to manage leads, monitor pipeline velocity, keep tasks on track, and proactively alert on anomalies.
 
@@ -205,7 +212,11 @@ Never omit the URL when presenting lists of leads, contacts, or organizations.
 • When asked to find or inspect overdue leads lacking LinkedIn links, call `query_leads` with `has_tasks: "overdue"` and `has_linkedin: "no"`.
 • When asked to delete overdue leads without LinkedIn links (or any filtered subset), call `delete_leads` with `has_tasks: "overdue"` and `has_linkedin: "no"`.
 • Never claim that you cannot filter or delete overdue leads lacking LinkedIn links in an automated step! You have the full tools to query and delete them directly.
+13. PROACTIVITY MODES & NOTIFICATION CONTROL: You support 4 proactivity modes (`high`, `balanced`, `low` / Daily Digest, `silent` / On-Demand) and temporary snooze timers.
+• Whenever Muzi asks to change notification frequency, reduce spam, be more or less proactive, mute/unmute, switch to digest mode, or snooze alerts for N hours, immediately call `update_notification_settings` (or `get_notification_settings` to check current status) and confirm the change clearly. Always remind him he can also tap `/mode` anytime for the interactive button control deck.
 PROMPT;
+
+        return $basePrompt."\n\nCURRENT ACTIVE MODE DIRECTIVE:\n".$proactivityDirective;
     }
 
     /**
@@ -410,6 +421,35 @@ PROMPT;
                 'parameters' => [
                     'type' => 'OBJECT',
                     'properties' => (object) [],
+                ],
+            ],
+            [
+                'name' => 'get_notification_settings',
+                'description' => 'Get the current AI proactivity mode (high, balanced, low/digest, silent), notification frequency cooldown, and snooze status.',
+                'parameters' => [
+                    'type' => 'OBJECT',
+                    'properties' => (object) [],
+                ],
+            ],
+            [
+                'name' => 'update_notification_settings',
+                'description' => 'Change the AI proactivity mode (high = 1h relentless, balanced = 4h smart delta, low = 24h daily digest, silent = on-demand only/muted) or snooze/unsnooze autonomous Telegram notifications.',
+                'parameters' => [
+                    'type' => 'OBJECT',
+                    'properties' => [
+                        'mode' => [
+                            'type' => 'STRING',
+                            'description' => 'Target proactivity mode: "high" (most proactive, every 1h), "balanced" (smart delta, every 4h only when alerts change), "low" (daily digest, once every 24h), or "silent" (least proactive, autonomous notifications off).',
+                        ],
+                        'snooze_hours' => [
+                            'type' => 'NUMBER',
+                            'description' => 'Optional number of hours to snooze notifications (e.g. 2, 4, 8, 24). Pass 0 to clear/resume from snooze.',
+                        ],
+                        'clear_snooze' => [
+                            'type' => 'BOOLEAN',
+                            'description' => 'Set true to immediately clear any active snooze timer.',
+                        ],
+                    ],
                 ],
             ],
         ];

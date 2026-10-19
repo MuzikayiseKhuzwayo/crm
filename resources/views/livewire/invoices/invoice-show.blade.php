@@ -8,15 +8,15 @@
             @endif
             @if($invoice->fully_paid_at)
                 <x-mary-badge value="{{ ucfirst(__('laravel-crm::lang.paid')) }}" class="badge badge-sm badge-success text-white" />
-            @elseif(! $invoice->fully_paid_at && $invoice->due_date->isToday())
+            @elseif(! $invoice->fully_paid_at && $invoice->due_date && $invoice->due_date->isToday())
                 <x-mary-badge value="{{ ucfirst(__('laravel-crm::lang.due_today')) }}" class="badge badge-sm badge-secondary text-white" />
-            @elseif(! $invoice->fully_paid_at && $invoice->due_date->isTomorrow())
+            @elseif(! $invoice->fully_paid_at && $invoice->due_date && $invoice->due_date->isTomorrow())
                 <x-mary-badge value="{{ ucfirst(__('laravel-crm::lang.due_tomorrow')) }}" class="badge badge-sm badge-secondary text-white" />
-            @elseif(! $invoice->fully_paid_at && $invoice->due_date->isYesterday())
+            @elseif(! $invoice->fully_paid_at && $invoice->due_date && $invoice->due_date->isYesterday())
                 <x-mary-badge value="{{ ucfirst(__('laravel-crm::lang.due_yesterday')) }}" class="badge badge-sm badge-secondary text-white" />
-            @elseif(! $invoice->fully_paid_at && abs($invoice->due_date->diffinDays()) > 0  && $invoice->due_date >= \Carbon\Carbon::now()->timezone($timezone))
+            @elseif(! $invoice->fully_paid_at && $invoice->due_date && abs($invoice->due_date->diffInDays()) > 0  && $invoice->due_date >= \Carbon\Carbon::now()->timezone($timezone))
                 <x-mary-badge value="{{ ucfirst(__('laravel-crm::lang.due')) }} {{ $invoice->due_date->diffForHumans() }}" class="badge badge-sm badge-secondary text-white" />
-            @elseif(! $invoice->fully_paid_at && abs($invoice->due_date->diffinDays()) > 0  && $invoice->due_date < \Carbon\Carbon::now()->timezone($timezone))
+            @elseif(! $invoice->fully_paid_at && $invoice->due_date && abs($invoice->due_date->diffInDays()) > 0  && $invoice->due_date < \Carbon\Carbon::now()->timezone($timezone))
                 <x-mary-badge value="{{ $invoice->due_date->diffForHumans() }} {{ ucfirst(__('laravel-crm::lang.overdue')) }}" class="badge badge-sm badge-error text-white" />
             @endif
         </x-slot:title>
@@ -69,6 +69,8 @@
                 @endif
             @endcan
             @can('view crm invoices')
+                <x-crm-pdf-preview-button :url="url(route('laravel-crm.invoices.preview', $invoice))" :download-url="url(route('laravel-crm.invoices.download', $invoice))" :title="$invoice->title" />
+                <x-crm-get-link-button :model="$invoice" />
                 <x-mary-button icon="o-arrow-down-tray" link="{{ url(route('laravel-crm.invoices.download', $invoice)) }}" no-wire-navigate class="btn-sm btn-square btn-outline" />
             @endcan
             | <livewire:crm-activity-menu /> |
@@ -190,8 +192,8 @@
                         @foreach($invoice->invoiceLines()->whereNotNull('product_id')->orderBy('order', 'asc')->orderBy('created_at', 'asc')->get() as $invoiceProduct)
                             <tr>
                                 <td class="px-0">
-                                    {{ $invoiceProduct->product->name }}
-                                    @if($invoiceProduct->product->code)
+                                    {{ $invoiceProduct->product?->name }}
+                                    @if($invoiceProduct->product?->code)
                                         <br /><small>{{ $invoiceProduct->product->code }}</small>
                                     @endif
                                 </td>

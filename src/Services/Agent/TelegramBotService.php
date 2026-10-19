@@ -116,10 +116,13 @@ class TelegramBotService
     /**
      * Answer inline button callback.
      */
-    public function answerCallbackQuery(string $callbackQueryId, ?string $text = null): bool
+    public function answerCallbackQuery(string $callbackQueryId, ?string $text = null, bool $showAlert = false): bool
     {
         try {
-            $payload = ['callback_query_id' => $callbackQueryId];
+            $payload = [
+                'callback_query_id' => $callbackQueryId,
+                'show_alert' => $showAlert,
+            ];
             if ($text) {
                 $payload['text'] = $text;
             }
@@ -128,6 +131,62 @@ class TelegramBotService
 
             return $response->successful();
         } catch (\Throwable $e) {
+            return false;
+        }
+    }
+
+    /**
+     * Edit an existing message text and/or inline keyboard in place.
+     */
+    public function editMessageText(string|int $chatId, int $messageId, string $text, ?array $replyMarkup = null): bool
+    {
+        try {
+            $payload = [
+                'chat_id' => $chatId,
+                'message_id' => $messageId,
+                'text' => $text,
+                'parse_mode' => 'Markdown',
+            ];
+
+            if ($replyMarkup) {
+                $payload['reply_markup'] = $replyMarkup;
+            }
+
+            $response = Http::withoutVerifying()->timeout(10)->post("{$this->baseUrl}/editMessageText", $payload);
+
+            if (! $response->successful()) {
+                $payload['parse_mode'] = null;
+                $fallback = Http::withoutVerifying()->timeout(10)->post("{$this->baseUrl}/editMessageText", $payload);
+
+                return $fallback->successful();
+            }
+
+            return true;
+        } catch (\Throwable $e) {
+            Log::error('Telegram editMessageText error: '.$e->getMessage());
+
+            return false;
+        }
+    }
+
+    /**
+     * Edit only the inline keyboard of an existing message in place.
+     */
+    public function editMessageReplyMarkup(string|int $chatId, int $messageId, ?array $replyMarkup = null): bool
+    {
+        try {
+            $payload = [
+                'chat_id' => $chatId,
+                'message_id' => $messageId,
+                'reply_markup' => $replyMarkup ?? ['inline_keyboard' => []],
+            ];
+
+            $response = Http::withoutVerifying()->timeout(10)->post("{$this->baseUrl}/editMessageReplyMarkup", $payload);
+
+            return $response->successful();
+        } catch (\Throwable $e) {
+            Log::error('Telegram editMessageReplyMarkup error: '.$e->getMessage());
+
             return false;
         }
     }

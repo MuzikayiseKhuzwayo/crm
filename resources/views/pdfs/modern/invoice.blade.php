@@ -32,14 +32,18 @@
                 <td>{{ $invoice->xeroInvoice->reference ?? $invoice->reference }}</td>
             </tr>
         @endif
-        <tr>
-            <td class="modern-meta-label">{{ ucfirst(__('laravel-crm::lang.invoice_date')) }}</td>
-            <td>{{ $invoice->issue_date->format($dateFormat) }}</td>
-        </tr>
-        <tr>
-            <td class="modern-meta-label">{{ ucfirst(__('laravel-crm::lang.due_date')) }}</td>
-            <td>{{ $invoice->due_date->format($dateFormat) }}</td>
-        </tr>
+        @if($invoice->issue_date)
+            <tr>
+                <td class="modern-meta-label">{{ ucfirst(__('laravel-crm::lang.invoice_date')) }}</td>
+                <td>{{ $invoice->issue_date->format($dateFormat) }}</td>
+            </tr>
+        @endif
+        @if($invoice->due_date)
+            <tr>
+                <td class="modern-meta-label">{{ ucfirst(__('laravel-crm::lang.due_date')) }}</td>
+                <td>{{ $invoice->due_date->format($dateFormat) }}</td>
+            </tr>
+        @endif
     </table>
 
     {{-- Parties block: bill-to left, from right --}}
@@ -74,7 +78,7 @@
             <td>
                 <div class="modern-party-heading">{{ ucfirst(__('laravel-crm::lang.from')) }}</div>
                 <div class="modern-party-body">
-                    @if($contactDetails)
+                    @if($contactDetails ?? null)
                         {!! nl2br($contactDetails) !!}
                     @else
                         {{ $fromName }}

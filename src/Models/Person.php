@@ -10,6 +10,7 @@ use VentureDrake\LaravelCrm\Traits\HasCrmActivities;
 use VentureDrake\LaravelCrm\Traits\HasCrmFields;
 use VentureDrake\LaravelCrm\Traits\HasEncryptableFields;
 use VentureDrake\LaravelCrm\Traits\HasGlobalSettings;
+use VentureDrake\LaravelCrm\Traits\HasPrimaryContactDetails;
 use VentureDrake\LaravelCrm\Traits\SearchFilters;
 
 class Person extends Model
@@ -19,6 +20,7 @@ class Person extends Model
     use HasCrmFields;
     use HasEncryptableFields;
     use HasGlobalSettings;
+    use HasPrimaryContactDetails;
     use SearchFilters;
     use SoftDeletes;
 
@@ -99,11 +101,6 @@ class Person extends Model
         return $this->morphMany(Email::class, 'emailable');
     }
 
-    public function getPrimaryEmail()
-    {
-        return $this->emails()->where('primary', 1)->first();
-    }
-
     /**
      * Get all of the persons phone numbers.
      */
@@ -112,22 +109,12 @@ class Person extends Model
         return $this->morphMany(Phone::class, 'phoneable');
     }
 
-    public function getPrimaryPhone()
-    {
-        return $this->phones()->where('primary', 1)->first();
-    }
-
     /**
      * Get all of the leads addresses.
      */
     public function addresses()
     {
         return $this->morphMany(Address::class, 'addressable');
-    }
-
-    public function getPrimaryAddress()
-    {
-        return $this->addresses()->where('primary', 1)->first();
     }
 
     public function organization()

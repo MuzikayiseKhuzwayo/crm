@@ -2,7 +2,6 @@
 
 namespace VentureDrake\LaravelCrm\Livewire\PurchaseOrders;
 
-use App\Models\User;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
 use Illuminate\Pagination\LengthAwarePaginator;
@@ -10,6 +9,7 @@ use Illuminate\Support\Collection;
 use Livewire\Component;
 use Livewire\WithPagination;
 use Mary\Traits\Toast;
+use VentureDrake\LaravelCrm\Livewire\Traits\HasUserOwnerFilter;
 use VentureDrake\LaravelCrm\Livewire\Traits\SearchesEncryptableContacts;
 use VentureDrake\LaravelCrm\Models\Label;
 use VentureDrake\LaravelCrm\Models\Pipeline;
@@ -19,7 +19,16 @@ use VentureDrake\LaravelCrm\Traits\ResetsPaginationWhenPropsChanges;
 
 class PurchaseOrderIndex extends Component
 {
-    use AuthorizesRequests, ClearsProperties, ResetsPaginationWhenPropsChanges, SearchesEncryptableContacts, Toast, WithPagination;
+    use AuthorizesRequests, ClearsProperties, HasUserOwnerFilter, ResetsPaginationWhenPropsChanges, SearchesEncryptableContacts, Toast, WithPagination;
+
+    /**
+     * The Sent badge on these rows goes stale the moment the layout's
+     * get-link modal ticks "mark as sent" -- that write runs in a
+     * different Livewire root, so nothing re-renders this table.
+     */
+    protected $listeners = [
+        'crm-get-link-sent' => '$refresh',
+    ];
 
     public $layout = 'index';
 
@@ -49,14 +58,9 @@ class PurchaseOrderIndex extends Component
         return (count($this->user_id) > 0 ? 1 : 0) + ($this->label_id ? 1 : 0);
     }
 
-    public function users(): Collection
-    {
-        return User::orderBy('name')->get();
-    }
-
     public function labels(): Collection
     {
-        return Label::all();
+        return Label::select('id', 'name')->get();
     }
 
     public function headers()
@@ -98,6 +102,15 @@ class PurchaseOrderIndex extends Component
         )
             ->leftJoin(config('laravel-crm.db_table_prefix').'people', config('laravel-crm.db_table_prefix').'purchase_orders.person_id', '=', config('laravel-crm.db_table_prefix').'people.id')
             ->leftJoin(config('laravel-crm.db_table_prefix').'organizations', config('laravel-crm.db_table_prefix').'purchase_orders.organization_id', '=', config('laravel-crm.db_table_prefix').'organizations.id')
+            // The joins above only select columns onto the PurchaseOrder
+            // itself; the preview button's `$purchaseOrder->title` reads the
+            // relations, which would otherwise lazy-load once per row.
+            //
+            // order backs the order-number cell, xeroPurchaseOrder the Xero
+            // action buttons, and person.primaryEmail the per-row
+            // <livewire:crm-purchase-order-send>, whose mount() pre-fills the
+            // To field.
+            ->with(['organization', 'person.primaryEmail', 'order', 'xeroPurchaseOrder'])
             ->when($this->search, function (Builder $q) {
                 $prefix = config('laravel-crm.db_table_prefix');
                 $term = $this->search;
@@ -117,7 +130,7 @@ class PurchaseOrderIndex extends Component
                     }
                 });
             })
-            ->when($this->user_id, fn (Builder $q) => $q->whereIn('user_owner_id', $this->user_id))
+            ->when($this->user_id, fn (Builder $q) => $q->whereIn(config('laravel-crm.db_table_prefix').'purchase_orders.user_owner_id', $this->user_id))
             ->when($this->label_id, fn (Builder $q) => $q->whereHas('labels', fn (Builder $q) => $q->whereIn(config('laravel-crm.db_table_prefix').'labels.id', $this->label_id)))
             ->orderBy(...array_values($this->sortBy))
             ->paginate(25);
@@ -137,7 +150,7 @@ class PurchaseOrderIndex extends Component
     public function render()
     {
         return view('laravel-crm::livewire.purchase-orders.purchase-order-index', [
-            'users' => $this->users(),
+            'users' => $this->users,
             'labels' => $this->labels(),
             'filterCount' => $this->filterCount(),
             'headers' => $this->headers(),

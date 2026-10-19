@@ -6,6 +6,7 @@ use Illuminate\Support\Facades\View;
 use VentureDrake\LaravelCrm\Http\Middleware\HasCrmAccess;
 use VentureDrake\LaravelCrm\Livewire\Settings\Integrations\ClickSend\ClickSendConnect;
 use VentureDrake\LaravelCrm\Livewire\Settings\Integrations\Xero\XeroConnect;
+use VentureDrake\LaravelCrm\Support\XeroIntegration;
 
 /* Portal routes (public, signed-URL + portal auth + public feature board)
    are registered separately in LaravelCrmServiceProvider::registerRoutes()
@@ -339,6 +340,10 @@ Route::group(['prefix' => 'quotes', 'middleware' => 'auth.laravel-crm'], functio
         ->name('laravel-crm.quotes.download')
         ->middleware(['can:view,quote']);
 
+    Route::get('{quote}/preview', 'VentureDrake\LaravelCrm\Http\Controllers\QuoteController@preview')
+        ->name('laravel-crm.quotes.preview')
+        ->middleware(['can:view,quote']);
+
     /* Quote Products */
 
     // Gated once, at the group, on can:manageProducts,<Model>.
@@ -426,6 +431,10 @@ Route::group(['prefix' => 'orders', 'middleware' => 'auth.laravel-crm'], functio
 
     Route::get('{order}/download', 'VentureDrake\LaravelCrm\Http\Controllers\OrderController@download')
         ->name('laravel-crm.orders.download')
+        ->middleware(['can:view,order']);
+
+    Route::get('{order}/preview', 'VentureDrake\LaravelCrm\Http\Controllers\OrderController@preview')
+        ->name('laravel-crm.orders.preview')
         ->middleware(['can:view,order']);
 
     /* Order Products */
@@ -520,6 +529,10 @@ Route::group(['prefix' => 'invoices', 'middleware' => 'auth.laravel-crm'], funct
     Route::get('{invoice}/download', 'VentureDrake\LaravelCrm\Http\Controllers\InvoiceController@download')
         ->name('laravel-crm.invoices.download')
         ->middleware(['can:view,invoice']);
+
+    Route::get('{invoice}/preview', 'VentureDrake\LaravelCrm\Http\Controllers\InvoiceController@preview')
+        ->name('laravel-crm.invoices.preview')
+        ->middleware(['can:view,invoice']);
 });
 
 /* Deliveries */
@@ -563,6 +576,10 @@ Route::group(['prefix' => 'deliveries', 'middleware' => 'auth.laravel-crm'], fun
 
     Route::get('{delivery}/download', 'VentureDrake\LaravelCrm\Http\Controllers\DeliveryController@download')
         ->name('laravel-crm.deliveries.download')
+        ->middleware(['can:view,delivery']);
+
+    Route::get('{delivery}/preview', 'VentureDrake\LaravelCrm\Http\Controllers\DeliveryController@preview')
+        ->name('laravel-crm.deliveries.preview')
         ->middleware(['can:view,delivery']);
 });
 
@@ -611,6 +628,10 @@ Route::group(['prefix' => 'purchase-orders', 'middleware' => 'auth.laravel-crm']
 
     Route::get('{purchaseOrder}/download', 'VentureDrake\LaravelCrm\Http\Controllers\PurchaseOrderController@download')
         ->name('laravel-crm.purchase-orders.download')
+        ->middleware(['can:view,purchaseOrder']);
+
+    Route::get('{purchaseOrder}/preview', 'VentureDrake\LaravelCrm\Http\Controllers\PurchaseOrderController@preview')
+        ->name('laravel-crm.purchase-orders.preview')
         ->middleware(['can:view,purchaseOrder']);
 
     Route::post('multiple', 'VentureDrake\LaravelCrm\Http\Controllers\PurchaseOrderController@storeMultiple')
@@ -1558,12 +1579,19 @@ Route::group(['prefix' => 'integrations', 'middleware' => 'auth.laravel-crm'], f
     Route::group(['prefix' => 'xero'], function () {
         Route::get('', XeroConnect::class)->name('laravel-crm.integrations.xero');
 
+        // Both routes stay registered even without dcblogdev/laravel-xero, because
+        // the settings view and the app layout build links to them by name; they
+        // just bounce back to the settings screen, which explains what's missing.
         Route::get('connect', function () {
+            if (! XeroIntegration::installed()) {
+                return redirect(route('laravel-crm.integrations.xero'));
+            }
+
             return Xero::connect();
         })->name('laravel-crm.integrations.xero.connect');
 
         Route::get('disconnect', function () {
-            if (Xero::isConnected()) {
+            if (XeroIntegration::connected()) {
                 Xero::disconnect();
             }
 

@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="{{ str_replace('_', '-', app()->getLocale()) }}">
+<html lang="{{ str_replace('_', '-', app()->getLocale()) }}" @if($hideNav ?? false) data-theme="light" @endif>
     <head>
         <meta charset="utf-8">
         <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -23,6 +23,7 @@
     </head>
     <body class="font-sans antialiased bg-base-200">
         <div id="app" class="min-h-screen flex flex-col">
+            @if(! ($hideNav ?? false))
             <x-mary-nav sticky full-width>
                 <x-slot:brand>
                     <a href="{{ url('/') }}" class="navbar-brand">
@@ -48,18 +49,19 @@
                     @endauth
                 </x-slot:actions>
             </x-mary-nav>
+            @endif
 
-            <x-mary-main with-nav full-width>
+            <x-mary-main :with-nav="! ($hideNav ?? false)" full-width>
                 <x-slot:content>
                     <div class="mx-auto max-w-6xl px-4 py-8">
                         @yield('content', $slot ?? null)
                     </div>
-
-                    <footer class="footer footer-center bg-base-100 text-base-content/60 py-4 mt-10">
-                        <span>© {{ \Carbon\Carbon::now()->year }} Techfusion Automata. All rights reserved.</span>
-                    </footer>
                 </x-slot:content>
             </x-mary-main>
+
+            <footer class="mt-auto w-full bg-base-100 text-base-content/60 text-sm text-center py-4">
+                <p>© {{ \Carbon\Carbon::now()->year }} Techfusion Automata. All rights reserved. · Powered by <a href="https://laravelcrm.com" target="_blank" rel="noopener noreferrer" class="link link-hover">Laravel CRM</a></p>
+            </footer>
         </div>
 
         <x-mary-toast />

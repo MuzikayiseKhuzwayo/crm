@@ -2,15 +2,16 @@
 
 namespace VentureDrake\LaravelCrm\Livewire\Quotes;
 
-use App\Models\User;
 use Carbon\Carbon;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
 use Illuminate\Pagination\LengthAwarePaginator;
 use Illuminate\Support\Collection;
+use Livewire\Attributes\Computed;
 use Livewire\Component;
 use Livewire\WithPagination;
 use Mary\Traits\Toast;
+use VentureDrake\LaravelCrm\Livewire\Traits\HasUserOwnerFilter;
 use VentureDrake\LaravelCrm\Livewire\Traits\SearchesEncryptableContacts;
 use VentureDrake\LaravelCrm\Models\Label;
 use VentureDrake\LaravelCrm\Models\Pipeline;
@@ -20,7 +21,7 @@ use VentureDrake\LaravelCrm\Traits\ResetsPaginationWhenPropsChanges;
 
 class QuoteIndex extends Component
 {
-    use AuthorizesRequests, ClearsProperties, ResetsPaginationWhenPropsChanges, SearchesEncryptableContacts, Toast, WithPagination;
+    use AuthorizesRequests, ClearsProperties, HasUserOwnerFilter, ResetsPaginationWhenPropsChanges, SearchesEncryptableContacts, Toast, WithPagination;
 
     public $layout = 'index';
 
@@ -50,14 +51,14 @@ class QuoteIndex extends Component
         return (count($this->user_id) > 0 ? 1 : 0) + ($this->label_id ? 1 : 0);
     }
 
-    public function users(): Collection
-    {
-        return User::orderBy('name')->get();
-    }
-
+    /**
+     * Filter drawer options, computed so a debounced search keystroke reuses
+     * them rather than re-querying labels on every render.
+     */
+    #[Computed]
     public function labels(): Collection
     {
-        return Label::all();
+        return Label::select('id', 'name')->get();
     }
 
     public function headers()
@@ -89,12 +90,30 @@ class QuoteIndex extends Component
         $sortColumn = in_array($this->sortBy['column'], $allowedSortColumns) ? $this->sortBy['column'] : 'created_at';
         $sortDirection = $this->sortBy['direction'] ?? 'desc';
 
-        return Quote::select(
-            config('laravel-crm.db_table_prefix').'quotes.*',
-            config('laravel-crm.db_table_prefix').'people.first_name',
-            config('laravel-crm.db_table_prefix').'people.last_name',
-            config('laravel-crm.db_table_prefix').'organizations.name'
-        )
+        // The quotes table is the heaviest of the index pages: on top of the
+        // usual contact/organization/stage/owner/label columns, every row runs
+        // the CheckAmount helpers over its line items and asks whether it has
+        // been fully ordered. quoteProducts and orders.orderProducts are loaded
+        // here so those checks read collections instead of issuing four or more
+        // queries per row.
+        // person.primaryEmail is for the per-row <livewire:crm-quote-send>,
+        // whose mount() pre-fills the To field from the contact's primary
+        // email.
+        return Quote::with([
+            'labels',
+            'person.primaryEmail',
+            'organization',
+            'ownerUser',
+            'pipelineStage',
+            'quoteProducts',
+            'orders.orderProducts',
+        ])
+            ->select(
+                config('laravel-crm.db_table_prefix').'quotes.*',
+                config('laravel-crm.db_table_prefix').'people.first_name',
+                config('laravel-crm.db_table_prefix').'people.last_name',
+                config('laravel-crm.db_table_prefix').'organizations.name'
+            )
             ->leftJoin(config('laravel-crm.db_table_prefix').'people', config('laravel-crm.db_table_prefix').'quotes.person_id', '=', config('laravel-crm.db_table_prefix').'people.id')
             ->leftJoin(config('laravel-crm.db_table_prefix').'organizations', config('laravel-crm.db_table_prefix').'quotes.organization_id', '=', config('laravel-crm.db_table_prefix').'organizations.id')
             ->when($this->search, function (Builder $q) {
@@ -119,7 +138,7 @@ class QuoteIndex extends Component
                     }
                 });
             })
-            ->when($this->user_id, fn (Builder $q) => $q->whereIn('user_owner_id', $this->user_id))
+            ->when($this->user_id, fn (Builder $q) => $q->whereIn(config('laravel-crm.db_table_prefix').'quotes.user_owner_id', $this->user_id))
             ->when($this->label_id, fn (Builder $q) => $q->whereHas('labels', fn (Builder $q) => $q->whereIn(config('laravel-crm.db_table_prefix').'labels.id', $this->label_id)))
             ->orderBy($sortColumn, $sortDirection)
             ->paginate(25);
@@ -195,8 +214,8 @@ class QuoteIndex extends Component
     public function render()
     {
         return view('laravel-crm::livewire.quotes.quote-index', [
-            'users' => $this->users(),
-            'labels' => $this->labels(),
+            'users' => $this->users,
+            'labels' => $this->labels,
             'filterCount' => $this->filterCount(),
             'headers' => $this->headers(),
             'quotes' => $this->quotes(),

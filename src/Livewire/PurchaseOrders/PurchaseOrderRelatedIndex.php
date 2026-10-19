@@ -15,6 +15,15 @@ class PurchaseOrderRelatedIndex extends Component
 {
     use AuthorizesRequests, Toast;
 
+    /**
+     * The Sent badge on these rows goes stale the moment the layout's
+     * get-link modal ticks "mark as sent" -- that write runs in a
+     * different Livewire root, so nothing re-renders this table.
+     */
+    protected $listeners = [
+        'crm-get-link-sent' => '$refresh',
+    ];
+
     public Model $model;
 
     public ?Pipeline $pipeline = null;
@@ -42,7 +51,8 @@ class PurchaseOrderRelatedIndex extends Component
     #[Computed]
     public function purchaseOrders(): Collection
     {
-        return $this->model->purchaseOrders()->latest()->get();
+        // organization/person back the preview button's `$purchaseOrder->title`.
+        return $this->model->purchaseOrders()->with(['organization', 'person'])->latest()->get();
     }
 
     public function delete($id): void

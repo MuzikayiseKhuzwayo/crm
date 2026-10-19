@@ -39,6 +39,8 @@
                 @endif
                 @can('view crm quotes')
                     @if(! $quoteError)
+                        <x-crm-pdf-preview-button :url="url(route('laravel-crm.quotes.preview', $quote))" :download-url="url(route('laravel-crm.quotes.download', $quote))" :title="$quote->title" />
+                        <x-crm-get-link-button :model="$quote" />
                         <x-mary-button icon="o-arrow-down-tray" link="{{ url(route('laravel-crm.quotes.download', $quote)) }}" no-wire-navigate class="btn-sm btn-square btn-outline" />
                     @endif
                 @endcan
@@ -168,8 +170,8 @@
                         @foreach($quote->quoteProducts()->whereNotNull('product_id')->orderBy('order', 'asc')->orderBy('created_at', 'asc')->get() as $quoteProduct)
                             <tr>
                                 <td class="px-0">
-                                    {{ $quoteProduct->product->name }}
-                                    @if($quoteProduct->product->code)
+                                    {{ $quoteProduct->product?->name }}
+                                    @if($quoteProduct->product?->code)
                                         <br /><small>{{ $quoteProduct->product->code }}</small>
                                     @endif
                                 </td>

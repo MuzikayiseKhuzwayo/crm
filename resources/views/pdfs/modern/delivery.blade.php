@@ -69,7 +69,7 @@
             <td>
                 <div class="modern-party-heading">{{ ucfirst(__('laravel-crm::lang.from')) }}</div>
                 <div class="modern-party-body">
-                    @if($contactDetails)
+                    @if($contactDetails ?? null)
                         {!! nl2br($contactDetails) !!}
                     @else
                         {{ $fromName }}
@@ -97,9 +97,9 @@
         <tbody>
             @foreach($delivery->deliveryProducts->where('quantity', '>', 0)->sortBy([['order', 'asc'], ['created_at', 'asc']]) as $deliveryProduct)
                 <tr>
-                    <td>{{ $deliveryProduct->orderProduct->product->name }}</td>
+                    <td>{{ $deliveryProduct->orderProduct?->product?->name }}</td>
                     <td class="modern-num">{{ $deliveryProduct->quantity }}</td>
-                    <td>{{ $deliveryProduct->orderProduct->comments }}</td>
+                    <td>{{ $deliveryProduct->orderProduct?->comments }}</td>
                 </tr>
             @endforeach
         </tbody>

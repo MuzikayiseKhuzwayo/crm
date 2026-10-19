@@ -10,7 +10,14 @@ use VentureDrake\LaravelCrm\Scopes\BelongsToTeamsScope;
 
 class SettingService
 {
-    protected string $cacheKey = 'app.crm-settings';
+    /**
+     * Counter appended to every cache key. Bumping it orphans every team's
+     * entry at once, which is how forgetCache() invalidates the whole map
+     * without having to enumerate teams.
+     */
+    protected const GENERATION_KEY = 'app.crm-settings.generation';
+
+    protected string $cacheKeyPrefix = 'app.crm-settings';
 
     protected int $ttl = 3600; // 1 hour (adjust)
 
@@ -23,6 +30,65 @@ class SettingService
     protected ?bool $hasUserColumn = null;
 
     /**
+     * Memoised answer to "does crm_settings exist at all?".
+     *
+     * Same lifecycle as hasUserColumn: once per request, not once per caller.
+     */
+    protected ?bool $tableExists = null;
+
+    /**
+     * The resolved map for this request, keyed by the cache key it came from.
+     *
+     * SettingsComposer is registered against every view, so a page render asks
+     * for the map hundreds of times. Without this every one of those reads
+     * costs two round-trips to the cache store — one for the generation
+     * counter, one for the map — which is free on the array driver and ~3000
+     * Redis calls per page on a real one.
+     *
+     * Keyed rather than a single slot so a team switch mid-request lands on a
+     * different entry instead of serving the previous tenant's map, and
+     * dropped wholesale by forgetCache() so a write is visible to the rest of
+     * the request that made it.
+     */
+    protected array $memo = [];
+
+    /**
+     * Request-lifetime copy of the generation counter.
+     *
+     * Same reasoning as $memo: cacheKey() is called on every read and the
+     * counter only moves when forgetCache() moves it, which resets this.
+     */
+    protected ?int $generation = null;
+
+    /**
+     * The team this service has been pinned to, when it has been pinned.
+     *
+     * Null is a meaningful value — "this document belongs to no team" — so the
+     * flag rather than the id is what says whether an override is in force.
+     */
+    protected ?int $teamId = null;
+
+    protected bool $hasTeamOverride = false;
+
+    /**
+     * Read settings as though the given team were the current one.
+     *
+     * BelongsToTeamsScope only engages for a signed-in user with a currentTeam,
+     * so on the anonymous public portal a plain read returns every team's rows
+     * and pluck() hands the page whichever tenant the database listed last.
+     * The portal controllers call this with the document's own team_id, which
+     * corrects every downstream reader of the shared scoped instance —
+     * PdfContactDetails, PdfLogo and the view composer included.
+     */
+    public function forTeam(?int $teamId): static
+    {
+        $this->teamId = $teamId;
+        $this->hasTeamOverride = true;
+
+        return $this;
+    }
+
+    /**
      * The global settings map, keyed by name.
      *
      * Scoped to rows with a null user_id so a per-user row can never shadow the
@@ -32,17 +98,75 @@ class SettingService
      * The hasUserColumn() check lives inside the closure so information_schema
      * is queried at most once per TTL rather than on every request, and so
      * hosts that never ran add_user_to_laravel_crm_settings_table still boot.
+     *
+     * The query is team-scoped by BelongsToTeamsScope, or by forTeam() where a
+     * caller has pinned the team explicitly — see query(). Either way the cache
+     * it fills must be partitioned the same way, see cacheKey().
      */
     public function all(): array
     {
-        return Cache::remember($this->cacheKey, $this->ttl, function () {
-            return Setting::query()
-                ->when(
-                    $this->hasUserColumn(),
-                    fn ($query) => $query->whereNull('user_id')
-                )
+        $key = $this->cacheKey();
+
+        if (array_key_exists($key, $this->memo)) {
+            return $this->memo[$key];
+        }
+
+        return $this->memo[$key] = Cache::remember($key, $this->ttl, function () {
+            return $this->query()
                 ->pluck('value', 'name')
                 ->toArray();
+        });
+    }
+
+    /**
+     * The query all() plucks the map from.
+     *
+     * Ordinarily this is BelongsToTeamsScope's job. When forTeam() has pinned
+     * the service the scope is dropped and its condition restated against the
+     * given team instead — including the model_with_global check, compared
+     * against getTable() exactly as the scope compares it rather than assumed
+     * either way, so the rows here are exactly the rows an authenticated
+     * member of the same team would read. The two share a cache key by design
+     * (see cacheKey()), so any disagreement between them would have one poison
+     * the other's map.
+     *
+     * With no team to pin to, `global = 1` rows only: a document that predates
+     * teams should render a blank From block, not another tenant's branding.
+     */
+    protected function query()
+    {
+        $query = Setting::query()
+            ->when(
+                $this->hasUserColumn(),
+                fn ($query) => $query->whereNull('user_id')
+            );
+
+        if (! $this->hasTeamOverride || ! config('laravel-crm.teams')) {
+            return $query;
+        }
+
+        $table = (new Setting)->getTable();
+
+        $query->withoutGlobalScope(BelongsToTeamsScope::class);
+
+        $withGlobal = in_array($table, config('laravel-crm.model_with_global') ?? []);
+
+        if ($this->teamId === null) {
+            return $withGlobal
+                ? $query->where($table.'.global', 1)
+                // Nothing is readable without a team on a model that has no
+                // global rows, and returning the unfiltered map would be the
+                // leak this exists to close.
+                : $query->whereRaw('1 = 0');
+        }
+
+        if (! $withGlobal) {
+            return $query->where($table.'.team_id', $this->teamId);
+        }
+
+        return $query->where(function ($query) use ($table) {
+            $query->where($table.'.team_id', $this->teamId)
+                ->orWhere($table.'.global', 1);
         });
     }
 
@@ -159,9 +283,105 @@ class SettingService
         return $rows->first();
     }
 
+    /**
+     * Drop the cached map for every team, not just the caller's.
+     *
+     * Bumping the generation counter is what makes that possible on any cache
+     * driver: there is no key enumeration, and the next read of any team's key
+     * misses because the key itself has changed. Spanning teams is the correct
+     * semantics rather than a shortcut — `global = 1` rows (and everything
+     * setInstallWide() writes) appear in every team's map, so a write to one
+     * of them has to invalidate all of them.
+     *
+     * The Cache::forget() is belt-and-braces for the caller's own entry, run
+     * before the bump so it targets the key that is actually live.
+     */
     public function forgetCache(): void
     {
-        Cache::forget($this->cacheKey);
+        Cache::forget($this->cacheKey());
+
+        // increment() is a no-op on a missing key for most drivers, so seed it.
+        // Seeding belongs here rather than in generation(): reads outnumber
+        // writes by orders of magnitude and only the bump needs the key to
+        // already exist.
+        Cache::add(self::GENERATION_KEY, 0);
+        Cache::increment(self::GENERATION_KEY);
+
+        // Re-read the counter and refetch the map on the next call, so a write
+        // is visible to the rest of the request that made it.
+        $this->generation = null;
+        $this->memo = [];
+    }
+
+    /**
+     * The cache key for the current reader's settings map.
+     *
+     * Partitioned by team because all() runs through BelongsToTeamsScope: a
+     * single shared key would let whichever team warmed the cache first serve
+     * its organisation name, ABN and logo to every other team for the rest of
+     * the TTL. The team id is resolved exactly the way the scope resolves it
+     * (BelongsToTeamsScope::apply) so the partition can never disagree with
+     * the query that fills it. Deliberately auth()->user() and not the scope's
+     * auth()->hasUser(): the key is computed before Cache::remember runs the
+     * query, so resolving the user here is what guarantees the scope sees one
+     * too. Reading hasUser() instead could file an unscoped map — every team's
+     * rows — under one team's key.
+     *
+     * The generation counter is part of the key so forgetCache() can reach
+     * every team's entry at once.
+     */
+    public function cacheKey(): string
+    {
+        $key = $this->cacheKeyPrefix.'.'.$this->generation();
+
+        if (! config('laravel-crm.teams')) {
+            return $key;
+        }
+
+        // Checked before appliesToRequest(), because the override exists
+        // precisely for the requests the scope stands down on — an anonymous
+        // portal page. Asking the scope first would file that request's map
+        // under the unsuffixed key every teamless reader shares, which is the
+        // leak the override is closing. `.team.{id}` deliberately collides
+        // with the key an authenticated member of the same team produces:
+        // query() restates the scope's condition, so both hold the same rows.
+        if ($this->hasTeamOverride) {
+            return $key.'.team.'.($this->teamId ?? 'none');
+        }
+
+        // The scope also stands down on Nova requests, and the map all() fills
+        // there spans every team. Partitioning it under one team's key would
+        // hand that team another tenant's organisation name for the rest of
+        // the TTL, so the partition has to stand down in exactly the same
+        // cases — hence the shared predicate rather than a second copy of the
+        // condition.
+        if (! BelongsToTeamsScope::appliesToRequest()) {
+            // The scope stands down on the signed document routes too, and the
+            // map all() fills there spans every team. The portal controllers
+            // pin the service before rendering anything, so this only catches
+            // a read that beat them to it — the view composer on an abort(401)
+            // error page, say. Those get a key of their own so an all-teams
+            // map can never land on the one console commands, queued jobs and
+            // teamless users read from.
+            return BelongsToTeamsScope::signedDocumentRequest() ? $key.'.portal' : $key;
+        }
+
+        $teamId = auth()->user()->currentTeam->id ?? null;
+
+        return $teamId ? $key.'.team.'.$teamId : $key;
+    }
+
+    /**
+     * Current value of the shared generation counter, defaulting to 0.
+     *
+     * Memoised for the life of the service (one request, or one queued job —
+     * the binding is scoped, not a singleton) because cacheKey() is on the hot
+     * path of every settings read and the counter cannot move underneath us
+     * without forgetCache() clearing this.
+     */
+    protected function generation(): int
+    {
+        return $this->generation ??= (int) Cache::get(self::GENERATION_KEY, 0);
     }
 
     /**
@@ -172,5 +392,17 @@ class SettingService
     protected function hasUserColumn(): bool
     {
         return $this->hasUserColumn ??= Schema::hasColumn((new Setting)->getTable(), 'user_id');
+    }
+
+    /**
+     * Whether crm_settings exists yet, resolved once per request.
+     *
+     * Callers that run before the package's migrations — the view composer
+     * registered against every view, for one — need this to avoid asking for
+     * settings from a table that is not there.
+     */
+    public function tableExists(): bool
+    {
+        return $this->tableExists ??= Schema::hasTable((new Setting)->getTable());
     }
 }

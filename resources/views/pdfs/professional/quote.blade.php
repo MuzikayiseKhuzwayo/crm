@@ -73,7 +73,7 @@
             <td>
                 <div class="prof-party-heading">{{ ucfirst(__('laravel-crm::lang.from')) }}</div>
                 <div class="prof-party-body">
-                    @if($contactDetails)
+                    @if($contactDetails ?? null)
                         {!! nl2br($contactDetails) !!}
                     @else
                         {{ $fromName }}
@@ -103,7 +103,7 @@
         <tbody>
             @foreach($quote->quoteProducts->whereNotNull('product_id')->sortBy([['order', 'asc'], ['created_at', 'asc']]) as $quoteProduct)
                 <tr>
-                    <td>{{ $quoteProduct->product->name }}</td>
+                    <td>{{ $quoteProduct->product?->name }}</td>
                     <td class="prof-num">{{ money($quoteProduct->price ?? null, $quoteProduct->currency) }}</td>
                     <td class="prof-num">{{ $quoteProduct->quantity }}</td>
                     <td class="prof-num">{{ money($quoteProduct->amount ?? null, $quoteProduct->currency) }}</td>

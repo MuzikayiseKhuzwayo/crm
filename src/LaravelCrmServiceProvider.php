@@ -151,6 +151,7 @@ use VentureDrake\LaravelCrm\Livewire\Features\FeatureShow;
 use VentureDrake\LaravelCrm\Livewire\Features\FeatureVoters;
 use VentureDrake\LaravelCrm\Livewire\Files\FileItem;
 use VentureDrake\LaravelCrm\Livewire\Files\FileRelated;
+use VentureDrake\LaravelCrm\Livewire\GetLink;
 use VentureDrake\LaravelCrm\Livewire\Invoices\InvoiceCreate;
 use VentureDrake\LaravelCrm\Livewire\Invoices\InvoiceEdit;
 use VentureDrake\LaravelCrm\Livewire\Invoices\InvoiceIndex;
@@ -196,9 +197,6 @@ use VentureDrake\LaravelCrm\Livewire\People\PersonShow;
 use VentureDrake\LaravelCrm\Livewire\Portal\Features\PublicFeatureBoard;
 use VentureDrake\LaravelCrm\Livewire\Portal\Features\PublicFeatureShow;
 use VentureDrake\LaravelCrm\Livewire\Portal\Features\PublicFeatureSubmit;
-use VentureDrake\LaravelCrm\Livewire\Portal\Invoices\PortalInvoiceLineItems;
-use VentureDrake\LaravelCrm\Livewire\Portal\PurchaseOrders\PortalPurchaseOrderLineItems;
-use VentureDrake\LaravelCrm\Livewire\Portal\Quotes\PortalQuoteLineItems;
 use VentureDrake\LaravelCrm\Livewire\Products\ProductCreate;
 use VentureDrake\LaravelCrm\Livewire\Products\ProductEdit;
 use VentureDrake\LaravelCrm\Livewire\Products\ProductIndex;
@@ -461,13 +459,18 @@ use VentureDrake\LaravelCrm\Policies\UserPolicy;
 use VentureDrake\LaravelCrm\Services\AccountRelayService;
 use VentureDrake\LaravelCrm\Services\SettingService;
 use VentureDrake\LaravelCrm\Services\SystemCheckService;
+use VentureDrake\LaravelCrm\Support\Modules;
+use VentureDrake\LaravelCrm\Support\XeroIntegration;
 use VentureDrake\LaravelCrm\View\Components\Addresses;
 use VentureDrake\LaravelCrm\View\Components\CustomFields;
 use VentureDrake\LaravelCrm\View\Components\CustomFieldValues;
 use VentureDrake\LaravelCrm\View\Components\DeleteConfirm;
 use VentureDrake\LaravelCrm\View\Components\Emails;
+use VentureDrake\LaravelCrm\View\Components\GetLinkButton;
 use VentureDrake\LaravelCrm\View\Components\Header;
 use VentureDrake\LaravelCrm\View\Components\IndexToggle;
+use VentureDrake\LaravelCrm\View\Components\PdfPreview;
+use VentureDrake\LaravelCrm\View\Components\PdfPreviewButton;
 use VentureDrake\LaravelCrm\View\Components\Phones;
 use VentureDrake\LaravelCrm\View\Components\TimelineItem;
 use VentureDrake\LaravelCrm\View\Composers\SettingsComposer;
@@ -590,8 +593,12 @@ class LaravelCrmServiceProvider extends ServiceProvider
         if (config('laravel-crm.teams')) {
             $router->pushMiddlewareToGroup('web', TeamsPermission::class);
             $router->pushMiddlewareToGroup('crm-api', TeamsPermission::class);
-            $router->pushMiddlewareToGroup('web', XeroTenant::class);
-            $router->pushMiddlewareToGroup('crm-api', XeroTenant::class);
+            // XeroTenant resolves Dcblogdev\Xero\Models\XeroToken on every request,
+            // so it only goes in the stack when the suggested package is installed.
+            if (XeroIntegration::installed()) {
+                $router->pushMiddlewareToGroup('web', XeroTenant::class);
+                $router->pushMiddlewareToGroup('crm-api', XeroTenant::class);
+            }
         }
 
         if (config('laravel-crm.route_subdomain')) {
@@ -637,7 +644,10 @@ class LaravelCrmServiceProvider extends ServiceProvider
         XeroInvoice::observe(XeroInvoiceObserver::class);
         Task::observe(TaskObserver::class);
         Activity::observe(ActivityObserver::class);
-        XeroToken::observe(XeroTokenObserver::class);
+        // XeroToken ships with the suggested dcblogdev/laravel-xero package, not with us.
+        if (XeroIntegration::installed()) {
+            XeroToken::observe(XeroTokenObserver::class);
+        }
         Call::observe(CallObserver::class);
         Meeting::observe(MeetingObserver::class);
         Monitor::observe(MonitorObserver::class);
@@ -944,6 +954,9 @@ class LaravelCrmServiceProvider extends ServiceProvider
         Blade::component('crm-timeline-item', TimelineItem::class);
         Blade::component('crm-custom-fields', CustomFields::class);
         Blade::component('crm-custom-field-values', CustomFieldValues::class);
+        Blade::component('crm-pdf-preview', PdfPreview::class);
+        Blade::component('crm-pdf-preview-button', PdfPreviewButton::class);
+        Blade::component('crm-get-link-button', GetLinkButton::class);
 
         // Livewire components
         Livewire::component('phone-edit', LivePhoneEdit::class);
@@ -998,6 +1011,7 @@ class LaravelCrmServiceProvider extends ServiceProvider
         Livewire::component('crm-auth-reset-password', ResetPassword::class);
         Livewire::component('crm-kanban-board', KanbanBoard::class);
         Livewire::component('crm-activity-menu', ActivityMenu::class);
+        Livewire::component('crm-get-link', GetLink::class);
         Livewire::component('crm-activity-tabs', ActivityTabs::class);
         Livewire::component('crm-lead-index', LeadIndex::class);
         Livewire::component('crm-lead-board', LeadBoard::class);
@@ -1013,9 +1027,6 @@ class LaravelCrmServiceProvider extends ServiceProvider
         Livewire::component('crm-portal-feature-board', PublicFeatureBoard::class);
         Livewire::component('crm-portal-feature-show', PublicFeatureShow::class);
         Livewire::component('crm-portal-feature-submit', PublicFeatureSubmit::class);
-        Livewire::component('crm-portal-quote-line-items', PortalQuoteLineItems::class);
-        Livewire::component('crm-portal-invoice-line-items', PortalInvoiceLineItems::class);
-        Livewire::component('crm-portal-purchase-order-line-items', PortalPurchaseOrderLineItems::class);
         Livewire::component('crm-task-index', TaskIndex::class);
         Livewire::component('crm-task-show', TaskShow::class);
         Livewire::component('crm-task-create', TaskCreate::class);
@@ -1256,109 +1267,31 @@ class LaravelCrmServiceProvider extends ServiceProvider
 
         View::composer('*', SettingsComposer::class);
 
-        Blade::if('hasleadsenabled', function () {
-            if (is_array(config('laravel-crm.modules')) && in_array('leads', config('laravel-crm.modules'))) {
-                return true;
-            } elseif (! config('laravel-crm.modules')) {
-                return true;
-            }
-        });
+        Blade::if('hasleadsenabled', fn () => Modules::enabled('leads'));
 
-        Blade::if('hasfeaturesenabled', function () {
-            if (is_array(config('laravel-crm.modules')) && in_array('features', config('laravel-crm.modules'))) {
-                return true;
-            } elseif (! config('laravel-crm.modules')) {
-                return true;
-            }
-        });
+        Blade::if('hasfeaturesenabled', fn () => Modules::enabled('features'));
 
-        Blade::if('hasdealsenabled', function () {
-            if (is_array(config('laravel-crm.modules')) && in_array('deals', config('laravel-crm.modules'))) {
-                return true;
-            } elseif (! config('laravel-crm.modules')) {
-                return true;
-            }
-        });
+        Blade::if('hasdealsenabled', fn () => Modules::enabled('deals'));
 
-        Blade::if('hasquotesenabled', function () {
-            if (is_array(config('laravel-crm.modules')) && in_array('quotes', config('laravel-crm.modules'))) {
-                return true;
-            } elseif (! config('laravel-crm.modules')) {
-                return true;
-            }
-        });
+        Blade::if('hasquotesenabled', fn () => Modules::enabled('quotes'));
 
-        Blade::if('hasordersenabled', function () {
-            if (is_array(config('laravel-crm.modules')) && in_array('orders', config('laravel-crm.modules'))) {
-                return true;
-            } elseif (! config('laravel-crm.modules')) {
-                return true;
-            }
-        });
+        Blade::if('hasordersenabled', fn () => Modules::enabled('orders'));
 
-        Blade::if('hasinvoicesenabled', function () {
-            if (is_array(config('laravel-crm.modules')) && in_array('invoices', config('laravel-crm.modules'))) {
-                return true;
-            } elseif (! config('laravel-crm.modules')) {
-                return true;
-            }
-        });
+        Blade::if('hasinvoicesenabled', fn () => Modules::enabled('invoices'));
 
-        Blade::if('hasdeliveriesenabled', function () {
-            if (is_array(config('laravel-crm.modules')) && in_array('deliveries', config('laravel-crm.modules'))) {
-                return true;
-            } elseif (! config('laravel-crm.modules')) {
-                return true;
-            }
-        });
+        Blade::if('hasdeliveriesenabled', fn () => Modules::enabled('deliveries'));
 
-        Blade::if('haspurchaseordersenabled', function () {
-            if (is_array(config('laravel-crm.modules')) && in_array('purchase-orders', config('laravel-crm.modules'))) {
-                return true;
-            } elseif (! config('laravel-crm.modules')) {
-                return true;
-            }
-        });
+        Blade::if('haspurchaseordersenabled', fn () => Modules::enabled('purchase-orders'));
 
-        Blade::if('hasteamsenabled', function () {
-            if (is_array(config('laravel-crm.modules')) && in_array('teams', config('laravel-crm.modules'))) {
-                return true;
-            } elseif (! config('laravel-crm.modules')) {
-                return true;
-            }
-        });
+        Blade::if('hasteamsenabled', fn () => Modules::enabled('teams'));
 
-        Blade::if('haschatenabled', function () {
-            if (is_array(config('laravel-crm.modules')) && in_array('chat', config('laravel-crm.modules'))) {
-                return true;
-            } elseif (! config('laravel-crm.modules')) {
-                return true;
-            }
-        });
+        Blade::if('haschatenabled', fn () => Modules::enabled('chat'));
 
-        Blade::if('hasemailmarketingenabled', function () {
-            if (is_array(config('laravel-crm.modules')) && in_array('email-marketing', config('laravel-crm.modules'))) {
-                return true;
-            } elseif (! config('laravel-crm.modules')) {
-                return true;
-            }
-        });
+        Blade::if('hasemailmarketingenabled', fn () => Modules::enabled('email-marketing'));
 
-        Blade::if('hassmsmarketingenabled', function () {
-            if (is_array(config('laravel-crm.modules')) && in_array('sms-marketing', config('laravel-crm.modules'))) {
-                return true;
-            } elseif (! config('laravel-crm.modules')) {
-                return true;
-            }
-        });
+        Blade::if('hassmsmarketingenabled', fn () => Modules::enabled('sms-marketing'));
 
-        Blade::if('hasmonitoringenabled', function () {
-            if (is_array(config('laravel-crm.modules')) && in_array('monitoring', config('laravel-crm.modules'))) {
-                return true;
-            } elseif (! config('laravel-crm.modules')) {
-                return true;
-            }
-        });
+        Blade::if('hasmonitoringenabled', fn () => Modules::enabled('monitoring'));
     }
 
     /**
@@ -1396,16 +1329,24 @@ class LaravelCrmServiceProvider extends ServiceProvider
             return new LaravelCrm;
         });
 
-        $this->app->singleton('laravel-crm.settings', function () {
+        // Scoped rather than singleton: the service memoises the settings map
+        // for the life of the instance, and scoped is the binding Laravel
+        // flushes between queued jobs and Octane requests. As a singleton that
+        // memo would outlive the request that filled it, so a worker could
+        // render mail from settings another process had already changed. Under
+        // php-fpm the two are identical — a fresh container per request.
+        $this->app->scoped('laravel-crm.settings', function () {
             return new SettingService;
         });
 
-        // Alias so type-hinting SettingService resolves the same singleton the
+        // Alias so type-hinting SettingService resolves the same instance the
         // ~30 existing app('laravel-crm.settings') call sites already share,
         // instead of auto-wiring a fresh instance per injection.
         $this->app->alias('laravel-crm.settings', SettingService::class);
 
-        $this->app->singleton('laravel-crm.system-check', function ($app) {
+        // Scoped for the same reason, and because it holds the SettingService
+        // above — a singleton here would pin one flushed instance forever.
+        $this->app->scoped('laravel-crm.system-check', function ($app) {
             return new SystemCheckService($app->make('laravel-crm.settings'));
         });
 

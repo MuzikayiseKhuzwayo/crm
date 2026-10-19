@@ -11,6 +11,7 @@ use VentureDrake\LaravelCrm\Traits\HasCrmActivities;
 use VentureDrake\LaravelCrm\Traits\HasCrmFields;
 use VentureDrake\LaravelCrm\Traits\HasCrmUserRelations;
 use VentureDrake\LaravelCrm\Traits\HasEncryptableFields;
+use VentureDrake\LaravelCrm\Traits\HasPrimaryContactDetails;
 use VentureDrake\LaravelCrm\Traits\SearchFilters;
 
 class Organization extends Model
@@ -20,6 +21,7 @@ class Organization extends Model
     use HasCrmFields;
     use HasCrmUserRelations;
     use HasEncryptableFields;
+    use HasPrimaryContactDetails;
     use SearchFilters;
     use SoftDeletes;
 
@@ -71,11 +73,6 @@ class Organization extends Model
         return $this->morphMany(Email::class, 'emailable');
     }
 
-    public function getPrimaryEmail()
-    {
-        return $this->emails()->where('primary', 1)->first();
-    }
-
     /**
      * Get all of the organization phone numbers.
      */
@@ -84,19 +81,9 @@ class Organization extends Model
         return $this->morphMany(Phone::class, 'phoneable');
     }
 
-    public function getPrimaryPhone()
-    {
-        return $this->phones()->where('primary', 1)->first();
-    }
-
     public function addresses()
     {
         return $this->morphMany(Address::class, 'addressable');
-    }
-
-    public function getPrimaryAddress()
-    {
-        return $this->addresses()->where('primary', 1)->first();
     }
 
     public function getBillingAddress()

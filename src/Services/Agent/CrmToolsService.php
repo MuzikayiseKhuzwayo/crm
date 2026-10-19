@@ -3,16 +3,61 @@
 namespace VentureDrake\LaravelCrm\Services\Agent;
 
 use Carbon\Carbon;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
 use VentureDrake\LaravelCrm\Models\Lead;
 use VentureDrake\LaravelCrm\Models\Organization;
 use VentureDrake\LaravelCrm\Models\Person;
 use VentureDrake\LaravelCrm\Models\PipelineStage;
+use VentureDrake\LaravelCrm\Models\Setting;
 use VentureDrake\LaravelCrm\Models\Task;
+use VentureDrake\LaravelCrm\Scopes\BelongsToTeamsScope;
 use VentureDrake\LaravelCrm\Services\LeadStatusAutomationService;
 
 class CrmToolsService
 {
+    public const NOTIFICATION_STATE_KEY = 'crm_agent_notification_state';
+
+    public const PROACTIVITY_MODES = [
+        'high' => [
+            'key' => 'high',
+            'label' => '🔥 High (Relentless)',
+            'short_label' => '🔥 High',
+            'cooldown_minutes' => 60,
+            'delta_only' => false,
+            'description' => 'Every 1h • Full proactive monitoring, all alert vectors & next-step recommendations',
+            'directive' => 'PROACTIVITY MODE: HIGH (Most Proactive / Relentless Chief of Staff). Proactively flag overdue tasks, stale leads, and ready-to-advance leads, and recommend concrete next actions to drive pipeline velocity.',
+        ],
+        'balanced' => [
+            'key' => 'balanced',
+            'label' => '⚡ Balanced (Smart Delta)',
+            'short_label' => '⚡ Balanced',
+            'cooldown_minutes' => 240,
+            'delta_only' => true,
+            'description' => 'Every 4h + Delta-only • Pings only when critical alerts change (zero duplicate spam)',
+            'directive' => 'PROACTIVITY MODE: BALANCED (Smart Delta). Be concise, executive, and focused strictly on new or changed critical items without repeating routine boilerplate.',
+        ],
+        'low' => [
+            'key' => 'low',
+            'label' => '☕ Daily Digest',
+            'short_label' => '☕ Digest',
+            'cooldown_minutes' => 1440,
+            'delta_only' => false,
+            'description' => 'Once per 24h • Consolidated daily executive summary with zero mid-day interruptions',
+            'directive' => 'PROACTIVITY MODE: DAILY DIGEST (Low Proactivity). Keep responses ultra-compact, calm, and high-level (max 2-3 bullets). Avoid unsolicited follow-up suggestions unless explicitly asked.',
+        ],
+        'silent' => [
+            'key' => 'silent',
+            'label' => '🔕 Silent (On-Demand)',
+            'short_label' => '🔕 Silent',
+            'cooldown_minutes' => null,
+            'delta_only' => false,
+            'description' => 'Autonomous pings OFF • Only responds when you message or tap a button in Telegram',
+            'directive' => 'PROACTIVITY MODE: SILENT (Least Proactive / On-Demand Only). Autonomous background alerts are muted. Answer user queries directly and concisely with zero unsolicited alerts.',
+        ],
+    ];
+
     protected LeadStatusAutomationService $leadAutomation;
 
     public function __construct(LeadStatusAutomationService $leadAutomation)
@@ -884,7 +929,7 @@ class CrmToolsService
         $title = $lead->title;
 
         // Clean up pending tasks attached to this lead
-        Task::where(function ($q) use ($lead) {
+        Task::where(function ($q) {
             $q->where('taskable_type', Lead::class)
                 ->orWhere('taskable_type', (new Lead)->getMorphClass());
         })->where('taskable_id', $lead->id)->delete();
@@ -1139,6 +1184,305 @@ class CrmToolsService
             'stale_active_leads' => $staleRelayLeads,
             'ready_to_advance_leads' => $readyToAdvanceLeads,
             'has_urgent_alerts' => count($overdueTasks) > 0 || count($staleRelayLeads) > 0,
+        ];
+    }
+
+    /**
+     * Normalize free-text or alias mode input into one of: high, balanced, low, silent.
+     */
+    public function normalizeProactivityMode(?string $input): string
+    {
+        if (! $input) {
+            return config('laravel-crm.agent.default_proactivity_mode', 'balanced');
+        }
+
+        $clean = strtolower(trim($input));
+
+        return match (true) {
+            in_array($clean, ['high', 'most', 'most_proactive', 'most proactive', 'proactive', 'relentless', 'war_room', 'war room', 'aggressive', 'max', '1h'], true) => 'high',
+            in_array($clean, ['balanced', 'normal', 'default', 'smart', 'delta', 'smart_delta', 'medium', 'moderate', '4h'], true) => 'balanced',
+            in_array($clean, ['low', 'digest', 'daily', 'daily_digest', 'daily digest', 'least', 'minimal', 'quiet', '24h', 'once_a_day'], true) => 'low',
+            in_array($clean, ['silent', 'off', 'mute', 'muted', 'none', 'least_proactive', 'least proactive', 'on_demand', 'on-demand', 'ondemand', 'disable', 'stop'], true) => 'silent',
+            isset(self::PROACTIVITY_MODES[$clean]) => $clean,
+            default => 'balanced',
+        };
+    }
+
+    /**
+     * Retrieve the persisted notification & proactivity state (DB + Cache).
+     */
+    public function getNotificationState(): array
+    {
+        $defaultMode = $this->normalizeProactivityMode(config('laravel-crm.agent.default_proactivity_mode', 'balanced'));
+        $defaults = [
+            'mode' => $defaultMode,
+            'snoozed_until' => null,
+            'last_notified_at' => null,
+            'last_alert_hash' => null,
+            'updated_at' => null,
+        ];
+
+        $cached = Cache::get(self::NOTIFICATION_STATE_KEY);
+        if (is_array($cached)) {
+            $state = array_merge($defaults, $cached);
+            $state['mode'] = $this->normalizeProactivityMode($state['mode'] ?? $defaultMode);
+
+            return $state;
+        }
+
+        try {
+            $table = (new Setting)->getTable();
+            if (Schema::hasTable($table)) {
+                $row = Setting::query()
+                    ->withoutGlobalScope(BelongsToTeamsScope::class)
+                    ->where('name', self::NOTIFICATION_STATE_KEY)
+                    ->first();
+
+                if ($row && ! empty($row->value)) {
+                    $decoded = is_array($row->value) ? $row->value : json_decode((string) $row->value, true);
+                    if (is_array($decoded)) {
+                        $state = array_merge($defaults, $decoded);
+                        $state['mode'] = $this->normalizeProactivityMode($state['mode'] ?? $defaultMode);
+                        Cache::forever(self::NOTIFICATION_STATE_KEY, $state);
+
+                        return $state;
+                    }
+                }
+            }
+        } catch (\Throwable $e) {
+            // Fallback to default state if DB not ready
+        }
+
+        return $defaults;
+    }
+
+    /**
+     * Persist notification & proactivity state to both Cache and crm_settings table.
+     */
+    public function saveNotificationState(array $updates): array
+    {
+        $state = array_merge($this->getNotificationState(), $updates);
+        $state['mode'] = $this->normalizeProactivityMode($state['mode'] ?? 'balanced');
+        $state['updated_at'] = Carbon::now()->toIso8601String();
+
+        Cache::forever(self::NOTIFICATION_STATE_KEY, $state);
+
+        try {
+            $table = (new Setting)->getTable();
+            if (Schema::hasTable($table)) {
+                $encoded = json_encode($state);
+                $rows = Setting::query()
+                    ->withoutGlobalScope(BelongsToTeamsScope::class)
+                    ->where('name', self::NOTIFICATION_STATE_KEY)
+                    ->get();
+
+                if ($rows->isEmpty()) {
+                    Setting::withoutEvents(function () use ($encoded) {
+                        Setting::query()
+                            ->withoutGlobalScope(BelongsToTeamsScope::class)
+                            ->create([
+                                'name' => self::NOTIFICATION_STATE_KEY,
+                                'value' => $encoded,
+                                'global' => 1,
+                            ]);
+                    });
+                } else {
+                    foreach ($rows as $row) {
+                        Setting::withoutEvents(function () use ($row, $encoded) {
+                            $row->value = $encoded;
+                            $row->save();
+                        });
+                    }
+                }
+            }
+        } catch (\Throwable $e) {
+            // Ignore DB errors when running in lightweight environments
+        }
+
+        return $state;
+    }
+
+    /**
+     * Record that an autonomous heartbeat notification was just dispatched.
+     */
+    public function recordHeartbeatSent(string $alertHash): array
+    {
+        return $this->saveNotificationState([
+            'last_notified_at' => Carbon::now()->toIso8601String(),
+            'last_alert_hash' => $alertHash,
+        ]);
+    }
+
+    /**
+     * Tool handler: Get current notification frequency & proactivity mode settings.
+     */
+    public function getNotificationSettings(): array
+    {
+        $state = $this->getNotificationState();
+        $modeKey = $state['mode'];
+        $modeMeta = self::PROACTIVITY_MODES[$modeKey] ?? self::PROACTIVITY_MODES['balanced'];
+        $now = Carbon::now();
+
+        $snoozedUntil = ! empty($state['snoozed_until']) ? Carbon::parse($state['snoozed_until']) : null;
+        $isSnoozed = $snoozedUntil && $snoozedUntil->isFuture();
+
+        $lastNotified = ! empty($state['last_notified_at']) ? Carbon::parse($state['last_notified_at']) : null;
+
+        return [
+            'current_mode' => $modeKey,
+            'mode_label' => $modeMeta['label'],
+            'cooldown_minutes' => $modeMeta['cooldown_minutes'],
+            'delta_only' => $modeMeta['delta_only'],
+            'description' => $modeMeta['description'],
+            'is_snoozed' => $isSnoozed,
+            'snoozed_until' => $isSnoozed ? $snoozedUntil->toDateTimeString() : null,
+            'snoozed_until_human' => $isSnoozed ? $snoozedUntil->diffForHumans() : null,
+            'last_notified_at' => $lastNotified ? $lastNotified->toDateTimeString() : null,
+            'last_notified_human' => $lastNotified ? $lastNotified->diffForHumans() : 'Never',
+            'available_modes' => array_map(fn ($m) => [
+                'mode' => $m['key'],
+                'label' => $m['label'],
+                'cooldown_minutes' => $m['cooldown_minutes'],
+                'description' => $m['description'],
+            ], self::PROACTIVITY_MODES),
+        ];
+    }
+
+    /**
+     * Tool handler: Update proactivity mode and/or snooze timer.
+     */
+    public function updateNotificationSettings(array $args): array
+    {
+        $updates = [];
+        $changes = [];
+
+        if (isset($args['mode']) && $args['mode'] !== '') {
+            $normalized = $this->normalizeProactivityMode((string) $args['mode']);
+            $updates['mode'] = $normalized;
+            $meta = self::PROACTIVITY_MODES[$normalized];
+            $changes[] = "Proactivity mode set to {$meta['label']} ({$meta['description']})";
+        }
+
+        if (array_key_exists('snooze_hours', $args) && $args['snooze_hours'] !== null) {
+            $hours = (float) $args['snooze_hours'];
+            if ($hours <= 0) {
+                $updates['snoozed_until'] = null;
+                $changes[] = 'Notifications unsnoozed (active immediately)';
+            } else {
+                $until = Carbon::now()->addMinutes((int) round($hours * 60));
+                $updates['snoozed_until'] = $until->toIso8601String();
+                $changes[] = "Autonomous alerts snoozed for {$hours}h (until {$until->format('H:i')})";
+            }
+        }
+
+        if (! empty($args['clear_snooze'])) {
+            $updates['snoozed_until'] = null;
+            $changes[] = 'Snooze cleared';
+        }
+
+        if (! empty($updates)) {
+            $this->saveNotificationState($updates);
+        }
+
+        $settings = $this->getNotificationSettings();
+        $settings['success'] = true;
+        $settings['message'] = ! empty($changes)
+            ? implode('. ', $changes).'.'
+            : "Current mode remains {$settings['mode_label']}.";
+
+        return $settings;
+    }
+
+    /**
+     * Build the inline keyboard attached to every autonomous heartbeat briefing.
+     */
+    public function buildAlertInlineKeyboard(): array
+    {
+        $state = $this->getNotificationState();
+        $modeKey = $state['mode'];
+        $modeMeta = self::PROACTIVITY_MODES[$modeKey] ?? self::PROACTIVITY_MODES['balanced'];
+
+        return [
+            'inline_keyboard' => [
+                [
+                    ['text' => '📋 Tasks List', 'callback_data' => 'view_tasks'],
+                    ['text' => '🎯 Lead Alerts', 'callback_data' => 'view_alerts'],
+                ],
+                [
+                    ['text' => '💤 Snooze 3h', 'callback_data' => 'agent_snooze:3'],
+                    ['text' => "⚙️ Mode: {$modeMeta['short_label']}", 'callback_data' => 'agent_mode_menu'],
+                ],
+            ],
+        ];
+    }
+
+    /**
+     * Build the interactive Telegram Proactivity & Notification Control Deck message + inline keyboard.
+     */
+    public function buildModeControlDeck(?string $flashNotice = null): array
+    {
+        $settings = $this->getNotificationSettings();
+        $currentMode = $settings['current_mode'];
+        $isSnoozed = $settings['is_snoozed'];
+
+        $lines = [];
+        if ($flashNotice) {
+            $lines[] = "✅ *{$flashNotice}*\n";
+        }
+
+        $lines[] = '🎛️ *AI Proactivity & Notification Control Deck*';
+        $lines[] = "Current Mode: *{$settings['mode_label']}*";
+        $lines[] = "Behavior: _{$settings['description']}_";
+
+        if ($isSnoozed) {
+            $lines[] = "⏳ Snooze Status: *Snoozed* (resumes {$settings['snoozed_until_human']} at `{$settings['snoozed_until']}`)";
+        } else {
+            $lines[] = '🔔 Snooze Status: *Active* (not snoozed)';
+        }
+
+        $lines[] = "🕒 Last Alert Sent: _{$settings['last_notified_human']}_";
+        $lines[] = '';
+        $lines[] = '*Select Proactivity Mode:*';
+        $lines[] = '• 🔥 *High (1h)* — Most proactive, all vectors & next-step pushes';
+        $lines[] = '• ⚡ *Balanced (4h Δ)* — Smart delta only when alerts change *(Recommended)*';
+        $lines[] = '• ☕ *Daily Digest (24h)* — 1x daily summary, zero mid-day noise';
+        $lines[] = '• 🔕 *Silent (Off)* — Least proactive, responds only when you ask';
+
+        $keyboard = [
+            'inline_keyboard' => [
+                [
+                    [
+                        'text' => ($currentMode === 'high' ? '🔥 High (1h) ✓' : '🔥 High (1h)'),
+                        'callback_data' => 'agent_mode:high',
+                    ],
+                    [
+                        'text' => ($currentMode === 'balanced' ? '⚡ Balanced (4h Δ) ✓' : '⚡ Balanced (4h Δ)'),
+                        'callback_data' => 'agent_mode:balanced',
+                    ],
+                ],
+                [
+                    [
+                        'text' => ($currentMode === 'low' ? '☕ Daily Digest ✓' : '☕ Daily Digest'),
+                        'callback_data' => 'agent_mode:low',
+                    ],
+                    [
+                        'text' => ($currentMode === 'silent' ? '🔕 Silent (Off) ✓' : '🔕 Silent (Off)'),
+                        'callback_data' => 'agent_mode:silent',
+                    ],
+                ],
+                [
+                    ['text' => '💤 Snooze 2h', 'callback_data' => 'agent_snooze:2'],
+                    ['text' => '🌙 Snooze 8h', 'callback_data' => 'agent_snooze:8'],
+                    $isSnoozed
+                        ? ['text' => '🔔 Resume Now', 'callback_data' => 'agent_snooze:0']
+                        : ['text' => '📋 Tasks', 'callback_data' => 'view_tasks'],
+                ],
+            ],
+        ];
+
+        return [
+            'text' => implode("\n", $lines),
+            'reply_markup' => $keyboard,
         ];
     }
 }

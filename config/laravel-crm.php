@@ -247,7 +247,6 @@ return [
     */
 
     'portal' => [
-        'team_id' => env('LARAVEL_CRM_PORTAL_TEAM_ID'),
         'allow_registration' => env('LARAVEL_CRM_PORTAL_ALLOW_REGISTRATION', false),
     ],
 
@@ -353,6 +352,7 @@ return [
         'telegram_admin_chat_id' => env('TELEGRAM_ADMIN_CHAT_ID'),
         'heartbeat_interval_minutes' => env('CRM_AGENT_HEARTBEAT_INTERVAL', 15),
         'stale_lead_days' => env('CRM_AGENT_STALE_LEAD_DAYS', 3),
+        'default_proactivity_mode' => env('CRM_AGENT_PROACTIVITY_MODE', 'balanced'),
     ],
 
 ];

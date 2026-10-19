@@ -45,6 +45,8 @@
             <div class="flex gap-1 justify-end">
                 <livewire:crm-purchase-order-send :key="'purchase-order-send-'.$purchaseOrder->id" :$purchaseOrder />
                 @can('view crm purchase orders')
+                    <x-crm-pdf-preview-button :url="url(route('laravel-crm.purchase-orders.preview', $purchaseOrder))" :download-url="url(route('laravel-crm.purchase-orders.download', $purchaseOrder))" :title="$purchaseOrder->title" />
+                    <x-crm-get-link-button :model="$purchaseOrder" />
                     <x-mary-button icon="o-arrow-down-tray" link="{{ url(route('laravel-crm.purchase-orders.download', $purchaseOrder)) }}" no-wire-navigate class="btn-sm btn-square btn-outline" />
                     <x-mary-button icon="o-eye" link="{{ url(route('laravel-crm.purchase-orders.show', $purchaseOrder)) }}" class="btn-sm btn-square btn-outline" />
                 @endcan
@@ -68,7 +70,7 @@
     {{-- FILTERS --}}
     <x-mary-drawer wire:model="showFilters" title="Filters" class="lg:w-1/3" right separator with-close-button>
         <div class="grid gap-5" @keydown.enter="$wire.showFilters = false">
-            <x-mary-choices label="Owner" wire:model.live="user_id" :options="$users" icon="o-user" inline allow-all />
+            <x-mary-choices label="Owner" wire:model.live="user_id" :options="$users" icon="o-user" inline searchable search-function="searchUsers" clearable />
             <x-mary-choices label="Label" wire:model.live="label_id" :options="$labels" icon="o-tag" inline allow-all />
         </div>
 

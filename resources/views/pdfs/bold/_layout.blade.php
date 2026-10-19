@@ -34,16 +34,26 @@
     .bold-pdf .bold-header-band {
         background: #05b3a9;
         color: #ffffff;
-        padding: 18px 22px;
         /* Previously bled 20px past the content box on each side via
            negative margins, so the band's edges did not line up with the
            meta/items tables below it. */
         margin: 0 0 22px 0;
     }
 
+    /* The band's 18px/22px inset lives on the cells, not on the table.
+       CSS ignores padding on a table in the collapsing border model (and
+       .bold-pdf table sets border-collapse: collapse), so a browser drops
+       it while DomPDF applies it — which left the portal page rendering
+       the title flush to the band's left edge and the logo plate jammed
+       against its right edge, where the PDF insets both by 22px.
+
+       Declaring it per cell is honoured by both. The outer edges land in
+       the same place because the title is left-aligned in the first cell
+       and the logo right-aligned in the last; the extra padding on the two
+       inner edges only widens an already-empty gutter between them. */
     .bold-pdf .bold-header-band td {
         vertical-align: middle;
-        padding: 0;
+        padding: 18px 22px;
         color: #ffffff;
     }
 
@@ -69,6 +79,14 @@
         background: #ffffff;
         padding: 8px 12px;
         border-radius: 4px;
+        /* An inline-block sits on the text baseline by default, so a browser
+           keeps the line box's descender space free *below* the plate and
+           the plate rides ~5px high inside the band — visibly more teal
+           underneath it than above. DomPDF centres it either way, so this
+           only ever mattered on the portal page. Aligning to the middle
+           makes the plate fill its line box, leaving the cell's 18px
+           padding as the only gap top and bottom. */
+        vertical-align: middle;
     }
 
     .bold-pdf .bold-band-brand img {

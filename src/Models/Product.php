@@ -45,9 +45,21 @@ class Product extends Model
         return $this->hasMany(ProductPrice::class);
     }
 
+    /**
+     * The price row for the install's currency.
+     *
+     * Reads the currency off the cached settings map rather than re-querying
+     * crm_settings, and prefers an eager-loaded productPrices — the products
+     * index calls this three times for every row it renders.
+     */
     public function getDefaultPrice()
     {
-        $currency = Setting::currency()->value ?? 'USD';
+        $currency = app('laravel-crm.settings')->get('currency') ?? 'USD';
+
+        if ($this->relationLoaded('productPrices')) {
+            return $this->productPrices->firstWhere('currency', $currency)
+                ?? $this->productPrices->first();
+        }
 
         return $this->productPrices()->where('currency', $currency)->first()
             ?? $this->productPrices()->first();

@@ -192,7 +192,7 @@
 
             {{-- 4. OWNER --}}
             <div>
-                <x-mary-choices label="Lead Owner" wire:model.live="user_id" :options="$userFilterOptions" icon="o-user" allow-all />
+                <x-mary-choices label="Lead Owner" wire:model.live="user_id" :options="$userFilterOptions" icon="o-user" searchable search-function="searchUsers" clearable />
             </div>
 
             {{-- 5. LABEL --}}

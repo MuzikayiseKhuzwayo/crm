@@ -28,12 +28,63 @@ class CrmHeartbeatService
     /**
      * Run the CRM proactive heartbeat evaluation.
      *
-     * @param  bool  $forceNotify  Send briefing even if no critical issues found
+     * @param  bool  $forceNotify  Send briefing even if no critical issues found or if suppressed by mode/cooldown
      * @return array Status report of the heartbeat execution
      */
     public function runHeartbeat(bool $forceNotify = false): array
     {
         $now = Carbon::now();
+        $state = $this->tools->getNotificationState();
+        $mode = $state['mode'] ?? 'balanced';
+        $modeMeta = CrmToolsService::PROACTIVITY_MODES[$mode] ?? CrmToolsService::PROACTIVITY_MODES['balanced'];
+
+        // Gate 1: Silent / On-Demand mode
+        if (! $forceNotify && $mode === 'silent') {
+            Log::info('CRM Heartbeat: Suppressed (Silent / On-Demand mode).');
+
+            return [
+                'status' => 'suppressed_silent',
+                'action_taken' => false,
+                'mode' => $mode,
+                'message' => 'Autonomous notifications are muted (Silent / On-Demand mode).',
+            ];
+        }
+
+        // Gate 2: Active Snooze window
+        if (! $forceNotify && ! empty($state['snoozed_until'])) {
+            $snoozedUntil = Carbon::parse($state['snoozed_until']);
+            if ($snoozedUntil->isFuture()) {
+                Log::info("CRM Heartbeat: Snoozed until {$snoozedUntil->toDateTimeString()}.");
+
+                return [
+                    'status' => 'snoozed',
+                    'action_taken' => false,
+                    'mode' => $mode,
+                    'snoozed_until' => $snoozedUntil->toDateTimeString(),
+                    'message' => "Autonomous notifications are snoozed until {$snoozedUntil->toDateTimeString()}.",
+                ];
+            }
+        }
+
+        // Gate 3: Mode Cooldown interval
+        $cooldownMinutes = $modeMeta['cooldown_minutes'] ?? 240;
+        if (! $forceNotify && $cooldownMinutes && ! empty($state['last_notified_at'])) {
+            $lastNotifiedAt = Carbon::parse($state['last_notified_at']);
+            $nextEligibleAt = $lastNotifiedAt->copy()->addMinutes($cooldownMinutes);
+
+            if ($nextEligibleAt->isFuture()) {
+                Log::info("CRM Heartbeat: Cooldown active for mode [{$mode}] until {$nextEligibleAt->toDateTimeString()}.");
+
+                return [
+                    'status' => 'cooldown',
+                    'action_taken' => false,
+                    'mode' => $mode,
+                    'next_eligible_at' => $nextEligibleAt->toDateTimeString(),
+                    'message' => "Cooldown active for mode [{$modeMeta['label']}] until {$nextEligibleAt->toDateTimeString()}.",
+                ];
+            }
+        }
+
         $staleDays = config('laravel-crm.agent.stale_lead_days', 3);
         $staleCutoff = $now->copy()->subDays($staleDays);
 
@@ -85,13 +136,35 @@ class CrmHeartbeatService
             return [
                 'status' => 'nominal',
                 'action_taken' => false,
+                'mode' => $mode,
                 'message' => 'No urgent tasks or stale leads detected.',
+            ];
+        }
+
+        // Compute deterministic fingerprint of current alert items for Smart Delta suppression
+        $alertHash = md5(json_encode([
+            'overdue_tasks' => $overdueLeadTasks->pluck('id')->sort()->values()->toArray(),
+            'stale_leads' => $staleActiveLeads->pluck('id')->sort()->values()->toArray(),
+            'ready_leads' => $readyLeads->pluck('id')->sort()->values()->toArray(),
+        ]));
+
+        // Gate 4: Smart Delta deduplication in Balanced mode
+        if (! $forceNotify && ($modeMeta['delta_only'] ?? false) && ! empty($state['last_alert_hash']) && $state['last_alert_hash'] === $alertHash) {
+            Log::info('CRM Heartbeat: Suppressed duplicate alert (no delta change since last notification).');
+
+            return [
+                'status' => 'no_delta',
+                'action_taken' => false,
+                'mode' => $mode,
+                'alert_hash' => $alertHash,
+                'message' => 'Alert items have not changed since last notification (Smart Delta suppression).',
             ];
         }
 
         // Prepare context summary for Gemini reasoning
         $summaryPayload = [
             'timestamp' => $now->toDateTimeString(),
+            'proactivity_mode' => $modeMeta['label'],
             'overdue_lead_tasks_count' => $overdueLeadTasks->count(),
             'sample_overdue_tasks' => $overdueLeadTasks->take(3)->map(fn ($t) => [
                 'task_id' => $t->id,
@@ -120,36 +193,81 @@ class CrmHeartbeatService
             ],
         ];
 
-        $prompt = 'You are running the scheduled autonomous CRM heartbeat.
-Review these lead and task alerts:
-'.json_encode($summaryPayload, JSON_PRETTY_PRINT).'
+        $modePromptInstruction = match ($mode) {
+            'high' => "Generate a proactive, high-energy Chief of Staff briefing for Muzi on Telegram (Mode: {$modeMeta['short_label']}).\nHighlight:\n1. Urgent tasks requiring immediate outreach.\n2. Stale leads at risk of dropping off.\n3. Leads ready to advance in the pipeline + concrete recommended next actions.",
+            'low' => "Generate a calm, ultra-compact Daily Executive Digest for Muzi on Telegram (Mode: {$modeMeta['short_label']}).\nSummarize the pipeline health and top priority in at most 3 short bullet points with zero noise.",
+            default => "Generate a punchy, delta-focused executive briefing for Muzi on Telegram (Mode: {$modeMeta['short_label']}).\nHighlight only the most critical overdue tasks, stale leads, and ready-to-advance leads concisely.",
+        };
 
-Generate a punchy, high-priority executive briefing for Muzi on Telegram.
-Highlight:
-1. Urgent tasks that require immediate outreach or resolution.
-2. Any stale leads at risk of dropping off.
-3. Leads ready to advance in the pipeline.
-Make every lead reference a 1-click clickable Markdown link using its provided URL, e.g.: [TFA-L1013](https://crm.techfusion-alchemy.xyz/crm/leads/...) - Title.
-Keep it compact, clear, and actionable with emoji indicators. If no emergencies exist, give a brief 2-bullet status update.';
+        $prompt = "You are running the scheduled autonomous CRM heartbeat.\n".
+            "Review these lead and task alerts:\n".
+            json_encode($summaryPayload, JSON_PRETTY_PRINT)."\n\n".
+            $modePromptInstruction."\n".
+            "Make every lead reference a 1-click clickable Markdown link using its provided URL, e.g.: [TFA-L1013](https://crm.techfusion-alchemy.xyz/crm/leads/...) - Title.\n".
+            'Keep it compact, clear, and actionable with emoji indicators. If no emergencies exist, give a brief 2-bullet status update.';
 
         $briefing = $this->gemini->executeTurn($prompt);
 
-        $replyMarkup = [
-            'inline_keyboard' => [
-                [
-                    ['text' => '📋 Tasks List', 'callback_data' => 'view_tasks'],
-                    ['text' => '🎯 Lead Alerts', 'callback_data' => 'view_alerts'],
-                ],
-            ],
-        ];
+        $replyMarkup = $this->tools->buildAlertInlineKeyboard();
 
         $this->telegram->sendAlertToAdmin($briefing, $replyMarkup);
+        $this->tools->recordHeartbeatSent($alertHash);
 
         return [
             'status' => 'dispatched',
             'action_taken' => true,
+            'mode' => $mode,
+            'alert_hash' => $alertHash,
             'critical_issues' => $criticalIssueCount,
             'briefing' => $briefing,
+        ];
+    }
+
+    /**
+     * Handle Telegram inline button callbacks for proactivity modes and snooze controls.
+     *
+     * @return array{handled: bool, toast: ?string, deck: ?array}|null
+     */
+    public function handleTelegramControlCallback(string $data, string|int $chatId, ?int $messageId = null): ?array
+    {
+        $toast = null;
+
+        if ($data === 'agent_mode_menu') {
+            $toast = '🎛️ Proactivity Control Deck';
+        } elseif (str_starts_with($data, 'agent_mode:')) {
+            $targetMode = substr($data, strlen('agent_mode:'));
+            $result = $this->tools->updateNotificationSettings([
+                'mode' => $targetMode,
+                'clear_snooze' => $targetMode !== 'silent',
+            ]);
+            $toast = "Mode switched to {$result['mode_label']}";
+        } elseif (str_starts_with($data, 'agent_snooze:')) {
+            $hours = (float) substr($data, strlen('agent_snooze:'));
+            $result = $this->tools->updateNotificationSettings([
+                'snooze_hours' => $hours,
+            ]);
+            $toast = $hours > 0
+                ? "💤 Alerts snoozed for {$hours}h"
+                : '🔔 Alerts resumed';
+        } else {
+            return null;
+        }
+
+        $deck = $this->tools->buildModeControlDeck($toast);
+
+        if ($messageId) {
+            $edited = $this->telegram->editMessageText($chatId, $messageId, $deck['text'], $deck['reply_markup']);
+            if (! $edited) {
+                $this->telegram->sendMessage($chatId, $deck['text'], $deck['reply_markup']);
+            }
+        } else {
+            $this->telegram->sendMessage($chatId, $deck['text'], $deck['reply_markup']);
+        }
+
+        return [
+            'handled' => true,
+            'toast' => $toast,
+            'deck' => $deck,
         ];
     }
 }

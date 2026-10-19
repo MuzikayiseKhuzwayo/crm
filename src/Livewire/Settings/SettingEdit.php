@@ -4,21 +4,89 @@ namespace VentureDrake\LaravelCrm\Livewire\Settings;
 
 use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Storage;
+use Illuminate\Validation\ValidationException;
+use Livewire\Attributes\Url;
 use Livewire\Component;
 use Livewire\WithFileUploads;
 use Mary\Traits\Toast;
 use Ramsey\Uuid\Uuid;
+use Throwable;
 use VentureDrake\LaravelCrm\Models\Address;
 use VentureDrake\LaravelCrm\Models\AddressType;
 use VentureDrake\LaravelCrm\Models\Email;
 use VentureDrake\LaravelCrm\Models\Phone;
 use VentureDrake\LaravelCrm\Models\Setting;
+use VentureDrake\LaravelCrm\Support\Modules;
+use VentureDrake\LaravelCrm\Support\PdfContactDetails;
 
 class SettingEdit extends Component
 {
     use AuthorizesRequests;
     use Toast;
     use WithFileUploads;
+
+    /**
+     * The tabs this page is split across, in display order, mapped to the
+     * modules any one of which must be enabled for the tab to be shown. An
+     * empty list means the tab is never gated.
+     *
+     * Every entity gets its own tab, in the order its records flow through the
+     * CRM, so a tab is always the one place that entity's settings live. Lead
+     * and deal carry only an ID prefix today, which is fine — a near-empty tab
+     * beats a shared one an admin has to learn the contents of.
+     *
+     * The shared contact block lives on `general` rather than a document tab of
+     * its own: it feeds quote, order, delivery and invoice PDFs alike, so there
+     * is no one document tab it belongs to, and it is the only account-wide
+     * document setting left now that the dynamic-products toggle has moved.
+     *
+     * @var array<string, array<int, string>>
+     */
+    protected const TABS = [
+        'general' => [],
+        'leads' => ['leads'],
+        'deals' => ['deals'],
+        'quotes' => ['quotes'],
+        'orders' => ['orders'],
+        'invoices' => ['invoices'],
+        'deliveries' => ['deliveries'],
+        'purchase-orders' => ['purchase-orders'],
+    ];
+
+    /**
+     * Which tab each field lives on, so a validation failure can surface the
+     * offending control rather than leaving Save looking inert while the error
+     * sits on a hidden panel.
+     *
+     * @var array<string, array<int, string>>
+     */
+    protected const TAB_FIELDS = [
+        'general' => [
+            'organizationName', 'vatNumber', 'logoFile', 'logo', 'country', 'language',
+            'currency', 'timezone', 'dateFormat', 'timeFormat', 'taxName', 'taxRate',
+            'pdfContactDetails', 'showRelatedActivity', 'dynamicProducts',
+            'phones', 'emails', 'addresses',
+        ],
+        'leads' => ['leadPrefix'],
+        'deals' => ['dealPrefix'],
+        'quotes' => ['quotePrefix', 'quoteTerms'],
+        'orders' => ['orderPrefix'],
+        'invoices' => [
+            'invoicePrefix', 'invoiceContactDetails', 'invoiceTerms', 'invoicePaymentInstructions',
+        ],
+        'deliveries' => ['deliveryPrefix'],
+        'purchase-orders' => [
+            'purchaseOrderPrefix', 'purchaseOrderTerms', 'purchaseOrderDeliveryInstructions',
+        ],
+    ];
+
+    /**
+     * The currently-visible tab. Query-string-synced so `?tab=invoices`
+     * deep-links, matching the tab-state contract on Settings → Templates.
+     */
+    #[Url]
+    public string $tab = 'general';
 
     public array $countries = [];
 
@@ -68,6 +136,14 @@ class SettingEdit extends Component
     public $purchaseOrderPrefix;
 
     public $quoteTerms;
+
+    /**
+     * The shared "From" contact block, used wherever a doc type has no
+     * override of its own. Printed on quote, order and delivery PDFs on the
+     * themed templates and on invoice PDFs everywhere; PdfContactDetails
+     * carries the full matrix and why `classic` and purchase orders differ.
+     */
+    public $pdfContactDetails;
 
     public $invoiceContactDetails;
 
@@ -126,6 +202,11 @@ class SettingEdit extends Component
 
     public function mount()
     {
+        // Before anything else: an unrecognised `?tab=` leaves no radio checked,
+        // and `.tab-content` is display:none until one is — a tab strip above a
+        // blank void. `?tab=` on its own arrives here as ''.
+        $this->normaliseTab();
+
         $this->countries = \VentureDrake\LaravelCrm\Http\Helpers\SelectOptions\countries();
 
         foreach (\VentureDrake\LaravelCrm\Http\Helpers\SelectOptions\currencies() as $id => $value) {
@@ -171,7 +252,8 @@ class SettingEdit extends Component
         $this->deliveryPrefix = app('laravel-crm.settings')->get('delivery_prefix');
         $this->purchaseOrderPrefix = app('laravel-crm.settings')->get('purchase_order_prefix');
         $this->quoteTerms = app('laravel-crm.settings')->get('quote_terms');
-        $this->invoiceContactDetails = app('laravel-crm.settings')->get('invoice_contact_details');
+        $this->pdfContactDetails = app('laravel-crm.settings')->get(PdfContactDetails::SHARED_KEY);
+        $this->invoiceContactDetails = app('laravel-crm.settings')->get(PdfContactDetails::settingKey('invoice'));
         $this->invoiceTerms = app('laravel-crm.settings')->get('invoice_terms');
         $this->invoicePaymentInstructions = app('laravel-crm.settings')->get('invoice_payment_instructions');
         $this->purchaseOrderTerms = app('laravel-crm.settings')->get('purchase_order_terms');
@@ -244,11 +326,30 @@ class SettingEdit extends Component
         }
     }
 
+    /**
+     * Guards `$wire.set('tab', ...)` from the console the same way mount()
+     * guards the query string.
+     */
+    public function updatedTab(): void
+    {
+        $this->normaliseTab();
+    }
+
     public function save()
     {
         $this->authorize('update', Setting::class);
 
-        $this->validate();
+        // Every field is submitted on every save regardless of which tab is
+        // showing, so a failure can be on a panel the admin cannot see. Jump to
+        // it, then rethrow untouched — nothing else about the save changes.
+        try {
+            $this->validate();
+        } catch (ValidationException $e) {
+            $this->tab = $this->tabForField(array_key_first($e->validator->errors()->messages()));
+            $this->normaliseTab();
+
+            throw $e;
+        }
 
         app('laravel-crm.settings')->set('organization_name', $this->organizationName);
 
@@ -301,8 +402,28 @@ class SettingEdit extends Component
             app('laravel-crm.settings')->set('quote_terms', $this->quoteTerms);
         }
 
-        if ($this->invoiceContactDetails) {
-            app('laravel-crm.settings')->set('invoice_contact_details', $this->invoiceContactDetails);
+        // Both halves of the contact-block chain guard on `!== null` rather
+        // than the truthy check their neighbours use, because a truthy guard
+        // makes a field write-once: clearing the textarea binds '', which
+        // skips the set(), leaves the old row in place, and lets mount()
+        // silently restore the stale value to the form on the next visit.
+        //
+        // That matters for the shared key because it feeds the "From" block
+        // on four doc types at once, and it matters just as much for the
+        // invoice override, which shadows the shared value — write-once there
+        // would mean an admin who once filled the invoice field could never
+        // fall back to the shared block, which is exactly what the field's
+        // hint tells them it does.
+        //
+        // Null still means "never filled on this install", so an untouched
+        // field writes no row. PdfContactDetails::for() reads with filled(),
+        // so a cleared row resolves to null and falls through the chain.
+        if ($this->pdfContactDetails !== null) {
+            app('laravel-crm.settings')->set(PdfContactDetails::SHARED_KEY, $this->pdfContactDetails);
+        }
+
+        if ($this->invoiceContactDetails !== null) {
+            app('laravel-crm.settings')->set(PdfContactDetails::settingKey('invoice'), $this->invoiceContactDetails);
         }
 
         if ($this->invoiceTerms) {
@@ -354,6 +475,54 @@ class SettingEdit extends Component
 
         $this->success(
             ucfirst(trans('laravel-crm::lang.settings_updated'))
+        );
+    }
+
+    /**
+     * Remove the logo currently previewed on the General tab.
+     *
+     * Two different things can be on screen there, so this removes whichever
+     * one it is rather than both: a pending upload is discarded back to the
+     * saved logo, and only when nothing is pending does the button clear the
+     * saved one. Pressing it after picking the wrong file must not also
+     * destroy the logo still printing on every PDF.
+     *
+     * Unlike the rest of this form the clear is immediate rather than deferred
+     * to save(), because the preview it removes is the only feedback that the
+     * logo is gone — leaving it staged until Save would show a logo-less field
+     * while every PDF still carried the old artwork.
+     */
+    public function deleteLogo(): void
+    {
+        $this->authorize('update', Setting::class);
+
+        if ($this->logoFile) {
+            $this->logoFile = null;
+
+            return;
+        }
+
+        if (! $this->logo) {
+            return;
+        }
+
+        // Best-effort, and deliberately not fatal: the settings rows are the
+        // source of truth for whether a logo exists, so a disk that cannot be
+        // read must not leave the CRM still showing one the admin deleted.
+        // PdfLogo::src() already treats a missing file as "no logo".
+        try {
+            Storage::disk('public')->delete($this->logo);
+        } catch (Throwable $e) {
+            // Intentionally swallowed — see above.
+        }
+
+        app('laravel-crm.settings')->set('logo_file', null);
+        app('laravel-crm.settings')->set('logo_file_name', null);
+
+        $this->logo = null;
+
+        $this->success(
+            ucfirst(trans('laravel-crm::lang.logo_deleted'))
         );
     }
 
@@ -530,8 +699,52 @@ class SettingEdit extends Component
         }
     }
 
+    /**
+     * The tabs to render, in declaration order, after module gating.
+     *
+     * @return array<int, string>
+     */
+    protected function visibleTabs(): array
+    {
+        return array_keys(array_filter(
+            self::TABS,
+            fn (array $modules) => Modules::anyEnabled($modules)
+        ));
+    }
+
+    /**
+     * Fall back to `general` whenever `$tab` is not a tab currently on screen —
+     * unknown name, empty string, or a real tab whose module is switched off.
+     */
+    protected function normaliseTab(): void
+    {
+        if (! in_array($this->tab, $this->visibleTabs(), true)) {
+            $this->tab = 'general';
+        }
+    }
+
+    /**
+     * The tab holding `$field`, for jumping to a validation failure.
+     */
+    protected function tabForField(?string $field): string
+    {
+        if ($field === null) {
+            return 'general';
+        }
+
+        foreach (self::TAB_FIELDS as $tab => $fields) {
+            if (in_array($field, $fields, true)) {
+                return $tab;
+            }
+        }
+
+        return 'general';
+    }
+
     public function render()
     {
-        return view('laravel-crm::livewire.settings.setting-edit');
+        return view('laravel-crm::livewire.settings.setting-edit', [
+            'tabs' => $this->visibleTabs(),
+        ]);
     }
 }

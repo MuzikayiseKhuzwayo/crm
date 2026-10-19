@@ -3,6 +3,8 @@
 namespace VentureDrake\LaravelCrm\Console;
 
 use Illuminate\Console\Command;
+use VentureDrake\LaravelCrm\Services\Agent\CrmHeartbeatService;
+use VentureDrake\LaravelCrm\Services\Agent\CrmToolsService;
 use VentureDrake\LaravelCrm\Services\Agent\GeminiAgentService;
 use VentureDrake\LaravelCrm\Services\Agent\TelegramBotService;
 
@@ -25,8 +27,12 @@ class LaravelCrmAgentTelegramPoll extends Command
     /**
      * Execute the console command.
      */
-    public function handle(TelegramBotService $telegram, GeminiAgentService $gemini): int
-    {
+    public function handle(
+        TelegramBotService $telegram,
+        GeminiAgentService $gemini,
+        CrmHeartbeatService $heartbeat,
+        CrmToolsService $tools
+    ): int {
         $this->info('Starting Telegram Bot Polling service...');
 
         $botProfile = $telegram->getMe();
@@ -48,9 +54,9 @@ class LaravelCrmAgentTelegramPoll extends Command
                 $offset = $update['update_id'] + 1;
 
                 if (isset($update['message'])) {
-                    $this->processMessage($update['message'], $telegram, $gemini);
+                    $this->processMessage($update['message'], $telegram, $gemini, $tools);
                 } elseif (isset($update['callback_query'])) {
-                    $this->processCallbackQuery($update['callback_query'], $telegram, $gemini);
+                    $this->processCallbackQuery($update['callback_query'], $telegram, $gemini, $heartbeat);
                 }
             }
 
@@ -64,8 +70,12 @@ class LaravelCrmAgentTelegramPoll extends Command
         return self::SUCCESS;
     }
 
-    protected function processMessage(array $message, TelegramBotService $telegram, GeminiAgentService $gemini): void
-    {
+    protected function processMessage(
+        array $message,
+        TelegramBotService $telegram,
+        GeminiAgentService $gemini,
+        CrmToolsService $tools
+    ): void {
         $chatId = $message['chat']['id'] ?? null;
         $text = trim($message['text'] ?? '');
         $sender = $message['from']['first_name'] ?? 'User';
@@ -84,9 +94,40 @@ class LaravelCrmAgentTelegramPoll extends Command
                 "• *Show me overdue tasks*\n".
                 "• *Give me a summary of lead LD-4504*\n".
                 "• *Find leads in the Systematic Macro niche*\n".
-                '• *Mark task 13703 as completed*';
+                '• *Switch to daily digest mode* (or type `/mode`)';
 
-            $telegram->sendMessage($chatId, $welcome);
+            $telegram->sendMessage($chatId, $welcome, [
+                'inline_keyboard' => [
+                    [
+                        ['text' => '📋 Tasks List', 'callback_data' => 'view_tasks'],
+                        ['text' => '🎛️ Notification Mode', 'callback_data' => 'agent_mode_menu'],
+                    ],
+                ],
+            ]);
+
+            return;
+        }
+
+        if (preg_match('/^\/(mode|notifications|settings)(?:\s+(.+))?$/i', $text, $matches)) {
+            $arg = trim($matches[2] ?? '');
+            $flash = null;
+            if ($arg !== '') {
+                $res = $tools->updateNotificationSettings(['mode' => $arg, 'clear_snooze' => true]);
+                $flash = "Mode switched to {$res['mode_label']}";
+            }
+            $deck = $tools->buildModeControlDeck($flash);
+            $telegram->sendMessage($chatId, $deck['text'], $deck['reply_markup']);
+            $this->info('🎛️ Sent Proactivity Control Deck to Telegram.');
+
+            return;
+        }
+
+        if (preg_match('/^\/snooze(?:\s+(\d+(?:\.\d+)?))?$/i', $text, $matches)) {
+            $hours = isset($matches[1]) ? (float) $matches[1] : 3.0;
+            $tools->updateNotificationSettings(['snooze_hours' => $hours]);
+            $deck = $tools->buildModeControlDeck($hours > 0 ? "💤 Alerts snoozed for {$hours}h" : '🔔 Alerts resumed');
+            $telegram->sendMessage($chatId, $deck['text'], $deck['reply_markup']);
+            $this->info('💤 Updated snooze timer and sent Control Deck.');
 
             return;
         }
@@ -110,25 +151,42 @@ class LaravelCrmAgentTelegramPoll extends Command
         $this->info('✅ Response sent to Telegram.');
     }
 
-    protected function processCallbackQuery(array $callback, TelegramBotService $telegram, GeminiAgentService $gemini): void
-    {
+    protected function processCallbackQuery(
+        array $callback,
+        TelegramBotService $telegram,
+        GeminiAgentService $gemini,
+        CrmHeartbeatService $heartbeat
+    ): void {
         $callbackId = $callback['id'];
         $chatId = $callback['message']['chat']['id'] ?? null;
+        $messageId = $callback['message']['message_id'] ?? null;
         $data = $callback['data'] ?? '';
-
-        $telegram->answerCallbackQuery($callbackId, 'Processing...');
 
         if (! $chatId) {
             return;
         }
+
+        $this->line("[CALLBACK] {$data} from {$chatId}");
+
+        if (
+            $data === 'agent_mode_menu'
+            || str_starts_with($data, 'agent_mode:')
+            || str_starts_with($data, 'agent_snooze:')
+        ) {
+            $controlResult = $heartbeat->handleTelegramControlCallback($data, $chatId, $messageId);
+            $telegram->answerCallbackQuery($callbackId, $controlResult['toast'] ?? 'Updated');
+            $this->info("🎛️ Processed control callback: {$data}");
+
+            return;
+        }
+
+        $telegram->answerCallbackQuery($callbackId, 'Processing...');
 
         $prompt = match ($data) {
             'view_tasks' => 'List the top overdue and due tasks right now with their linked leads.',
             'view_alerts' => 'Check lead alerts: stale leads, ready to advance, and overdue tasks.',
             default => "User clicked action: {$data}. Check CRM status accordingly.",
         };
-
-        $this->line("[CALLBACK] {$data} from {$chatId}");
 
         $historyKey = "crm_agent_history_{$chatId}";
         $history = cache()->get($historyKey, []);

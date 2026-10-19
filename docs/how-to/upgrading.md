@@ -140,6 +140,388 @@ exists and composer reports the script returned a non-zero exit code. Delete the
 
 ## Version-specific notes
 
+## 2.4.7
+
+### No migrations, no new config keys
+
+This is a bug-fix patch release. It adds no tables, columns or configuration keys, so
+
+```bash
+composer update venturedrake/laravel-crm
+php artisan laravelcrm:update
+```
+
+is the whole upgrade. Run `laravelcrm:update` even though there is nothing to migrate. It still
+advances the `db_version` marker, and without it the system check reports the database as behind
+the code.
+
+### Views
+
+No views changed. The fix that unlinks a person or organization when you edit its name is
+PHP-only (in the `HasPersonSuggest` and `HasOrganizationSuggest` traits), so it applies even if you
+keep published or frozen views.
+
+## 2.4.6
+
+### No migrations, no new config keys
+
+This is a bug-fix patch release. It adds no tables, columns or configuration keys, so
+
+```bash
+composer update venturedrake/laravel-crm
+php artisan laravelcrm:update
+```
+
+is the whole upgrade. Run `laravelcrm:update` even though there is nothing to migrate. It still
+advances the `db_version` marker, and without it the system check reports the database as behind
+the code.
+
+### Views to re-publish
+
+If you have published views into `resources/views/vendor/laravel-crm`, the view finder uses your
+frozen copy instead of the package's. This release changes these views:
+
+| View | What you miss if you keep the old copy |
+|---|---|
+| `livewire/related-organizations.blade.php`, `livewire/related-people.blade.php` | The autocomplete fix. **A frozen copy stays broken**: it keeps `wire:blur`, so clicking a suggestion still does not link the organization or person |
+| `livewire/leads/lead-form.blade.php` and the same file under `.../deals`, `.../quotes`, `.../orders`, `.../invoices`, `.../purchase-orders` (`deal-form`, `quote-form`, `order-form`, `invoice-form`, `purchase-order-form`) | The same fix for the person and organization fields on the create and edit forms. A frozen copy still loses the click on a suggestion |
+| `mail/templates/send-quote/subject.blade.php`, `mail/templates/send-invoice/subject.blade.php`, `mail/templates/send-purchase-order/subject.blade.php` | The person-name fallback. A frozen copy still ends the subject in a dangling "for" when the document has no organization |
+| `mail/templates/send-invoice/message.blade.php` | The morph-marker fix. A frozen copy still puts `<!--[if BLOCK]><![endif]-->` into the message body |
+| `livewire/users/user-form.blade.php` | Cosmetic only: a frozen copy still prints a stray `>` under the form |
+
+The team-members fix (`TeamEdit`) and the encrypted autocomplete search are PHP-only. They apply even
+if you keep frozen views.
+
+`php artisan laravelcrm:upgrade` names your drifted published views on every deploy (added in 2.4.1),
+so this table is a cross-check rather than the only signal you will get.
+
+## 2.4.5
+
+### No migrations, no new config keys
+
+This release changes only which packages composer installs and how the Xero integration behaves when
+one of them is absent. It adds no tables, columns or configuration keys, so
+
+```bash
+composer update venturedrake/laravel-crm
+php artisan laravelcrm:update
+```
+
+is the whole upgrade. `laravelcrm:update` still advances the `db_version` marker, so run it even
+though there is nothing to migrate — otherwise the system check reports the database as behind the
+code.
+
+### If you use the Xero integration, require it yourself *before* you deploy
+
+`dcblogdev/laravel-xero` was in this package's `require`. It is now a `suggest` plus a `require-dev`,
+which means nothing pulls it into your application any more. Add it to your own `composer.json`:
+
+```bash
+composer require dcblogdev/laravel-xero:1.1.3
+```
+
+Do that **in the same change as the upgrade**, not after it. Upgrade first and the package is gone
+between the two deploys, and the integration stops syncing in that window without saying so.
+
+**Nothing errors when it is missing — it goes quiet.** Every entry point now gates on
+`XeroIntegration::installed()`, so with the package absent the `XeroToken` observer is never
+registered, `XeroTenant` is never pushed onto the `web` or `crm-api` middleware groups,
+`Product` / `Invoice` / `PurchaseOrder` sync becomes a no-op, and `php artisan laravelcrm:xero`
+exits non-zero with the install command instead of a fatal error. There is no banner and no failed
+job. The one visible sign is **Settings → Integrations → Xero**, where the "Connect to Xero" button
+is replaced by an alert naming the missing package.
+
+Your data is not touched. Stored tokens and the `crm_xero_*` mirror rows survive, so installing the
+package restores the connection with nothing to re-authorise.
+
+### Why: the package would not install on Guzzle 8
+
+`composer require venturedrake/laravel-crm` failed outright in any app that had resolved
+`guzzlehttp/guzzle` 8 — which includes a stock Laravel 13.32+ app, since `laravel/framework` moved
+to `^7.8.2 || ^8.0` at that version. Composer named this package's own `^6.0|^7.0` constraint first,
+so it read as a one-line bump, but the binding cap arrived transitively from `dcblogdev/laravel-xero`,
+which pins guzzle to `^7.9.3` at most in **every version it has ever published**. There is no
+upstream release of it compatible with Guzzle 8.
+
+So the choice is yours rather than ours, and it is a real one:
+
+| You want | Do this | Consequence |
+| --- | --- | --- |
+| Xero sync | `composer require dcblogdev/laravel-xero:1.1.3` | Your app stays on Guzzle 7 until that package ships a Guzzle 8 release |
+| Guzzle 8 / Laravel 13.32+ | Nothing | The Xero integration is inert, as described above |
+
+You cannot have both today.
+
+### Views to re-publish
+
+If you have published views into `resources/views/vendor/laravel-crm`, the view finder prefers your
+frozen copy, and this release changes one of them:
+
+| View | What you miss if you keep the old copy |
+|---|---|
+| `livewire/settings/integrations/xero/xero-connect.blade.php` | The "not installed" alert. A frozen copy still renders a **Connect to Xero** button with the package absent. It is not fatal — the route redirects back to this same screen — but it loops silently instead of naming what to install, which removes the only signal this release gives you |
+
+`php artisan laravelcrm:upgrade` names your drifted published views on every deploy (added in 2.4.1),
+so this table is a cross-check rather than the only signal you will get.
+
+### If you copied blades out of `resources/v1/` during a v1 → v2 migration
+
+`resources/v1/views/invoices/partials/fields.blade.php` and its purchase-order twin were gated in
+this release too, but nothing in the package loads or publishes that tree — it is there for v1-era
+apps that lifted the blades into their own `resources/views`. If yours is one of them, a copy taken
+before this release calls `\Dcblogdev\Xero\Facades\Xero::isConnected()` directly, and with the
+package absent that is a hard `Class "Dcblogdev\Xero\Facades\Xero" not found` on the invoice and
+purchase-order forms. Swap the call for
+`\VentureDrake\LaravelCrm\Support\XeroIntegration::connected()`, which is a drop-in replacement, or
+keep `dcblogdev/laravel-xero` installed.
+
+## 2.4.4
+
+### No migrations, no new config keys
+
+This is a performance patch release. It adds no tables or columns and no configuration keys, so
+
+```bash
+composer update venturedrake/laravel-crm
+php artisan laravelcrm:update
+```
+
+is the whole upgrade. `laravelcrm:update` still advances the `db_version` marker, so run it even
+though there is nothing to migrate — otherwise the system check reports the database as behind the
+code.
+
+### The Owner filter no longer has a "Select all"
+
+The Owner filter used to hand the whole users table to the filter drawer, which is why a page on a
+large install could weigh tens of megabytes and take seconds to render. It now searches server-side:
+type a name and the matches come back from the database, capped at 20 at a time, instead of scrolling
+a list that was pre-rendered in full on every request.
+
+The trade is **Select all**, which is gone from that filter. It could only ever have selected the
+options that happened to be rendered, so on any install big enough for this to matter it was already
+selecting a subset rather than "all owners". **Clear** takes its place for emptying the filter in one
+click, and owners you have already selected stay visible as chips even when they fall outside the
+current search.
+
+No action is required. Tell your support and sales people, since it is the one change in this release
+they will notice.
+
+### Views to re-publish
+
+If you have published views into `resources/views/vendor/laravel-crm`, the view finder prefers your
+frozen copy, and this release changes the Owner `<x-mary-choices>` on 15 of them:
+
+| View | What you miss if you keep the old copy |
+|---|---|
+| The 12 index blades (`livewire/people/person-index.blade.php`, `livewire/organizations/organization-index.blade.php`, `livewire/leads/lead-index.blade.php`, and the same file under `.../deals`, `.../quotes`, `.../orders`, `.../invoices`, `.../deliveries`, `.../purchase-orders`, `.../products`, `.../tasks`, `.../teams`) | The `searchable` / `search-function="searchUsers"` / `clearable` Owner filter. **This one does not error — it goes quietly wrong.** A frozen copy keeps `allow-all` and has no search box, while the component behind it now returns at most 20 users, so the filter lists only the first 20 owners alphabetically with no way to reach the rest, and **Select all** selects those 20 rather than everyone. On an install with more than 20 users, re-publishing these is not optional |
+| The 3 board blades (`livewire/leads/lead-board.blade.php`, `livewire/deals/deal-board.blade.php`, `livewire/quotes/quote-board.blade.php`) | The same change, and the same silent failure |
+
+`php artisan laravelcrm:upgrade` names your drifted published views on every deploy (added in 2.4.1),
+so this table is a cross-check rather than the only signal you will get.
+
+(The reverse combination *does* throw: MaryUI rejects `allow-all` together with `searchable`, which is
+why **Select all** could not simply be kept alongside the new search.)
+
+## 2.4.3
+
+### No migrations, no new config keys
+
+This is a performance patch release. It adds no tables or columns and no configuration keys, so
+
+```bash
+composer update venturedrake/laravel-crm
+php artisan laravelcrm:update
+```
+
+is the whole upgrade. `laravelcrm:update` still advances the `db_version` marker, so run it even
+though there is nothing to migrate — otherwise the system check reports the database as behind the
+code.
+
+### Clear your application cache after deploying
+
+This release gates the settings-seeding pass that used to run on every CRM page behind a cache flag,
+which is the one genuinely new operator-facing behaviour here. The flag is stamped with the package
+version (`crm.settings-seeded.2.4.3`), so **the version bump re-arms it on its own** — the first CRM
+request after the upgrade runs the seeding pass once, and every request after that skips it. You do
+not have to clear anything by hand for that to happen, and `laravelcrm:upgrade` (which fires from
+the composer hook, and which `laravelcrm:update` calls first) clears your caches anyway. This is a
+caveat only for anyone who bypasses both.
+
+The flag also carries a 24-hour TTL, so a settings row deleted by hand heals itself on the next day's
+first request rather than staying missing until the next release.
+
+**On a teams install the flag is partitioned by team.** Most of what the pass seeds is team-scoped —
+`organization_name`, `currency`, the document prefixes — so each team's first request after a deploy
+does its own seeding pass, once. A single shared flag would have meant whichever team requested first
+got its rows and no other team did.
+
+### The version phone-home now has timeouts
+
+The CRM's version check posts to `api.laravelcrm.com`. Guzzle defaults both `connect_timeout` and
+`timeout` to "wait forever", and the install id is only recorded from a successful response, so **an
+install with blocked egress to that host was putting a blocking outbound POST with no timeout in
+front of every CRM page load.** The call is now capped at 2s connect / 3s total, with an hour-long
+backoff marked before the request goes out, so a failure costs one attempt an hour rather than one
+per page view.
+
+No action is needed. It is worth knowing about if your page load times drop noticeably after this
+upgrade, or if you had previously worked around the stall by blocking the CRM's own checks.
+
+### `crm_usage_requests.visitor` values change format
+
+The visitor pseudonym was hashed with `crypt($ip, config('hashing.encryption_key'))` — not a stock
+Laravel config key, so the salt was null and PHP emitted a deprecation on every page view. It is now
+a sha256 over your application key.
+
+**Rows written before the upgrade will not match rows written after it for the same visitor.** There
+is no migration and no backfill, and none is offered: the column is a pseudonym, not a key, and
+nothing joins on it. The practical consequence is that any report counting *distinct* visitors over a
+window spanning the upgrade double-counts anyone who appears on both sides of it. Pick a window that
+starts after the deploy if the number has to be exact.
+
+### Views to re-publish
+
+If you have published views into `resources/views/vendor/laravel-crm`, the view finder prefers your
+frozen copy, and this release changes:
+
+| View | What you miss if you keep the old copy |
+|---|---|
+| `livewire/people/person-index.blade.php`, `livewire/organizations/organization-index.blade.php` | The removal of the always-blank `next_activity` column. The eager loading is in the components, not the views, so the pages are fast either way |
+| `livewire/quotes/quote-index.blade.php`, `livewire/users/user-index.blade.php` | Column changes paired with the new eager loads |
+| `layouts/app.blade.php` | The `version_compare()` badge fix and the cached settings read — a frozen copy keeps two raw queries on every page and keeps showing the wrong badge once the minor version passes 2.10 |
+| `mail/templates/send-quote/*`, `send-invoice/*`, `send-purchase-order/*` (both `message` and `subject`) | The memoised settings read. The rendered output is identical; the query count is not, and these render once per row behind the index send buttons |
+
+`php artisan laravelcrm:upgrade` names your drifted published views on every deploy (added in 2.4.1),
+so this table is a cross-check rather than the only signal you will get.
+
+## 2.4.2
+
+### Republish assets — the pdf.js worker filename changed
+
+The pdf.js worker is now emitted as `pdf.worker.min-<hash>.js` where it was
+`pdf.worker.min-<hash>.mjs`. `.mjs` is in the default MIME map of neither nginx nor older Apache, so
+those servers handed it over as `application/octet-stream` and the browser's strict module-script
+MIME check refused to run it — every PDF preview failed with *"setting up fake worker failed"*, on a
+build and a publish that were both correct.
+
+`manifest.json` names the new filename, so **a host that upgrades without republishing assets has a
+manifest pointing at a file that is no longer on disk, and every preview fails.** Nothing manual is
+needed — the composer hook fires `laravelcrm:upgrade`, which republishes the assets and prunes the
+stale content-hashed file — but this is the release where `composer update` on its own is not
+enough. If you have not added the hook, see **One-time step for installs from before 2.4.0** above,
+or run `php artisan laravelcrm:upgrade` by hand.
+
+### No migrations; one config key removed
+
+No tables and no columns. Unlike 2.4.1 this is *not* a "no new config keys" release: `portal.team_id`
+is **removed** — see below. Run
+
+```bash
+composer update venturedrake/laravel-crm
+php artisan laravelcrm:update
+```
+
+as usual. `laravelcrm:update` still advances the `db_version` marker, so run it even though there is
+nothing to migrate — otherwise the system check reports the database as behind the code.
+
+### Multi-tenant installs should upgrade promptly
+
+Before this release the public portal rendered a document's page and PDF from **unscoped** settings.
+The portal is anonymous — a signed link, no login — so `BelongsToTeamsScope` never engaged there and
+the settings query returned every team's rows; `pluck()` keys by name, so whichever team the database
+listed last supplied the organisation name, ABN, contact block and logo on every tenant's quotes,
+invoices and purchase orders alike. On a `laravel-crm.teams` install, a customer opening one team's
+emailed invoice link could be shown another team's branding. See the **Security** entry in
+[CHANGELOG.md](../CHANGELOG.md) for the full description.
+
+**No data migration is needed.** The fix is in the scope and the cache key — the portal controllers
+pin the settings service to the document's own team before rendering — so upgrading and clearing the
+application cache is sufficient. Single-tenant installs were never affected.
+
+### `LARAVEL_CRM_PORTAL_TEAM_ID` is gone
+
+`LARAVEL_CRM_PORTAL_TEAM_ID` and `config('laravel-crm.portal.team_id')` are **removed**. The variable
+sat ahead of every other portal team signal as a hard single-tenant lock, which was harmless while
+the portal served only roadmaps and wrong once the portal started answering "whose branding does this
+invoice carry?" — a document states its own owner, and one env var was silently overruling it for
+every team on the install. Every portal team signal is now derived from the request or the record.
+
+**If you had that variable set,** delete it from your `.env` and drop the `team_id` line from
+`config/laravel-crm.php` if you have published the config. Nothing reads it any more, so leaving it
+in place is inert rather than harmful — but the portal will stop behaving as a single-tenant lock,
+which is the point. A team whose board you do *not* want public should have its features marked
+non-public rather than relying on the other teams being locked out.
+
+Boards stay reachable per team at `/p/features/team/{id}`, and bare `/p/features` resolves as it has
+since 2.4.0: the team in the URL, the board remembered in the visitor's session, the signed-in user's
+current team, and finally — when exactly one team has a public board — that team.
+
+### Views to re-publish
+
+**None.** Neither change in this release touches `resources/views`, so a published view cannot hide
+either fix. If you are coming from 2.4.0, the 2.4.1 table below still applies to you.
+
+## 2.4.1
+
+### No migrations, no new config keys
+
+This is a patch release. It adds no tables or columns and no configuration keys, so
+
+```bash
+composer update venturedrake/laravel-crm
+php artisan laravelcrm:update
+```
+
+is the whole upgrade. `laravelcrm:update` still advances the `db_version` marker, so run it even
+though there is nothing to migrate — otherwise the system check reports the database as behind the
+code.
+
+### Multi-tenant installs should upgrade promptly
+
+Before this release the settings cache was global while the query behind it was team-scoped, so on
+a `laravel-crm.teams` install whichever team warmed the cache served its organisation name, ABN,
+address and logo to every other team until the next settings write — on the settings screen and on
+the documents those settings are rendered into. See the **Security** entry in
+[CHANGELOG.md](../CHANGELOG.md) for the full description.
+
+**No data migration is needed.** The fix is in the cache key, so upgrading and clearing the
+application cache is sufficient. Single-tenant installs were never affected.
+
+### Views to re-publish
+
+If you have published views into `resources/views/vendor/laravel-crm`, the view finder prefers your
+frozen copy, and this release changes:
+
+| View | What you miss if you keep the old copy |
+|---|---|
+| `livewire/settings/setting-edit.blade.php` | The flat single-column settings page persists — harmless, and it keeps saving correctly |
+| `livewire/kanban-board/record.blade.php`, `livewire/kanban-board/sortable.blade.php` | The client-side half of the drag-and-drop fix — the `data-record-id` marking. The server side resolves, filters and renumbers regardless, so the 500 and the authorization gap are closed either way |
+| The quote / order / delivery / invoice / purchase-order `*-index`, `*-related-index`, `*-show` and `*-form` views | The Preview and **Get link** buttons — the routes exist, but nothing renders a link to them |
+| `portal/quotes/show`, `portal/invoices/show`, `portal/purchase-orders/show` | The portal page keeps its own hand-built layout instead of rendering the record's PDF template |
+| `layouts/app.blade.php`, `layouts/portal.blade.php` | The Get-link modal mount, the chrome-free portal document pages and the footer fix. `layouts/partials/nav-integrations.blade.php` no longer exists in the package at all |
+| `pdfs/{modern,bold,compact,professional}/*` and the five classic `*/pdf.blade.php` | The null-date guards, the Bold header inset and its logo alignment |
+| `mail/templates/send-invoice/message.blade.php` | The no-due-date variant of the emailed invoice body |
+
+`php artisan laravelcrm:upgrade` now names your drifted published views on every deploy, so you no
+longer have to work this out by hand — it md5-compares each published blade against the packaged
+one and warns on both drifted views and views the package no longer ships. It only warns; it never
+fails the run.
+
+**The Settings → Templates thumbnails come back on their own.** 2.4.0 shipped without the five
+template SVGs, so the picker rendered broken images; the artwork has moved out of the build output
+directory and is republished by `laravelcrm:upgrade`, which `laravelcrm:update` calls first. Nothing
+manual is needed.
+
+**If you published the portal views**, note the three `crm-portal-*-line-items` Livewire components
+are gone. A published portal view still referencing one will throw — remove the reference, or
+re-publish the view.
+
+### New routes
+
+Five preview routes are added: `laravel-crm.quotes.preview` and its order, delivery, invoice and
+purchase-order siblings. Each carries the same `can:view` guard as the download route it mirrors,
+so they grant nothing your existing roles did not already allow.
+
 ## 2.4.0
 
 ### Migrations no longer need publishing
@@ -325,6 +707,9 @@ single-team install needs no configuration at all. Admins can copy the right lin
 
 If you *have* set `portal.team_id`, it still behaves exactly as before: a hard single-tenant lock
 that 404s every feature outside that team. Unset it to give the other teams a portal.
+
+> The variable is **removed** in 2.4.2. If you are upgrading past this release, see the
+> **`LARAVEL_CRM_PORTAL_TEAM_ID` is gone** note in the 2.4.2 section above.
 
 One behaviour fix comes with this: submitting a feature through the portal used to require the
 submitter's `currentTeam` to match the board's team, which `403`'d every visitor who registered

@@ -371,8 +371,8 @@
             {{-- ASSIGNMENT & CREATOR --}}
             <div class="space-y-4 pt-3 border-t border-base-200">
                 <h4 class="font-semibold text-sm text-base-content/80">People & Lead</h4>
-                <x-mary-choices label="{{ ucfirst(__('laravel-crm::lang.assigned_to')) }}" wire:model.live="user_id" :options="$userOptions" icon="o-user" allow-all />
-                <x-mary-choices label="{{ ucfirst(__('laravel-crm::lang.created_by')) }}" wire:model.live="created_by_id" :options="$users" icon="o-user-circle" allow-all />
+                <x-mary-choices label="{{ ucfirst(__('laravel-crm::lang.assigned_to')) }}" wire:model.live="user_id" :options="$userOptions" icon="o-user" searchable search-function="searchUsers" clearable />
+                <x-mary-choices label="{{ ucfirst(__('laravel-crm::lang.created_by')) }}" wire:model.live="created_by_id" :options="$users" icon="o-user-circle" searchable search-function="searchUsers" clearable />
                 <x-mary-choices label="Filter by Lead" wire:model.live="lead_id" :options="$leads" option-label="title" icon="o-funnel" allow-all />
             </div>
 

@@ -7,6 +7,8 @@ use Illuminate\Contracts\Encryption\DecryptException;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
 use Illuminate\Support\Str;
+use Symfony\Component\HttpFoundation\HeaderUtils;
+use VentureDrake\LaravelCrm\Http\Controllers\Concerns\ServesPdfDocuments;
 use VentureDrake\LaravelCrm\Http\Requests\StorePurchaseOrderRequest;
 use VentureDrake\LaravelCrm\Http\Requests\UpdatePurchaseOrderRequest;
 use VentureDrake\LaravelCrm\Models\Order;
@@ -17,11 +19,14 @@ use VentureDrake\LaravelCrm\Services\OrganizationService;
 use VentureDrake\LaravelCrm\Services\PersonService;
 use VentureDrake\LaravelCrm\Services\PurchaseOrderService;
 use VentureDrake\LaravelCrm\Services\SettingService;
+use VentureDrake\LaravelCrm\Support\PdfContactDetails;
 use VentureDrake\LaravelCrm\Support\PdfLogo;
 use VentureDrake\LaravelCrm\Support\PdfTemplateRegistry;
 
 class PurchaseOrderController extends Controller
 {
+    use ServesPdfDocuments;
+
     /**
      * @var SettingService
      */
@@ -305,6 +310,31 @@ class PurchaseOrderController extends Controller
 
     public function download(PurchaseOrder $purchaseOrder)
     {
+        return $this->pdfResponse($this->buildPdf($purchaseOrder)->output(), $this->pdfFilename($purchaseOrder));
+    }
+
+    /**
+     * The same document as download(), served inline so a browser (or the
+     * pdf.js preview drawer) renders it in place rather than saving it.
+     */
+    public function preview(PurchaseOrder $purchaseOrder)
+    {
+        return $this->pdfResponse(
+            $this->buildPdf($purchaseOrder)->output(),
+            $this->pdfFilename($purchaseOrder),
+            HeaderUtils::DISPOSITION_INLINE
+        );
+    }
+
+    /**
+     * Sole loadView() call site for purchase orders — download() and
+     * preview() must share it. PdfViewDataContractTest statically asserts
+     * exactly one per controller, and a second copy would drift from this one.
+     *
+     * @return \Barryvdh\DomPDF\PDF
+     */
+    protected function buildPdf(PurchaseOrder $purchaseOrder)
+    {
         if ($purchaseOrder->person) {
             $email = $purchaseOrder->person->getPrimaryEmail();
             $phone = $purchaseOrder->person->getPrimaryPhone();
@@ -322,13 +352,18 @@ class PurchaseOrderController extends Controller
                 'purchaseOrder' => $purchaseOrder,
                 'dateFormat' => app('laravel-crm.settings')->get('date_format', config('laravel-crm.date_format')),
                 'taxName' => app('laravel-crm.settings')->get('tax_name', 'Tax'),
-                'contactDetails' => app('laravel-crm.settings')->get('purchase_order_contact_details', null),
+                'contactDetails' => PdfContactDetails::for('purchase-order'),
                 'email' => $email ?? null,
                 'phone' => $phone ?? null,
                 'address' => $address ?? null,
                 'organization_address' => $organization_address ?? null,
                 'fromName' => app('laravel-crm.settings')->get('organization_name', null),
                 'logo' => PdfLogo::fromSettings(),
-            ])->download('purchase-order-'.strtolower($purchaseOrder->xeroPurchaseOrder->number ?? $purchaseOrder->purchase_order_id).'.pdf');
+            ]);
+    }
+
+    protected function pdfFilename(PurchaseOrder $purchaseOrder): string
+    {
+        return 'purchase-order-'.strtolower($purchaseOrder->xeroPurchaseOrder->number ?? $purchaseOrder->purchase_order_id).'.pdf';
     }
 }

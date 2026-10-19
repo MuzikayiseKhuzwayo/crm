@@ -4,6 +4,7 @@ namespace VentureDrake\LaravelCrm\Console;
 
 use Illuminate\Console\Command;
 use VentureDrake\LaravelCrm\Services\Agent\CrmHeartbeatService;
+use VentureDrake\LaravelCrm\Services\Agent\CrmToolsService;
 
 class LaravelCrmAgentHeartbeat extends Command
 {
@@ -12,7 +13,9 @@ class LaravelCrmAgentHeartbeat extends Command
      *
      * @var string
      */
-    protected $signature = 'laravelcrm:agent-heartbeat {--force : Force notification dispatch even if metrics are normal}';
+    protected $signature = 'laravelcrm:agent-heartbeat
+                            {--force : Force notification dispatch even if metrics are normal or suppressed}
+                            {--mode= : Optionally set the proactivity mode (high, balanced, low, silent)}';
 
     /**
      * The console command description.
@@ -24,8 +27,15 @@ class LaravelCrmAgentHeartbeat extends Command
     /**
      * Execute the console command.
      */
-    public function handle(CrmHeartbeatService $heartbeat): int
-    {
+    public function handle(
+        CrmHeartbeatService $heartbeat,
+        CrmToolsService $tools
+    ): int {
+        if ($mode = $this->option('mode')) {
+            $updated = $tools->updateNotificationSettings(['mode' => $mode]);
+            $this->info("🎛️ Proactivity mode set to: {$updated['mode_label']}");
+        }
+
         $this->info('Running CRM Agent Heartbeat evaluation...');
 
         $force = (bool) $this->option('force');
@@ -36,7 +46,7 @@ class LaravelCrmAgentHeartbeat extends Command
             $this->line('');
             $this->line($result['briefing'] ?? '');
         } else {
-            $this->comment('ℹ️ Heartbeat nominal: '.($result['message'] ?? 'No action required'));
+            $this->comment("ℹ️ Heartbeat [{$result['status']}]: ".($result['message'] ?? 'No action required'));
         }
 
         return self::SUCCESS;

@@ -50,11 +50,11 @@
                             @if(!$quote->accepted_at && !$quote->rejected_at)
                                 <x-mary-button wire:click="accept({{ $quote->id }})" class="btn-sm btn-success text-white"  label="{{ ucfirst(__('laravel-crm::lang.accept')) }}" />
                                 <x-mary-button wire:click="reject({{ $quote->id }})" class="btn-sm btn-error text-white" label="{{ ucfirst(__('laravel-crm::lang.reject')) }}" />
-                            @elseif($quote->accepted_at && $quote->orders()->count() > 0 && ! $quote->orderComplete())
+                            @elseif($quote->accepted_at && $quote->orders->count() > 0 && ! $quote->orderComplete())
                                 @hasordersenabled
                                 <x-mary-button link="{{ route('laravel-crm.orders.create',['model' => 'quote', 'id' => $quote->id]) }}" class="btn-sm btn-success text-white"  label="{{ ucfirst(__('laravel-crm::lang.create_order')) }}" />
                                 @endhasordersenabled
-                            @elseif($quote->accepted_at && $quote->orders()->count() < 1)
+                            @elseif($quote->accepted_at && $quote->orders->count() < 1)
                                 <x-mary-button wire:click="unaccept({{ $quote->id }})" class="btn-sm btn-outline"  label="{{ ucfirst(__('laravel-crm::lang.unaccept')) }}" />
                                 @hasordersenabled
                                 <x-mary-button link="{{ route('laravel-crm.orders.create',['model' => 'quote', 'id' => $quote->id]) }}" class="btn-sm btn-success text-white"  label="{{ ucfirst(__('laravel-crm::lang.create_order')) }}" />
@@ -66,6 +66,8 @@
                     @endcan
                     @can('view crm quotes')
                         @if(! $quoteError)
+                            <x-crm-pdf-preview-button :url="url(route('laravel-crm.quotes.preview', $quote))" :download-url="url(route('laravel-crm.quotes.download', $quote))" :title="$quote->title" />
+                            <x-crm-get-link-button :model="$quote" />
                             <x-mary-button icon="o-arrow-down-tray" link="{{ url(route('laravel-crm.quotes.download', $quote)) }}" no-wire-navigate class="btn-sm btn-square btn-outline" />
                         @endif    
                         <x-mary-button icon="o-eye" link="{{ url(route('laravel-crm.quotes.show', $quote)) }}" class="btn-sm btn-square btn-outline" />
@@ -87,7 +89,7 @@
     {{-- FILTERS --}}
     <x-mary-drawer wire:model="showFilters" title="Filters" class="lg:w-1/3" right separator with-close-button>
         <div class="grid gap-5" @keydown.enter="$wire.showFilters = false">
-            <x-mary-choices label="Owner" wire:model.live="user_id" :options="$users" icon="o-user" inline allow-all />
+            <x-mary-choices label="Owner" wire:model.live="user_id" :options="$users" icon="o-user" inline searchable search-function="searchUsers" clearable />
             <x-mary-choices label="Label" wire:model.live="label_id" :options="$labels" icon="o-tag" inline allow-all />
         </div>
 

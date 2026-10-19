@@ -32,19 +32,19 @@
                 @endforeach
             @endscope
             @scope('cell_email', $person)
-                {{ $person->getPrimaryEmail()->address ?? null }}
+                {{ $person->primaryEmail?->address }}
             @endscope
             @scope('cell_phone', $person)
-                {{ $person->getPrimaryPhone()->number ?? null }}
+                {{ $person->primaryPhone?->number }}
             @endscope
             @scope('cell_open_deals', $person)
-                {{ $person->deals->whereNull('closed_at')->count() }}
+                {{ $person->open_deals_count }}
             @endscope
             @scope('cell_lost_deals', $person)
-                {{ $person->deals->where('closed_status', 'lost')->count() }}
+                {{ $person->lost_deals_count }}
             @endscope
             @scope('cell_won_deals', $person)
-                {{ $person->deals->where('closed_status', 'won')->count() }}
+                {{ $person->won_deals_count }}
             @endscope
             @scope('actions', $person)
                 @hasleadsenabled
@@ -84,7 +84,7 @@
     {{-- FILTERS --}}
     <x-mary-drawer wire:model="showFilters" title="Filters" class="lg:w-1/3" right separator with-close-button>
         <div class="grid gap-5" @keydown.enter="$wire.showFilters = false">
-            <x-mary-choices label="Owner" wire:model.live="user_id" :options="$users" icon="o-user" inline allow-all />
+            <x-mary-choices label="Owner" wire:model.live="user_id" :options="$users" icon="o-user" inline searchable search-function="searchUsers" clearable />
             <x-mary-choices label="Label" wire:model.live="label_id" :options="$labels" icon="o-tag" inline allow-all />
         </div>
 

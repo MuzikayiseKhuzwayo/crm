@@ -11,6 +11,7 @@ use VentureDrake\LaravelCrm\Models\Address;
 use VentureDrake\LaravelCrm\Models\Email;
 use VentureDrake\LaravelCrm\Models\Phone;
 use VentureDrake\LaravelCrm\Services\SettingService;
+use VentureDrake\LaravelCrm\Support\PdfContactDetails;
 
 class SettingController extends Controller
 {
@@ -94,8 +95,22 @@ class SettingController extends Controller
             $this->settingService->set('quote_terms', $request->quote_terms);
         }
 
-        if ($request->invoice_contact_details) {
-            $this->settingService->set('invoice_contact_details', $request->invoice_contact_details);
+        // Both halves of the contact-block chain guard on `has()` rather than
+        // the truthy check their neighbours use, because a truthy guard makes
+        // a field write-once: clearing it posts an empty string, skips the
+        // set(), and leaves the old row printing with no way to remove it
+        // short of DB access. The shared key feeds the "From" block on four
+        // doc types at once; the invoice override shadows that shared value,
+        // so write-once there strands an admin on an override they can never
+        // drop back out of. An empty string is a meaningful value for both —
+        // PdfContactDetails::for() reads with filled(), so a cleared row
+        // resolves to null and falls through the chain.
+        if ($request->has('pdf_contact_details')) {
+            $this->settingService->set(PdfContactDetails::SHARED_KEY, $request->pdf_contact_details);
+        }
+
+        if ($request->has('invoice_contact_details')) {
+            $this->settingService->set(PdfContactDetails::settingKey('invoice'), $request->invoice_contact_details);
         }
 
         if ($request->invoice_terms) {

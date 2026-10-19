@@ -15,6 +15,15 @@ class InvoiceRelatedIndex extends Component
 {
     use AuthorizesRequests, Toast;
 
+    /**
+     * The Sent badge on these rows goes stale the moment the layout's
+     * get-link modal ticks "mark as sent" -- that write runs in a
+     * different Livewire root, so nothing re-renders this table.
+     */
+    protected $listeners = [
+        'crm-get-link-sent' => '$refresh',
+    ];
+
     public Model $model;
 
     public ?Pipeline $pipeline = null;
@@ -48,7 +57,8 @@ class InvoiceRelatedIndex extends Component
     #[Computed]
     public function invoices(): Collection
     {
-        return $this->model->invoices()->latest()->get();
+        // organization/person back the preview button's `$invoice->title`.
+        return $this->model->invoices()->with(['organization', 'person'])->latest()->get();
     }
 
     public function delete($id): void

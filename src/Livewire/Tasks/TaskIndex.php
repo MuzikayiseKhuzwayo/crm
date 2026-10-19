@@ -2,7 +2,6 @@
 
 namespace VentureDrake\LaravelCrm\Livewire\Tasks;
 
-use App\Models\User;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
 use Illuminate\Pagination\LengthAwarePaginator;
@@ -11,6 +10,7 @@ use Livewire\Attributes\Url;
 use Livewire\Component;
 use Livewire\WithPagination;
 use Mary\Traits\Toast;
+use VentureDrake\LaravelCrm\Livewire\Traits\HasUserOwnerFilter;
 use VentureDrake\LaravelCrm\Models\Deal;
 use VentureDrake\LaravelCrm\Models\Lead;
 use VentureDrake\LaravelCrm\Models\Organization;
@@ -22,7 +22,7 @@ use VentureDrake\LaravelCrm\Traits\ResetsPaginationWhenPropsChanges;
 
 class TaskIndex extends Component
 {
-    use AuthorizesRequests, ClearsProperties, ResetsPaginationWhenPropsChanges, Toast, WithPagination;
+    use AuthorizesRequests, ClearsProperties, HasUserOwnerFilter, ResetsPaginationWhenPropsChanges, Toast, WithPagination;
 
     public $layout = 'index';
 
@@ -108,18 +108,13 @@ class TaskIndex extends Component
         ];
     }
 
-    public function users(): Collection
-    {
-        return User::orderBy('name')->get();
-    }
-
     public function userOptions(): array
     {
         $options = [
             ['id' => 'unassigned', 'name' => '- '.ucfirst(__('laravel-crm::lang.unallocated')).' -'],
         ];
 
-        foreach ($this->users() as $user) {
+        foreach ($this->users as $user) {
             $options[] = ['id' => (string) $user->id, 'name' => $user->name];
         }
 
@@ -480,7 +475,7 @@ class TaskIndex extends Component
     public function render()
     {
         return view('laravel-crm::livewire.tasks.task-index', [
-            'users' => $this->users(),
+            'users' => $this->users,
             'userOptions' => $this->userOptions(),
             'leads' => $this->leads(),
             'duePresets' => $this->duePresets(),

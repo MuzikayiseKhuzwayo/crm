@@ -5,6 +5,8 @@ namespace VentureDrake\LaravelCrm\Http\Controllers;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Routing\Controller;
+use VentureDrake\LaravelCrm\Services\Agent\CrmHeartbeatService;
+use VentureDrake\LaravelCrm\Services\Agent\CrmToolsService;
 use VentureDrake\LaravelCrm\Services\Agent\GeminiAgentService;
 use VentureDrake\LaravelCrm\Services\Agent\TelegramBotService;
 
@@ -16,7 +18,9 @@ class AgentTelegramWebhookController extends Controller
     public function handle(
         Request $request,
         TelegramBotService $telegram,
-        GeminiAgentService $gemini
+        GeminiAgentService $gemini,
+        CrmHeartbeatService $heartbeat,
+        CrmToolsService $tools
     ): JsonResponse {
         $update = $request->all();
 
@@ -32,9 +36,30 @@ class AgentTelegramWebhookController extends Controller
                         "• *What's the status of our CRM today?*\n".
                         "• *Show me overdue tasks*\n".
                         "• *Give me a summary of lead LD-4504*\n".
-                        '• *Delete lead LD-TFA-L1542*';
+                        '• *Switch to daily digest mode* (or type `/mode`)';
 
-                    $telegram->sendMessage($chatId, $welcome);
+                    $telegram->sendMessage($chatId, $welcome, [
+                        'inline_keyboard' => [
+                            [
+                                ['text' => '📋 Tasks List', 'callback_data' => 'view_tasks'],
+                                ['text' => '🎛️ Notification Mode', 'callback_data' => 'agent_mode_menu'],
+                            ],
+                        ],
+                    ]);
+                } elseif (preg_match('/^\/(mode|notifications|settings)(?:\s+(.+))?$/i', $text, $matches)) {
+                    $arg = trim($matches[2] ?? '');
+                    $flash = null;
+                    if ($arg !== '') {
+                        $res = $tools->updateNotificationSettings(['mode' => $arg, 'clear_snooze' => true]);
+                        $flash = "Mode switched to {$res['mode_label']}";
+                    }
+                    $deck = $tools->buildModeControlDeck($flash);
+                    $telegram->sendMessage($chatId, $deck['text'], $deck['reply_markup']);
+                } elseif (preg_match('/^\/snooze(?:\s+(\d+(?:\.\d+)?))?$/i', $text, $matches)) {
+                    $hours = isset($matches[1]) ? (float) $matches[1] : 3.0;
+                    $tools->updateNotificationSettings(['snooze_hours' => $hours]);
+                    $deck = $tools->buildModeControlDeck($hours > 0 ? "💤 Alerts snoozed for {$hours}h" : '🔔 Alerts resumed');
+                    $telegram->sendMessage($chatId, $deck['text'], $deck['reply_markup']);
                 } else {
                     $historyKey = "crm_agent_history_{$chatId}";
                     $history = cache()->get($historyKey, []);
@@ -54,7 +79,21 @@ class AgentTelegramWebhookController extends Controller
             $callback = $update['callback_query'];
             $callbackId = $callback['id'] ?? null;
             $chatId = $callback['message']['chat']['id'] ?? null;
+            $messageId = $callback['message']['message_id'] ?? null;
             $data = $callback['data'] ?? '';
+
+            if ($chatId && (
+                $data === 'agent_mode_menu'
+                || str_starts_with($data, 'agent_mode:')
+                || str_starts_with($data, 'agent_snooze:')
+            )) {
+                $controlResult = $heartbeat->handleTelegramControlCallback($data, $chatId, $messageId);
+                if ($callbackId) {
+                    $telegram->answerCallbackQuery($callbackId, $controlResult['toast'] ?? 'Updated');
+                }
+
+                return response()->json(['ok' => true]);
+            }
 
             if ($callbackId) {
                 $telegram->answerCallbackQuery($callbackId, 'Processing request...');

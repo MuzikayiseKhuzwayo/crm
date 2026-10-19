@@ -37,7 +37,7 @@
                 @endif
             @endscope
             @scope('cell_overdue_by', $invoice)
-                @if(! $invoice->fully_paid_at && abs($invoice->due_date->diffinDays()) > 0 && $invoice->due_date < \Carbon\Carbon::now()->timezone($this->timezone ))
+                @if(! $invoice->fully_paid_at && $invoice->due_date && abs($invoice->due_date->diffInDays()) > 0 && $invoice->due_date < \Carbon\Carbon::now()->timezone($this->timezone))
                     {{ $invoice->due_date->diffForHumans() }}
                 @endif
             @endscope
@@ -55,6 +55,8 @@
                         @endif
                     @endif
                     @can('view crm invoices')
+                        <x-crm-pdf-preview-button :url="url(route('laravel-crm.invoices.preview', $invoice))" :download-url="url(route('laravel-crm.invoices.download', $invoice))" :title="$invoice->title" />
+                        <x-crm-get-link-button :model="$invoice" />
                         <x-mary-button icon="o-arrow-down-tray" link="{{ url(route('laravel-crm.invoices.download', $invoice)) }}" no-wire-navigate class="btn-sm btn-square btn-outline" />
                         <x-mary-button icon="o-eye" link="{{ url(route('laravel-crm.invoices.show', $invoice)) }}" class="btn-sm btn-square btn-outline" />
                     @endcan
@@ -80,7 +82,7 @@
     {{-- FILTERS --}}
     <x-mary-drawer wire:model="showFilters" title="Filters" class="lg:w-1/3" right separator with-close-button>
         <div class="grid gap-5" @keydown.enter="$wire.showFilters = false">
-            <x-mary-choices label="Owner" wire:model.live="user_id" :options="$users" icon="o-user" inline allow-all />
+            <x-mary-choices label="Owner" wire:model.live="user_id" :options="$users" icon="o-user" inline searchable search-function="searchUsers" clearable />
             <x-mary-choices label="Label" wire:model.live="label_id" :options="$labels" icon="o-tag" inline allow-all />
         </div>
 

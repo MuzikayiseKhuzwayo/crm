@@ -2,16 +2,17 @@
 
 namespace VentureDrake\LaravelCrm\Livewire\Leads;
 
-use App\Models\User;
 use Carbon\Carbon;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
 use Illuminate\Pagination\LengthAwarePaginator;
 use Illuminate\Support\Collection;
+use Livewire\Attributes\Computed;
 use Livewire\Attributes\Url;
 use Livewire\Component;
 use Livewire\WithPagination;
 use Mary\Traits\Toast;
+use VentureDrake\LaravelCrm\Livewire\Traits\HasUserOwnerFilter;
 use VentureDrake\LaravelCrm\Livewire\Traits\SearchesEncryptableContacts;
 use VentureDrake\LaravelCrm\Models\Label;
 use VentureDrake\LaravelCrm\Models\Lead;
@@ -22,7 +23,7 @@ use VentureDrake\LaravelCrm\Traits\ResetsPaginationWhenPropsChanges;
 
 class LeadIndex extends Component
 {
-    use AuthorizesRequests, ClearsProperties, ResetsPaginationWhenPropsChanges, SearchesEncryptableContacts, Toast, WithPagination;
+    use AuthorizesRequests, ClearsProperties, HasUserOwnerFilter, ResetsPaginationWhenPropsChanges, SearchesEncryptableContacts, Toast, WithPagination;
 
     public $layout = 'index';
 
@@ -92,32 +93,33 @@ class LeadIndex extends Component
         ];
     }
 
-    public function users(): Collection
-    {
-        return User::orderBy('name')->get();
-    }
-
     public function userFilterOptions(): array
     {
         $options = [
             ['id' => 'unassigned', 'name' => '- Unallocated / Unassigned -'],
         ];
 
-        foreach ($this->users() as $user) {
+        foreach ($this->users as $user) {
             $options[] = ['id' => (string) $user->id, 'name' => $user->name];
         }
 
         return $options;
     }
 
+    /**
+     * Filter drawer options, computed so a debounced search keystroke reuses
+     * them rather than re-querying on every render.
+     */
+    #[Computed]
     public function labels(): Collection
     {
-        return Label::all();
+        return Label::select('id', 'name')->get();
     }
 
+    #[Computed]
     public function leadSources(): Collection
     {
-        return LeadSource::orderBy('name')->get();
+        return LeadSource::select('id', 'name')->orderBy('name')->get();
     }
 
     public function pipelineStages(): Collection
@@ -381,10 +383,10 @@ class LeadIndex extends Component
     public function render()
     {
         return view('laravel-crm::livewire.leads.lead-index', [
-            'users' => $this->users(),
+            'users' => $this->users,
             'userFilterOptions' => $this->userFilterOptions(),
-            'labels' => $this->labels(),
-            'leadSources' => $this->leadSources(),
+            'labels' => $this->labels,
+            'leadSources' => $this->leadSources,
             'pipelineStages' => $this->pipelineStages(),
             'companyStatusOptions' => $this->companyStatusOptions(),
             'amountPresets' => $this->amountPresets(),

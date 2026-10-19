@@ -4,6 +4,7 @@ use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Schema;
 use VentureDrake\LaravelCrm\Models\Setting;
+use VentureDrake\LaravelCrm\Tests\Stubs\CountingCacheStore;
 
 test('set creates a new setting', function () {
     $setting = app('laravel-crm.settings')->set('lead_prefix', 'L', 'Lead Prefix');
@@ -76,11 +77,48 @@ test('forget cache removes cached entry', function () {
     $service->set('x', 'y');
     $service->all();
 
-    expect(Cache::has('app.crm-settings'))->toBeTrue();
+    expect(Cache::has($service->cacheKey()))->toBeTrue();
 
     $service->forgetCache();
 
-    expect(Cache::has('app.crm-settings'))->toBeFalse();
+    expect(Cache::has($service->cacheKey()))->toBeFalse();
+});
+
+test('repeated reads within a request do not keep hitting the cache store', function () {
+    // SettingsComposer is registered against every view, so a page render asks
+    // for the map hundreds of times. Each one used to cost two store reads —
+    // the generation counter and the map — which measured ~3000 redis calls on
+    // a single dashboard render.
+    Cache::extend('counting', fn () => Cache::repository(new CountingCacheStore));
+    config([
+        'cache.stores.counting' => ['driver' => 'counting'],
+        'cache.default' => 'counting',
+    ]);
+    Cache::purge('counting');
+
+    $service = app('laravel-crm.settings');
+    $service->set('date_format', 'd/m/Y');
+
+    CountingCacheStore::reset();
+
+    for ($i = 0; $i < 50; $i++) {
+        expect($service->get('date_format'))->toBe('d/m/Y');
+    }
+
+    // One for the generation counter, one for the map, and nothing after that.
+    expect(CountingCacheStore::$reads)->toBeLessThanOrEqual(3);
+});
+
+test('a write is visible to the rest of the request that made it', function () {
+    $service = app('laravel-crm.settings');
+    $service->set('date_format', 'd/m/Y');
+
+    // Fill the memo before the second write, so a stale one would be caught.
+    expect($service->get('date_format'))->toBe('d/m/Y');
+
+    $service->set('date_format', 'm/d/Y');
+
+    expect($service->get('date_format'))->toBe('m/d/Y');
 });
 
 test('all excludes user scoped rows', function () {
@@ -203,6 +241,81 @@ test('set install wide creates a global row when none exists', function () {
     expect((int) $setting->global)->toBe(1)
         ->and((int) $setting->value)->toBe(1)
         ->and(Setting::where('name', 'db_update_1201')->count())->toBe(1);
+});
+
+/**
+ * forTeam() is what makes the anonymous portal read the right tenant's
+ * branding: BelongsToTeamsScope only engages for a signed-in user with a
+ * current team, so without an explicit override a portal request reads every
+ * team's rows and pluck() keeps whichever one the database listed last.
+ */
+function settingRowFor(?int $teamId, string $name, string $value, int $global = 0): void
+{
+    Setting::withoutGlobalScopes()->create([
+        'name' => $name,
+        'value' => $value,
+        'team_id' => $teamId,
+        'global' => $global,
+    ]);
+}
+
+test('for team reads that teams rows and not another teams', function () {
+    config()->set('laravel-crm.teams', true);
+
+    settingRowFor(1, 'organization_name', 'A Co');
+    settingRowFor(2, 'organization_name', 'B Co');
+
+    $service = app('laravel-crm.settings');
+
+    expect($service->forTeam(2)->get('organization_name'))->toBe('B Co')
+        ->and($service->forTeam(1)->get('organization_name'))->toBe('A Co');
+});
+
+test('for team with no team reads neither teams rows', function () {
+    // A document written before teams existed. Rendering a blank From block is
+    // correct; borrowing whichever tenant sorted last is the bug.
+    config()->set('laravel-crm.teams', true);
+
+    settingRowFor(1, 'organization_name', 'A Co');
+    settingRowFor(2, 'organization_name', 'B Co');
+
+    expect(app('laravel-crm.settings')->forTeam(null)->get('organization_name'))->toBeNull();
+});
+
+test('for team is inert when teams are disabled', function () {
+    config()->set('laravel-crm.teams', false);
+
+    settingRowFor(null, 'organization_name', 'Single Tenant Co');
+
+    expect(app('laravel-crm.settings')->forTeam(2)->get('organization_name'))->toBe('Single Tenant Co');
+});
+
+test('two for team values in one request do not share a cache entry', function () {
+    config()->set('laravel-crm.teams', true);
+
+    $service = app('laravel-crm.settings');
+
+    $keyForTeamOne = $service->forTeam(1)->cacheKey();
+    $keyForTeamTwo = $service->forTeam(2)->cacheKey();
+    $keyForNoTeam = $service->forTeam(null)->cacheKey();
+
+    expect($keyForTeamOne)->toContain('.team.1')
+        ->and($keyForTeamTwo)->toContain('.team.2')
+        ->and($keyForNoTeam)->toContain('.team.none')
+        ->and([$keyForTeamOne, $keyForTeamTwo, $keyForNoTeam])->toHaveCount(3)
+        ->and(array_unique([$keyForTeamOne, $keyForTeamTwo, $keyForNoTeam]))->toHaveCount(3);
+});
+
+test('for team pins the key even where the team scope stands down', function () {
+    // The whole point: on an anonymous request the scope is inert, so the
+    // unsuffixed key would be filled with an all-teams map and handed to every
+    // console command and queued job that reads settings.
+    config()->set('laravel-crm.teams', true);
+
+    $service = app('laravel-crm.settings');
+    $unpinned = $service->cacheKey();
+
+    expect($service->forTeam(2)->cacheKey())->not->toBe($unpinned);
 });
 
 test('get for user is a direct query rather than a cache read', function () {

@@ -257,6 +257,7 @@ class TestSchema
             $table->unsignedBigInteger('lead_source_id')->nullable();
             $table->unsignedBigInteger('pipeline_id')->nullable();
             $table->unsignedBigInteger('pipeline_stage_id')->nullable();
+            $table->integer('pipeline_stage_order')->nullable();
             $table->integer('pipeline_order')->nullable();
             $table->boolean('qualified')->default(false);
             $table->string('relay_status')->nullable()->default('active');
@@ -294,6 +295,7 @@ class TestSchema
             $table->unsignedBigInteger('pipeline_id')->nullable();
             $table->unsignedBigInteger('pipeline_stage_id')->nullable();
             $table->unsignedBigInteger('partner_id')->nullable();
+            $table->integer('pipeline_stage_order')->nullable();
             $table->integer('pipeline_order')->nullable();
             $table->boolean('qualified')->default(false);
             $table->datetime('expected_close')->nullable();
@@ -737,6 +739,7 @@ class TestSchema
             $table->datetime('rejected_at')->nullable();
             $table->unsignedBigInteger('pipeline_id')->nullable();
             $table->unsignedBigInteger('pipeline_stage_id')->nullable();
+            $table->integer('pipeline_stage_order')->nullable();
             $table->unsignedBigInteger('user_created_id')->nullable();
             $table->unsignedBigInteger('user_updated_id')->nullable();
             $table->unsignedBigInteger('user_deleted_id')->nullable();
@@ -785,6 +788,7 @@ class TestSchema
             $table->unsignedBigInteger('order_id')->nullable();
             $table->unsignedBigInteger('pipeline_id')->nullable();
             $table->unsignedBigInteger('pipeline_stage_id')->nullable();
+            $table->integer('pipeline_stage_order')->nullable();
             $table->string('delivery_id')->nullable();
             $table->string('prefix')->nullable();
             $table->integer('number')->nullable();
@@ -851,6 +855,7 @@ class TestSchema
             $table->text('terms')->nullable();
             $table->unsignedBigInteger('pipeline_id')->nullable();
             $table->unsignedBigInteger('pipeline_stage_id')->nullable();
+            $table->integer('pipeline_stage_order')->nullable();
             $table->unsignedBigInteger('user_created_id')->nullable();
             $table->unsignedBigInteger('user_updated_id')->nullable();
             $table->unsignedBigInteger('user_deleted_id')->nullable();
@@ -908,6 +913,7 @@ class TestSchema
             $table->datetime('fully_paid_at')->nullable();
             $table->unsignedBigInteger('pipeline_id')->nullable();
             $table->unsignedBigInteger('pipeline_stage_id')->nullable();
+            $table->integer('pipeline_stage_order')->nullable();
             $table->unsignedBigInteger('user_created_id')->nullable();
             $table->unsignedBigInteger('user_updated_id')->nullable();
             $table->unsignedBigInteger('user_deleted_id')->nullable();
@@ -949,6 +955,7 @@ class TestSchema
             $table->unsignedBigInteger('organization_id')->nullable();
             $table->unsignedBigInteger('pipeline_id')->nullable();
             $table->unsignedBigInteger('pipeline_stage_id')->nullable();
+            $table->integer('pipeline_stage_order')->nullable();
             $table->string('reference')->nullable();
             $table->string('purchase_order_id')->nullable();
             $table->string('prefix')->nullable();
@@ -1013,6 +1020,61 @@ class TestSchema
             $table->date('delivery_date')->nullable();
             $table->string('line_amount_types')->nullable();
             $table->string('currency_code', 3)->nullable();
+            $table->datetime('xero_updated_at')->nullable();
+            $table->timestamps();
+            $table->softDeletes();
+        });
+
+        Schema::create($prefix.'xero_invoices', function (Blueprint $table) {
+            $table->bigIncrements('id');
+            $table->string('external_id')->nullable();
+            $table->unsignedBigInteger('team_id')->nullable();
+            $table->unsignedBigInteger('invoice_id')->nullable();
+            $table->string('xero_type')->nullable();
+            $table->string('xero_id')->nullable();
+            $table->string('number')->nullable();
+            $table->string('reference')->nullable();
+            $table->integer('subtotal')->nullable();
+            $table->integer('total_tax')->nullable();
+            $table->integer('total')->nullable();
+            $table->string('status')->nullable();
+            $table->integer('amount_due')->nullable();
+            $table->integer('amount_paid')->nullable();
+            $table->integer('amount_credited')->nullable();
+            $table->date('issue_date')->nullable();
+            $table->date('due_date')->nullable();
+            $table->string('line_amount_types')->nullable();
+            $table->string('currency_code', 3)->nullable();
+            $table->datetime('fully_paid_at')->nullable();
+            $table->datetime('xero_updated_at')->nullable();
+            $table->timestamps();
+            $table->softDeletes();
+        });
+
+        // The organizations and products index pages both render a Xero badge
+        // off these, so the tables have to exist for those tables to render at
+        // all — even on an install with no Xero connection.
+        Schema::create($prefix.'xero_contacts', function (Blueprint $table) {
+            $table->bigIncrements('id');
+            $table->string('external_id')->nullable();
+            $table->unsignedBigInteger('team_id')->nullable();
+            $table->unsignedBigInteger('organization_id')->nullable();
+            $table->string('xero_id')->nullable();
+            $table->string('name')->nullable();
+            $table->string('status')->nullable();
+            $table->datetime('xero_updated_at')->nullable();
+            $table->timestamps();
+            $table->softDeletes();
+        });
+
+        Schema::create($prefix.'xero_items', function (Blueprint $table) {
+            $table->bigIncrements('id');
+            $table->string('external_id')->nullable();
+            $table->unsignedBigInteger('team_id')->nullable();
+            $table->unsignedBigInteger('product_id')->nullable();
+            $table->string('xero_id')->nullable();
+            $table->string('code')->nullable();
+            $table->string('name')->nullable();
             $table->datetime('xero_updated_at')->nullable();
             $table->timestamps();
             $table->softDeletes();

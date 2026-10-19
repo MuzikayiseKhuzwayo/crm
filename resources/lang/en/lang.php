@@ -345,6 +345,9 @@ return [
     'system_check_db_update_command' => 'php artisan laravelcrm:update',
     'system_check_update_database' => 'update database',
     'settings_updated' => 'settings updated',
+    'logo_deleted' => 'logo deleted',
+    'delete_logo' => 'delete logo',
+    'delete_logo_confirm' => 'delete the uploaded logo?',
     'organization_name' => 'organization name',
     'language' => 'language',
     'product_category_stored' => 'product category stored',
@@ -622,7 +625,10 @@ return [
     'allow_creating_products_when_creating_quotes_orders_and_invoices' => 'allow creating new products when creating or editing quotes orders & invoices',
     'tax_rate' => 'tax rate',
     'tax_name' => 'tax name',
+    'pdf_contact_details' => 'contact details',
+    'pdf_contact_details_hint' => 'shown in the "from" block on quote, order, delivery and invoice PDFs, unless a document type overrides it on its own tab; the classic template shows this block on invoices only',
     'invoice_contact_details' => 'invoice contact details',
+    'invoice_contact_details_hint' => 'overrides the shared document contact details on invoices only',
     'overdue' => 'overdue',
     'due_tomorrow' => 'due tomorrow',
     'total_invoices' => 'total invoices',
@@ -1033,6 +1039,7 @@ return [
 
     // PDF templates (shared registry entries used across the 5 doc types)
     'templates' => 'templates',
+    'template' => 'template',
     'pdf_template' => 'PDF template',
     'pdf_template_use_default' => 'default (:template)',
     'pdf_template_published_override' => 'this document type is currently rendering through your own customised copy of the original PDF view, published under resources/views/vendor/laravel-crm. Saving this page replaces it with the template you pick here.',
@@ -1046,4 +1053,19 @@ return [
     'pdf_template_compact_description' => 'A dense layout that fits more onto a single page.',
     'pdf_template_professional' => 'professional',
     'pdf_template_professional_description' => 'A polished layout with branded headers and a summary panel.',
+    'pages' => 'pages',
+    'zoom_in' => 'zoom in',
+    'zoom_out' => 'zoom out',
+    'close' => 'close',
+
+    // Get link (portal share modal)
+    'get_link' => 'get link',
+    'get_link_hint' => 'Anyone with this link will be able to view the :record.',
+    'link_expires_days' => 'This link expires in :days days.',
+    'copy' => 'copy',
+    'copied' => 'copied',
+    'mark_as_sent' => 'mark as sent',
+    'marked_as_sent' => 'marked as sent',
+    'ok' => 'ok',
+    'record' => 'record',
 ];
