@@ -8,6 +8,31 @@
 
         {{-- ACTIONS --}}
         <x-slot:actions>
+            <x-mary-dropdown 
+                label="{{ $relay_status === 'active' ? 'Active Relay Only' : ($relay_status === 'standby' ? 'Standby Queue (' . ($standbyCount ?? 0) . ')' : 'All Relay (' . ($standbyCount ?? 0) . ' Standby)') }}" 
+                icon="o-queue-list" 
+                class="btn-sm {{ $relay_status ? 'btn-primary text-white' : 'btn-outline' }}" 
+                right>
+                <x-mary-menu-item title="All Relay Statuses" icon="o-squares-2x2" wire:click="$set('relay_status', '')" />
+                <x-mary-menu-item title="Active in Relay Only" icon="o-bolt" wire:click="$set('relay_status', 'active')" />
+                <x-mary-menu-item title="Standby Queue Only ({{ $standbyCount ?? 0 }})" icon="o-pause-circle" wire:click="$set('relay_status', 'standby')" />
+                <x-mary-menu-item title="Engaged Only" icon="o-fire" wire:click="$set('relay_status', 'engaged')" />
+                <x-mary-menu-item title="Fallen Off Only" icon="o-archive-box" wire:click="$set('relay_status', 'fallen_off')" />
+            </x-mary-dropdown>
+
+            @can('edit crm leads')
+                @if(($standbyCount ?? 0) > 0)
+                    <x-mary-button 
+                        label="Release All Standby ({{ $standbyCount }})" 
+                        icon="o-bolt" 
+                        wire:click="releaseAllStandby" 
+                        wire:confirm="Are you sure you want to activate all {{ $standbyCount }} standby leads into active outreach? Both these leads and any currently active colleagues at the same companies will remain active."
+                        class="btn-sm btn-warning text-neutral-900 font-semibold" 
+                        spinner="releaseAllStandby"
+                        responsive />
+                @endif
+            @endcan
+
             <x-mary-button label="Filters"
                            icon="o-funnel"
                            :badge="$filterCount ?? 0"
@@ -36,6 +61,10 @@
 
             @if($company_status !== '')
                 <x-mary-badge value="Company: {{ ucfirst($company_status) }}" icon-right="o-x-mark" wire:click="$set('company_status', '')" class="badge-warning text-white gap-1 cursor-pointer" />
+            @endif
+
+            @if($relay_status !== '')
+                <x-mary-badge value="Relay: {{ ucfirst(str_replace('_', ' ', $relay_status)) }}" icon-right="o-x-mark" wire:click="$set('relay_status', '')" class="badge-primary text-white gap-1 cursor-pointer" />
             @endif
 
             @if(!empty($user_id))
@@ -135,16 +164,32 @@
             @endscope
 
             @scope('cell_pipeline_stage', $lead)
-                @if($lead->pipelineStage)
-                    <x-mary-badge :value="$lead->pipelineStage->name" class="badge badge-neutral text-white text-[11px]" />
-                @else
-                    <span class="text-xs text-neutral-content/40">-</span>
-                @endif
+                <div class="flex flex-col gap-1 items-start">
+                    @if($lead->pipelineStage)
+                        <x-mary-badge :value="$lead->pipelineStage->name" class="badge badge-neutral text-white text-[11px]" />
+                    @else
+                        <span class="text-xs text-neutral-content/40">-</span>
+                    @endif
+                    @if($lead->relay_status === 'standby')
+                        @php $rBadge = $lead->relay_badge; @endphp
+                        <x-mary-badge :value="$rBadge['label']" class="badge-warning badge-outline text-[10px] font-semibold" />
+                    @endif
+                </div>
             @endscope
 
             @scope('actions', $lead)
-                <div class="flex gap-1 justify-end">
+                <div class="flex gap-1 justify-end items-center">
                     @can('edit crm leads')
+                        @if($lead->relay_status === 'standby')
+                            <x-mary-button 
+                                label="Activate" 
+                                icon="o-bolt" 
+                                wire:click="activateStandby({{ $lead->id }})" 
+                                onclick="event.stopPropagation();"
+                                class="btn-sm btn-warning text-neutral-900 font-semibold" 
+                                title="Move out of Standby Queue (Keep colleagues active)"
+                                spinner="activateStandby({{ $lead->id }})" />
+                        @endif
                         <x-mary-button label="{{ ucfirst(__('laravel-crm::lang.convert')) }}" link="{{ route('laravel-crm.deals.create', ['model' => 'lead', 'id' => $lead->id]) }}" class="btn-sm btn-success text-white" />
                     @endcan
                     @can('view crm leads')
@@ -178,6 +223,11 @@
             {{-- 2. COMPANY OUTREACH STATUS --}}
             <div>
                 <x-mary-select label="Company Outreach Status" wire:model.live="company_status" :options="$companyStatusOptions" icon="o-building-office" inline />
+            </div>
+
+            {{-- 2B. ACCOUNT RELAY QUEUE STATUS --}}
+            <div>
+                <x-mary-select label="Account Relay Queue" wire:model.live="relay_status" :options="$relayStatusOptions" icon="o-queue-list" inline />
             </div>
 
             {{-- 3. PIPELINE STAGE --}}

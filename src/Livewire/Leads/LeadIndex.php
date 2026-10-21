@@ -7,6 +7,7 @@ use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
 use Illuminate\Pagination\LengthAwarePaginator;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\Schema;
 use Livewire\Attributes\Computed;
 use Livewire\Attributes\Url;
 use Livewire\Component;
@@ -18,6 +19,7 @@ use VentureDrake\LaravelCrm\Models\Label;
 use VentureDrake\LaravelCrm\Models\Lead;
 use VentureDrake\LaravelCrm\Models\LeadSource;
 use VentureDrake\LaravelCrm\Models\PipelineStage;
+use VentureDrake\LaravelCrm\Services\AccountRelayService;
 use VentureDrake\LaravelCrm\Traits\ClearsProperties;
 use VentureDrake\LaravelCrm\Traits\ResetsPaginationWhenPropsChanges;
 
@@ -47,6 +49,9 @@ class LeadIndex extends Component
 
     #[Url]
     public string $company_status = '';
+
+    #[Url]
+    public string $relay_status = '';
 
     #[Url]
     public string $amount_preset = '';
@@ -79,8 +84,32 @@ class LeadIndex extends Component
             + (count((array) $this->pipeline_stage_id) > 0 ? 1 : 0)
             + ($this->lead_status !== 'active' ? 1 : 0)
             + ($this->company_status !== '' ? 1 : 0)
+            + ($this->relay_status !== '' ? 1 : 0)
             + ($this->amount_preset !== '' || $this->min_amount || $this->max_amount ? 1 : 0)
             + ($this->created_preset !== '' || $this->created_from || $this->created_to ? 1 : 0);
+    }
+
+    public function relayStatusOptions(): array
+    {
+        return [
+            ['id' => '', 'name' => 'All Relay Statuses'],
+            ['id' => 'active', 'name' => '🟢 Active in Relay'],
+            ['id' => 'standby', 'name' => '⏸️ Standby Queue Only'],
+            ['id' => 'engaged', 'name' => '🔥 Engaged'],
+            ['id' => 'fallen_off', 'name' => '⚪ Fallen Off'],
+        ];
+    }
+
+    public function standbyCount(): int
+    {
+        $tableName = config('laravel-crm.db_table_prefix', 'crm_').'leads';
+        if (! Schema::hasColumn($tableName, 'relay_status')) {
+            return 0;
+        }
+
+        return Lead::whereNull('converted_at')
+            ->where('relay_status', 'standby')
+            ->count();
     }
 
     public function companyStatusOptions(): array
@@ -251,6 +280,18 @@ class LeadIndex extends Component
             $query->whereIn("{$prefix}leads.pipeline_stage_id", (array) $this->pipeline_stage_id);
         }
 
+        // Account Relay Status Filter
+        if ($this->relay_status !== '' && Schema::hasColumn("{$prefix}leads", 'relay_status')) {
+            if ($this->relay_status === 'active') {
+                $query->where(function ($q) use ($prefix) {
+                    $q->where("{$prefix}leads.relay_status", 'active')
+                        ->orWhereNull("{$prefix}leads.relay_status");
+                });
+            } else {
+                $query->where("{$prefix}leads.relay_status", $this->relay_status);
+            }
+        }
+
         // Company Outreach Status Filter
         if ($this->company_status === 'disqualified') {
             $query->whereHas('organization', function ($orgQ) use ($prefix) {
@@ -359,6 +400,7 @@ class LeadIndex extends Component
             'pipeline_stage_id',
             'lead_status',
             'company_status',
+            'relay_status',
             'amount_preset',
             'min_amount',
             'max_amount',
@@ -367,6 +409,28 @@ class LeadIndex extends Component
             'created_to',
         ]);
         $this->resetPage();
+    }
+
+    public function activateStandby(int $id): void
+    {
+        if ($lead = Lead::find($id)) {
+            $this->authorize('update', $lead);
+
+            app(AccountRelayService::class)->activateStandbyLead($lead);
+
+            $this->success("Lead '{$lead->title}' activated from standby! Both this lead and any active colleagues remain active.");
+        }
+    }
+
+    public function releaseAllStandby(): void
+    {
+        $count = app(AccountRelayService::class)->bulkActivateStandbyLeads();
+
+        if ($count > 0) {
+            $this->success("Released {$count} lead(s) from the standby queue into active outreach!");
+        } else {
+            $this->info('No standby leads left to release.');
+        }
     }
 
     public function delete($id)
@@ -389,6 +453,8 @@ class LeadIndex extends Component
             'leadSources' => $this->leadSources,
             'pipelineStages' => $this->pipelineStages(),
             'companyStatusOptions' => $this->companyStatusOptions(),
+            'relayStatusOptions' => $this->relayStatusOptions(),
+            'standbyCount' => $this->standbyCount(),
             'amountPresets' => $this->amountPresets(),
             'createdPresets' => $this->createdPresets(),
             'filterCount' => $this->filterCount(),

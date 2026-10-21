@@ -73,8 +73,19 @@
                         @endif
                     </div>
 
-                    <div class="flex items-center gap-2">
-                        @if($lead->relay_status === 'active')
+                    <div class="flex flex-wrap items-center gap-2">
+                        @php
+                            $companyStandbyCount = $lead->organization ? $lead->organization->leads()->where('relay_status', 'standby')->count() : 0;
+                        @endphp
+                        @if($lead->relay_status === 'standby')
+                            <x-mary-button label="Activate from Standby" wire:click="activateFromStandby" icon="o-bolt" class="btn-xs btn-success text-white font-semibold" spinner="activateFromStandby" />
+                            @if($companyStandbyCount > 1)
+                                <x-mary-button label="Activate All Standby at Co ({{ $companyStandbyCount }})" wire:click="activateAllCompanyStandby" icon="o-bolt" class="btn-xs btn-outline bg-base-100" spinner="activateAllCompanyStandby" />
+                            @endif
+                        @elseif($lead->relay_status === 'active')
+                            @if($companyStandbyCount > 0)
+                                <x-mary-button label="Activate All Standby at Co ({{ $companyStandbyCount }})" wire:click="activateAllCompanyStandby" icon="o-bolt" class="btn-xs btn-outline btn-success bg-base-100" spinner="activateAllCompanyStandby" />
+                            @endif
                             <x-mary-button label="Pass to Next Colleague" wire:click="rotateRelay('passed by rep')" icon="o-arrow-right-circle" class="btn-xs btn-outline bg-base-100" spinner="rotateRelay" />
                         @elseif(empty($lead->relay_status))
                             <x-mary-button label="Initialize Relay Basket" wire:click="initializeRelayQueue" icon="o-queue-list" class="btn-xs btn-outline bg-base-100" spinner="initializeRelayQueue" />

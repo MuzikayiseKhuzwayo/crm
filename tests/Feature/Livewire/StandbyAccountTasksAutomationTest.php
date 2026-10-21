@@ -3,10 +3,11 @@
 use Carbon\Carbon;
 use Illuminate\Support\Str;
 use Livewire\Livewire;
+use VentureDrake\LaravelCrm\Livewire\Leads\LeadIndex;
+use VentureDrake\LaravelCrm\Livewire\Leads\LeadShow;
 use VentureDrake\LaravelCrm\Livewire\Tasks\TaskIndex;
 use VentureDrake\LaravelCrm\Models\Lead;
 use VentureDrake\LaravelCrm\Models\Organization;
-use VentureDrake\LaravelCrm\Models\Person;
 use VentureDrake\LaravelCrm\Models\Task;
 use VentureDrake\LaravelCrm\Services\AccountRelayService;
 use VentureDrake\LaravelCrm\Tests\Stubs\User;
@@ -229,4 +230,114 @@ it('cancels all incomplete tasks across the basket when company is marked disqua
     expect(Task::find($task1->id))->toBeNull()
         ->and(Task::find($task2->id))->toBeNull()
         ->and(Task::find($taskDone->id))->not->toBeNull();
+});
+
+it('activates a standby lead in parallel while keeping the primary colleague active and rebasing overdue tasks', function () {
+    $user = User::first() ?: User::create([
+        'name' => 'Test Agent',
+        'email' => 'agent@example.com',
+        'password' => bcrypt('secret'),
+    ]);
+
+    $org = Organization::create([
+        'external_id' => Str::uuid()->toString(),
+        'name' => 'Initech',
+    ]);
+
+    $activeLead = Lead::create([
+        'external_id' => Str::uuid()->toString(),
+        'title' => 'Bill Lumbergh',
+        'organization_id' => $org->id,
+        'relay_status' => 'active',
+        'relay_order' => 1,
+    ]);
+
+    $standbyLead = Lead::create([
+        'external_id' => Str::uuid()->toString(),
+        'title' => 'Peter Gibbons',
+        'organization_id' => $org->id,
+        'relay_status' => 'standby',
+        'relay_order' => 2,
+    ]);
+
+    $overdueStandbyTask = Task::create([
+        'external_id' => Str::uuid()->toString(),
+        'name' => 'Follow up with Peter',
+        'taskable_type' => Lead::class,
+        'taskable_id' => $standbyLead->id,
+        'due_at' => Carbon::now()->subDays(5),
+    ]);
+
+    expect($overdueStandbyTask->fresh()->isStandby())->toBeTrue();
+
+    Livewire::actingAs($user)
+        ->test(LeadShow::class, ['lead' => $standbyLead])
+        ->call('activateFromStandby');
+
+    // Both leads remain active in parallel
+    expect($activeLead->fresh()->relay_status)->toBe('active')
+        ->and($standbyLead->fresh()->relay_status)->toBe('active')
+        ->and($standbyLead->fresh()->relay_activated_at)->not->toBeNull()
+        ->and($overdueStandbyTask->fresh()->isStandby())->toBeFalse()
+        ->and($overdueStandbyTask->fresh()->due_at->isFuture())->toBeTrue();
+});
+
+it('bulk releases standby leads across the CRM while skipping disqualified companies', function () {
+    $user = User::first() ?: User::create([
+        'name' => 'Test Agent',
+        'email' => 'agent@example.com',
+        'password' => bcrypt('secret'),
+    ]);
+
+    $orgGood = Organization::create([
+        'external_id' => Str::uuid()->toString(),
+        'name' => 'Hooli',
+    ]);
+
+    $orgDnc = Organization::create([
+        'external_id' => Str::uuid()->toString(),
+        'name' => 'Pied Piper DNC',
+    ]);
+    $orgDnc->markDisqualified();
+
+    $activeLead = Lead::create([
+        'external_id' => Str::uuid()->toString(),
+        'title' => 'Gavin Belson',
+        'organization_id' => $orgGood->id,
+        'relay_status' => 'active',
+        'relay_order' => 1,
+    ]);
+
+    $standby1 = Lead::create([
+        'external_id' => Str::uuid()->toString(),
+        'title' => 'Jared Dunn',
+        'organization_id' => $orgGood->id,
+        'relay_status' => 'standby',
+        'relay_order' => 2,
+    ]);
+
+    $standby2 = Lead::create([
+        'external_id' => Str::uuid()->toString(),
+        'title' => 'Richard Hendricks',
+        'organization_id' => $orgGood->id,
+        'relay_status' => 'standby',
+        'relay_order' => 3,
+    ]);
+
+    $standbyDnc = Lead::create([
+        'external_id' => Str::uuid()->toString(),
+        'title' => 'Erlich Bachman',
+        'organization_id' => $orgDnc->id,
+        'relay_status' => 'standby',
+        'relay_order' => 2,
+    ]);
+
+    Livewire::actingAs($user)
+        ->test(LeadIndex::class)
+        ->call('releaseAllStandby');
+
+    expect($activeLead->fresh()->relay_status)->toBe('active')
+        ->and($standby1->fresh()->relay_status)->toBe('active')
+        ->and($standby2->fresh()->relay_status)->toBe('active')
+        ->and($standbyDnc->fresh()->relay_status)->toBe('standby');
 });

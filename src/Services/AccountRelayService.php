@@ -305,6 +305,76 @@ class AccountRelayService
     }
 
     /**
+     * Activate a standby lead in parallel without deactivating other active leads at the same company.
+     */
+    public function activateStandbyLead(Lead $lead): Lead
+    {
+        $this->ensureRelayColumnsExist();
+
+        $tableName = $lead->getTable();
+        $hasRelayStatus = Schema::hasColumn($tableName, 'relay_status');
+        $hasRelayActivatedAt = Schema::hasColumn($tableName, 'relay_activated_at');
+
+        if ($hasRelayStatus) {
+            $updates = ['relay_status' => 'active'];
+            if ($hasRelayActivatedAt) {
+                $updates['relay_activated_at'] = Carbon::now();
+            }
+            $lead->update($updates);
+        }
+
+        // Restore any soft-deleted tasks and rebase overdue pending tasks so they are actionable
+        $lead->tasks()->onlyTrashed()->each(function (Task $task) {
+            $task->restore();
+        });
+
+        $lead->tasks()->whereNull('completed_at')->where('due_at', '<', Carbon::now())->each(function (Task $overdueTask) {
+            $overdueTask->update(['due_at' => Carbon::now()->addDay()]);
+        });
+
+        return $lead->fresh();
+    }
+
+    /**
+     * Bulk activate standby leads in parallel (optionally scoped to specific lead IDs or an organization).
+     */
+    public function bulkActivateStandbyLeads(?array $leadIds = null, ?int $organizationId = null): int
+    {
+        $this->ensureRelayColumnsExist();
+
+        $tableName = config('laravel-crm.db_table_prefix', 'crm_').'leads';
+        if (! Schema::hasColumn($tableName, 'relay_status')) {
+            return 0;
+        }
+
+        $query = Lead::where('relay_status', 'standby')
+            ->whereNull('deleted_at')
+            ->with('organization.labels');
+
+        if ($leadIds !== null) {
+            $query->whereIn('id', $leadIds);
+        }
+
+        if ($organizationId !== null) {
+            $query->where('organization_id', $organizationId);
+        }
+
+        $leads = $query->get();
+        $activatedCount = 0;
+
+        foreach ($leads as $lead) {
+            if ($lead->organization && $lead->organization->isDisqualified()) {
+                continue;
+            }
+
+            $this->activateStandbyLead($lead);
+            $activatedCount++;
+        }
+
+        return $activatedCount;
+    }
+
+    /**
      * Freeze the company basket when a lead engages or books a call.
      */
     public function freezeBasket(Lead $lead): void

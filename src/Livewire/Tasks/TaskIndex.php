@@ -6,6 +6,7 @@ use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
 use Illuminate\Pagination\LengthAwarePaginator;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\Schema;
 use Livewire\Attributes\Url;
 use Livewire\Component;
 use Livewire\WithPagination;
@@ -16,6 +17,7 @@ use VentureDrake\LaravelCrm\Models\Lead;
 use VentureDrake\LaravelCrm\Models\Organization;
 use VentureDrake\LaravelCrm\Models\Person;
 use VentureDrake\LaravelCrm\Models\Task;
+use VentureDrake\LaravelCrm\Services\AccountRelayService;
 use VentureDrake\LaravelCrm\Services\TaskService;
 use VentureDrake\LaravelCrm\Traits\ClearsProperties;
 use VentureDrake\LaravelCrm\Traits\ResetsPaginationWhenPropsChanges;
@@ -472,6 +474,44 @@ class TaskIndex extends Component
         }
     }
 
+    public function activateTaskLead(int $id): void
+    {
+        if ($task = Task::find($id)) {
+            $this->authorize('update', $task);
+
+            $lead = $task->lead;
+            if ($lead) {
+                app(AccountRelayService::class)->activateStandbyLead($lead);
+                $this->dispatch('task-updated');
+                $this->success("Activated '{$lead->title}' from standby! Task is now active.");
+            }
+        }
+    }
+
+    public function releaseAllStandby(): void
+    {
+        $count = app(AccountRelayService::class)->bulkActivateStandbyLeads();
+
+        if ($count > 0) {
+            $this->dispatch('task-updated');
+            $this->success("Released {$count} lead(s) from the standby queue into active outreach!");
+        } else {
+            $this->info('No standby leads left to release.');
+        }
+    }
+
+    public function standbyCount(): int
+    {
+        $prefix = config('laravel-crm.db_table_prefix', 'crm_');
+        if (! Schema::hasColumn($prefix.'leads', 'relay_status')) {
+            return 0;
+        }
+
+        return Lead::whereNull('converted_at')
+            ->where('relay_status', 'standby')
+            ->count();
+    }
+
     public function render()
     {
         return view('laravel-crm::livewire.tasks.task-index', [
@@ -483,6 +523,7 @@ class TaskIndex extends Component
             'assignedPresets' => $this->assignedPresets(),
             'entityTypeOptions' => $this->entityTypeOptions(),
             'filterCount' => $this->filterCount(),
+            'standbyCount' => $this->standbyCount(),
             'headers' => $this->headers(),
             'tasks' => $this->tasks(),
         ]);

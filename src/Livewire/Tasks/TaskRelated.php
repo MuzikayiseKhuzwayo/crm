@@ -8,6 +8,7 @@ use Livewire\Component;
 use Mary\Traits\Toast;
 use VentureDrake\LaravelCrm\Models\Lead;
 use VentureDrake\LaravelCrm\Models\Task;
+use VentureDrake\LaravelCrm\Services\AccountRelayService;
 use VentureDrake\LaravelCrm\Services\SalesPlaybookService;
 
 class TaskRelated extends Component
@@ -90,6 +91,7 @@ class TaskRelated extends Component
 
     #[On('task-updated')]
     #[On('task-added')]
+    #[On('lead-relay-updated')]
     public function getTasks(): void
     {
         $taskIds = [];
@@ -179,6 +181,23 @@ class TaskRelated extends Component
         }
 
         return null;
+    }
+
+    public function activateLeadFromStandby(): void
+    {
+        $lead = $this->resolveLead();
+        if (! $lead) {
+            return;
+        }
+
+        app(AccountRelayService::class)->activateStandbyLead($lead);
+        $this->model->refresh();
+        $this->getTasks();
+
+        $this->dispatch('task-updated');
+        $this->dispatch('lead-relay-updated');
+
+        $this->success("Lead '{$lead->title}' activated from standby! Tasks are now active.");
     }
 
     public function getPlaybookOptionsProperty(): array

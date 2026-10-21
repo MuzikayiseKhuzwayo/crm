@@ -37,6 +37,7 @@ class LeadShow extends Component
 
     #[On('task-completed')]
     #[On('task-updated')]
+    #[On('lead-relay-updated')]
     public function onTaskCompleted(): void
     {
         $this->lead->refresh();
@@ -250,6 +251,49 @@ class LeadShow extends Component
         } catch (\Throwable $e) {
             Log::error('rotateRelay failed: '.$e->getMessage());
             $this->error('Could not rotate relay: '.$e->getMessage().'. Please ensure migrations have run (`php artisan migrate`).');
+        }
+    }
+
+    public function activateFromStandby(): void
+    {
+        try {
+            $relayService = app(AccountRelayService::class);
+            $relayService->activateStandbyLead($this->lead);
+
+            $this->lead->refresh();
+            $this->dispatch('task-updated');
+            $this->dispatch('lead-relay-updated');
+
+            $companyName = $this->lead->organization?->name ?? 'this account';
+            $this->success("Lead activated from standby! Both {$this->lead->title} and any active colleagues at {$companyName} are now active.");
+        } catch (\Throwable $e) {
+            Log::error('activateFromStandby failed: '.$e->getMessage());
+            $this->error('Could not activate lead from standby: '.$e->getMessage());
+        }
+    }
+
+    public function activateAllCompanyStandby(): void
+    {
+        if (! $this->lead->organization) {
+            return;
+        }
+
+        try {
+            $relayService = app(AccountRelayService::class);
+            $count = $relayService->bulkActivateStandbyLeads(organizationId: $this->lead->organization_id);
+
+            $this->lead->refresh();
+            $this->dispatch('task-updated');
+            $this->dispatch('lead-relay-updated');
+
+            if ($count > 0) {
+                $this->success("Released {$count} standby lead(s) at {$this->lead->organization->name} into active outreach!");
+            } else {
+                $this->info("No standby leads remaining at {$this->lead->organization->name}.");
+            }
+        } catch (\Throwable $e) {
+            Log::error('activateAllCompanyStandby failed: '.$e->getMessage());
+            $this->error('Could not activate company standby leads: '.$e->getMessage());
         }
     }
 

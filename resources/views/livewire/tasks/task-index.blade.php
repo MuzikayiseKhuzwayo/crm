@@ -16,6 +16,19 @@
                 title="{{ $account_relay === 'active_only' ? 'Currently hiding tasks under standby accounts. Click to show all.' : 'Click to hide tasks under standby accounts.' }}"
                 responsive />
 
+            @can('edit crm leads')
+                @if(($standbyCount ?? 0) > 0)
+                    <x-mary-button 
+                        label="Release Standby ({{ $standbyCount }})" 
+                        icon="o-bolt" 
+                        wire:click="releaseAllStandby" 
+                        wire:confirm="Are you sure you want to activate all {{ $standbyCount }} standby leads into active outreach? Both these leads and any currently active colleagues at the same companies will remain active."
+                        class="btn-sm btn-warning text-neutral-900 font-semibold" 
+                        spinner="releaseAllStandby"
+                        responsive />
+                @endif
+            @endcan
+
             <x-mary-button label="Filters"
                            icon="o-funnel"
                            :badge="$filterCount ?? 0"
@@ -304,6 +317,16 @@
                     @endif
                     @can('edit crm tasks')
                         @if(! $task->completed_at)
+                            @if($task->is_standby)
+                                <x-mary-button 
+                                    label="Activate" 
+                                    icon="o-bolt" 
+                                    wire:click="activateTaskLead({{ $task->id }})" 
+                                    onclick="event.stopPropagation();"
+                                    class="btn-sm btn-warning text-neutral-900 font-semibold" 
+                                    title="Move Lead out of Standby Queue (Keep colleagues active)"
+                                    spinner="activateTaskLead({{ $task->id }})" />
+                            @endif
                             <div class="inline-block" onclick="event.stopPropagation();">
                                 <x-mary-dropdown class="btn-sm btn-outline {{ ($task->due_at && $task->due_at->isPast()) ? 'btn-warning font-semibold' : 'btn-neutral' }} gap-1" right>
                                     <x-slot:trigger>
