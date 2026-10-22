@@ -19,7 +19,7 @@ it('updates lead pipeline stage and creates stage-specific automated tasks', fun
     $stages = $pipeline->pipelineStages()->orderBy('order', 'asc')->get();
 
     $stageCold = $stages->firstWhere('order', 1);
-    $stageCall = $stages->firstWhere('order', 4);
+    $stageCall = $stages->firstWhere('name', 'Call Scheduled');
 
     $lead = Lead::create([
         'external_id' => Uuid::uuid4()->toString(),

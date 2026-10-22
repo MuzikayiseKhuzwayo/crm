@@ -49,10 +49,25 @@ class LeadShow extends Component
         if ($stage) {
             $this->lead->update([
                 'pipeline_stage_id' => $stage->id,
+                'pipeline_stage_order' => $stage->order,
                 'pipeline_id' => $stage->pipeline_id,
             ]);
 
+            $this->lead->refresh();
             $this->success("Lead stage updated to '{$stage->name}'");
+        }
+    }
+
+    public function markConnected(): void
+    {
+        $connectedStage = $this->pipelineStages->first(function ($stage) {
+            $name = strtolower(trim($stage->name ?? ''));
+
+            return str_contains($name, 'connected / dm sent') || str_contains($name, 'dm sent') || $name === 'connected';
+        }) ?? $this->pipelineStages->firstWhere('order', 3);
+
+        if ($connectedStage) {
+            $this->updateStage($connectedStage->id);
         }
     }
 

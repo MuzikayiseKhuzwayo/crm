@@ -93,7 +93,7 @@ class SalesPlaybookService
                 'name' => 'LinkedIn Note: Angle A (Crypto Prop / MMs)',
                 'due_in_days' => 2,
                 'max_chars' => 300,
-                'target_stage' => 'Connected / DM Sent',
+                'target_stage' => 'Connection Request Sent',
                 'body' => 'Hi {first_name} — Saw your work at {firm_name}. We’ve been working on filtering out on-chain Sybil clusters and wash trading from prediction market CLOBs before feature ingestion. Curious if your desk has looked at prediction data as an orthogonal signal.',
             ],
             'connection_angle_b' => [
@@ -104,7 +104,7 @@ class SalesPlaybookService
                 'name' => 'LinkedIn Note: Angle B (Systematic Macro)',
                 'due_in_days' => 2,
                 'max_chars' => 300,
-                'target_stage' => 'Connected / DM Sent',
+                'target_stage' => 'Connection Request Sent',
                 'body' => 'Hi {first_name} — Following your work in systematic macro. We’ve been building stationary 16-channel tensors that combine macro event graphs with prediction market microstructure, with strict zero-lookahead bi-temporal stamping. Glad to connect.',
             ],
             'connection_angle_c' => [
@@ -115,7 +115,7 @@ class SalesPlaybookService
                 'name' => 'LinkedIn Note: Angle C (Quant Devs / Data Infra)',
                 'due_in_days' => 2,
                 'max_chars' => 300,
-                'target_stage' => 'Connected / DM Sent',
+                'target_stage' => 'Connection Request Sent',
                 'body' => 'Hi {first_name} — Saw your focus on data infrastructure at {firm_name}. We recently finished our Flink/Kafka pipeline that packages prediction orderbooks and regulatory gazettes into daily point-in-time Parquet partitions. Always good to connect with other builders.',
             ],
             'scenario_1' => [
@@ -322,7 +322,7 @@ class SalesPlaybookService
                 'name' => 'LinkedIn Note: Angle A (Lead Velocity & Speed-to-Lead)',
                 'due_in_days' => 2,
                 'max_chars' => 300,
-                'target_stage' => 'Connected / DM Sent',
+                'target_stage' => 'Connection Request Sent',
                 'body' => 'Hi {first_name} — Noticed your team’s expansion at {firm_name}. We build sub-45s speed-to-lead pipelines that ingest, enrich, and dispatch custom WhatsApp/email teardowns before cold drop-off. Curious if lead response latency is something your sales team is actively optimizing right now.',
             ],
             'tfa_connection_angle_b' => [
@@ -333,7 +333,7 @@ class SalesPlaybookService
                 'name' => 'LinkedIn Note: Angle B (Vision OMS & Document Intake)',
                 'due_in_days' => 2,
                 'max_chars' => 300,
-                'target_stage' => 'Connected / DM Sent',
+                'target_stage' => 'Connection Request Sent',
                 'body' => 'Hi {first_name} — Saw your operational focus at {firm_name}. We recently engineered a Vision OMS pipeline that parses multi-page supplier POs into structured Supabase records with zero dropped items, replacing manual data entry. Curious how your team currently handles non-standard PDF intake.',
             ],
             'tfa_connection_angle_c' => [
@@ -344,7 +344,7 @@ class SalesPlaybookService
                 'name' => 'LinkedIn Note: Angle C (Fault-Tolerant Pipelines & DLQ)',
                 'due_in_days' => 2,
                 'max_chars' => 300,
-                'target_stage' => 'Connected / DM Sent',
+                'target_stage' => 'Connection Request Sent',
                 'body' => 'Hi {first_name} — Following your technical build at {firm_name}. We build fault-tolerant workflow pipelines using self-hosted n8n, Pydantic schemas, and automated Dead-Letter Queue failovers to eliminate silent no-code breakages. Always good to connect with other systems engineers.',
             ],
             'tfa_connection_angle_d' => [
@@ -355,7 +355,7 @@ class SalesPlaybookService
                 'name' => 'LinkedIn Note: Angle D (Autonomous Marketing Syndication)',
                 'due_in_days' => 2,
                 'max_chars' => 300,
-                'target_stage' => 'Connected / DM Sent',
+                'target_stage' => 'Connection Request Sent',
                 'body' => 'Hi {first_name} — Great momentum at {firm_name}. We’ve been deploying autonomous syndication pipelines that turn 1 core breakdown into platform-native LinkedIn/X formats and trigger micro-budget ad boosts behind top 10% organic winners. Glad to connect and share notes.',
             ],
             'tfa_scenario_1' => [
@@ -923,15 +923,15 @@ class SalesPlaybookService
         if ($this->matchesKeywords($taskName, [
             'connection request', 'connection note', 'angle a', 'angle b', 'angle c',
             'linkedin note', 'send a connection', 'connect with prospect',
-        ]) || $stageOrder === 1) {
+        ]) || in_array($stageOrder, [1, 2], true)) {
             return ['scenario_1', 'scenario_4'];
         }
 
         // 3. Scenario 1 / First touch / Introductory DM completed -> Scenario 3 (Kit link) + Call Transition
         if ($this->matchesKeywords($taskName, [
             'scenario 1', 'accept in silence', 'audit paper', 'introductory dm',
-            'intro dm', 'first contact', 'outreach', 'first touch',
-        ]) || $stageOrder === 2) {
+            'intro dm', 'first contact', 'outreach', 'first touch', 'connection accepted',
+        ]) || $stageOrder === 3) {
             return ['scenario_3', 'call_transition'];
         }
 
@@ -940,7 +940,7 @@ class SalesPlaybookService
             'scenario 2', 'scenario 3', 'evaluation kit', 'quant_evaluation_kit',
             'deliver evaluation kit', 'offer kit', 'discovery', 'conduct discovery',
             'discovery meeting', 'discovery call', 'qualif',
-        ]) || $stageOrder === 3) {
+        ]) || $stageOrder === 4) {
             return ['scenario_3_1', 'technical_sync_debrief'];
         }
 
@@ -949,7 +949,7 @@ class SalesPlaybookService
             'call transition', 'technical sync', 'post-eval debrief', 'schedule call',
             'schedule discovery', 'schedule pitch', 'schedule demo', 'book call',
             'schedule meeting', 'call scheduled', 'debrief', 'presentation',
-        ]) || $stageOrder === 4) {
+        ]) || $stageOrder === 5) {
             return ['sandbox_sow', 'cro_clearance'];
         }
 
@@ -957,7 +957,7 @@ class SalesPlaybookService
         if ($this->matchesKeywords($taskName, [
             'sandbox sow', 'sow', 'proposal', 'send proposal', 'prepare & send',
             'quote', 'send quote', 'contract terms', 'review contract',
-        ]) || $stageOrder === 5) {
+        ]) || $stageOrder === 6) {
             return ['production_contract'];
         }
 
@@ -966,7 +966,7 @@ class SalesPlaybookService
             'closed won', 'deal won', 'close deal', 'annual enterprise production contract',
             'production contract', 'sign contract', 'contract signed', 'license activation',
             'payment received', 'closed',
-        ]) || $stageOrder === 6) {
+        ]) || $stageOrder === 7) {
             return ['onboarding_production'];
         }
 
@@ -990,15 +990,15 @@ class SalesPlaybookService
         if ($this->matchesKeywords($taskName, [
             'connection request', 'connection note', 'angle a', 'angle b', 'angle c', 'angle d',
             'linkedin note', 'send a connection', 'connect with prospect',
-        ]) || $stageOrder === 1) {
+        ]) || in_array($stageOrder, [1, 2], true)) {
             return ['tfa_scenario_1', 'tfa_scenario_4'];
         }
 
         // 3. Scenario 1 / First touch / Introductory DM completed -> Architecture Blueprint + 30-Min Whiteboard Call
         if ($this->matchesKeywords($taskName, [
             'scenario 1', 'accept in silence', 'case study', 'introductory dm',
-            'intro dm', 'first contact', 'outreach', 'first touch',
-        ]) || $stageOrder === 2) {
+            'intro dm', 'first contact', 'outreach', 'first touch', 'connection accepted',
+        ]) || $stageOrder === 3) {
             return ['tfa_scenario_3_1', 'tfa_call_transition'];
         }
 
@@ -1007,7 +1007,7 @@ class SalesPlaybookService
             'scenario 2', 'scenario 3', 'blueprint', 'architecture blueprint',
             'deliver architecture', 'loom teardown', 'data plumbing', 'discovery',
             'conduct discovery', 'discovery meeting', 'discovery call', 'qualif',
-        ]) || $stageOrder === 3) {
+        ]) || $stageOrder === 4) {
             return ['tfa_scenario_3_2', 'tfa_architecture_session'];
         }
 
@@ -1016,7 +1016,7 @@ class SalesPlaybookService
             'call transition', 'whiteboard', 'architecture session', 'schedule call',
             'schedule discovery', 'schedule pitch', 'schedule demo', 'book call',
             'schedule meeting', 'call scheduled', 'presentation',
-        ]) || $stageOrder === 4) {
+        ]) || $stageOrder === 5) {
             return ['tfa_pilot_sow'];
         }
 
@@ -1024,7 +1024,7 @@ class SalesPlaybookService
         if ($this->matchesKeywords($taskName, [
             'pilot sow', 'sow', 'proposal', 'send proposal', 'prepare & send',
             'quote', 'send quote', 'contract terms', 'review contract',
-        ]) || $stageOrder === 5) {
+        ]) || $stageOrder === 6) {
             return ['tfa_sprint_handover'];
         }
 
@@ -1033,7 +1033,7 @@ class SalesPlaybookService
             'closed won', 'deal won', 'close deal', 'sprint handover', 'delivery warranty',
             'handover', 'sign contract', 'contract signed', 'license activation',
             'payment received', 'closed',
-        ]) || $stageOrder === 6) {
+        ]) || $stageOrder === 7) {
             return ['tfa_core_conversion'];
         }
 

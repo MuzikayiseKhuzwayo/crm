@@ -425,7 +425,7 @@ class AccountRelayService
             ->whereNotNull('organization_id')
             ->where('relay_activated_at', '<=', $cutoff)
             ->whereDoesntHave('pipelineStage', function ($q) {
-                $q->where('order', '>=', 4); // Don't rotate if Call Scheduled or Won
+                $q->where('order', '>=', 5); // Don't rotate if Call Scheduled or Won
             })
             ->get();
 

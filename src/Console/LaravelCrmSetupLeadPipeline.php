@@ -49,26 +49,30 @@ class LaravelCrmSetupLeadPipeline extends Command
                 'color' => '64748b',
             ],
             2 => [
+                'name' => 'Connection Request Sent',
+                'color' => '0ea5e9',
+            ],
+            3 => [
                 'name' => 'Connected / DM Sent',
                 'color' => '0284c7',
             ],
-            3 => [
+            4 => [
                 'name' => 'Engaged / Qualified',
                 'color' => '8b5cf6',
             ],
-            4 => [
+            5 => [
                 'name' => 'Call Scheduled',
                 'color' => 'f59e0b',
             ],
-            5 => [
+            6 => [
                 'name' => 'Proposal Sent',
                 'color' => 'ec4899',
             ],
-            6 => [
+            7 => [
                 'name' => 'Closed Won',
                 'color' => '10b981',
             ],
-            7 => [
+            8 => [
                 'name' => 'Closed Lost',
                 'color' => 'ef4444',
             ],
@@ -79,13 +83,23 @@ class LaravelCrmSetupLeadPipeline extends Command
             ->orderBy('id', 'asc')
             ->get();
 
+        $canonicalNames = array_map(fn ($s) => strtolower($s['name']), $stages);
         $canonicalStageIds = [];
 
         foreach ($stages as $order => $stageData) {
-            $stage = $existingStages->firstWhere('order', $order);
+            // 1. Prefer matching existing stage by name so existing stage IDs are preserved
+            $stage = $existingStages->first(function ($s) use ($stageData, $canonicalStageIds) {
+                return ! in_array($s->id, $canonicalStageIds, true)
+                    && strtolower(trim($s->name)) === strtolower($stageData['name']);
+            });
 
-            if (! $stage && isset($existingStages[$order - 1])) {
-                $stage = $existingStages[$order - 1];
+            // 2. Fallback to an unmapped legacy stage (one whose name is not another canonical stage)
+            if (! $stage) {
+                $stage = $existingStages->first(function ($s) use ($order, $canonicalNames, $canonicalStageIds) {
+                    return ! in_array($s->id, $canonicalStageIds, true)
+                        && ! in_array(strtolower(trim($s->name)), $canonicalNames, true)
+                        && $s->order == $order;
+                });
             }
 
             if ($stage) {
@@ -107,7 +121,7 @@ class LaravelCrmSetupLeadPipeline extends Command
             $canonicalStageIds[] = $stage->id;
         }
 
-        // Clean up or remap any extra stages beyond the canonical 7 stages
+        // Clean up or remap any extra stages beyond the canonical 8 stages
         $extraStages = PipelineStage::where('pipeline_id', $pipeline->id)
             ->whereNotIn('id', $canonicalStageIds)
             ->get();
@@ -121,6 +135,13 @@ class LaravelCrmSetupLeadPipeline extends Command
                 ]);
             }
             $extra->delete();
+        }
+
+        // Synchronize pipeline_stage_order for all leads attached to this pipeline
+        foreach ($pipeline->pipelineStages()->orderBy('order', 'asc')->get() as $s) {
+            Lead::where('pipeline_stage_id', $s->id)->update([
+                'pipeline_stage_order' => $s->order,
+            ]);
         }
 
         $this->info('Lead Pipeline Stages aligned successfully:');

@@ -136,6 +136,15 @@
                 </div>
 
                 <div class="flex flex-wrap items-center gap-2">
+                    @if(str_contains(strtolower($lead->pipelineStage?->name ?? ''), 'connection request'))
+                        <x-mary-button 
+                            label="✓ Mark Connected" 
+                            wire:click="markConnected" 
+                            icon="o-check-badge" 
+                            class="btn-xs btn-success text-white font-semibold" 
+                            spinner="markConnected" 
+                        />
+                    @endif
                     <x-mary-button 
                         label="+ Connect (Auto Angle)" 
                         wire:click="createStageTask('{{ $recommendedKey }}')" 

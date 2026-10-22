@@ -1,6 +1,8 @@
 <?php
 
+use Livewire\Livewire;
 use Ramsey\Uuid\Uuid;
+use VentureDrake\LaravelCrm\Livewire\Leads\LeadShow;
 use VentureDrake\LaravelCrm\Models\Lead;
 use VentureDrake\LaravelCrm\Models\Pipeline;
 use VentureDrake\LaravelCrm\Models\Task;
@@ -16,22 +18,24 @@ beforeEach(function () {
     $this->stages = $this->pipeline->pipelineStages()->orderBy('order', 'asc')->get();
 });
 
-it('strictly associates sales motion task completion with sequential lead stages', function () {
+it('strictly associates sales motion task completion with sequential 8-stage lead funnel', function () {
     $stage1 = $this->stages->firstWhere('order', 1); // Cold Prospect
-    $stage2 = $this->stages->firstWhere('order', 2); // Connected / DM Sent
-    $stage3 = $this->stages->firstWhere('order', 3); // Engaged / Qualified
-    $stage4 = $this->stages->firstWhere('order', 4); // Call Scheduled
-    $stage5 = $this->stages->firstWhere('order', 5); // Proposal Sent
-    $stage6 = $this->stages->firstWhere('order', 6); // Closed Won
-    $stage7 = $this->stages->firstWhere('order', 7); // Closed Lost
+    $stage2 = $this->stages->firstWhere('order', 2); // Connection Request Sent
+    $stage3 = $this->stages->firstWhere('order', 3); // Connected / DM Sent
+    $stage4 = $this->stages->firstWhere('order', 4); // Engaged / Qualified
+    $stage5 = $this->stages->firstWhere('order', 5); // Call Scheduled
+    $stage6 = $this->stages->firstWhere('order', 6); // Proposal Sent
+    $stage7 = $this->stages->firstWhere('order', 7); // Closed Won
+    $stage8 = $this->stages->firstWhere('order', 8); // Closed Lost
 
     expect($stage1->name)->toBe('Cold Prospect')
-        ->and($stage2->name)->toBe('Connected / DM Sent')
-        ->and($stage3->name)->toBe('Engaged / Qualified')
-        ->and($stage4->name)->toBe('Call Scheduled')
-        ->and($stage5->name)->toBe('Proposal Sent')
-        ->and($stage6->name)->toBe('Closed Won')
-        ->and($stage7->name)->toBe('Closed Lost');
+        ->and($stage2->name)->toBe('Connection Request Sent')
+        ->and($stage3->name)->toBe('Connected / DM Sent')
+        ->and($stage4->name)->toBe('Engaged / Qualified')
+        ->and($stage5->name)->toBe('Call Scheduled')
+        ->and($stage6->name)->toBe('Proposal Sent')
+        ->and($stage7->name)->toBe('Closed Won')
+        ->and($stage8->name)->toBe('Closed Lost');
 
     // 1. Initial State: Cold Prospect
     $lead = Lead::create([
@@ -44,10 +48,10 @@ it('strictly associates sales motion task completion with sequential lead stages
 
     expect($lead->fresh()->pipeline_stage_id)->toBe($stage1->id);
 
-    // 2. Complete Initial Connection Task -> Moves to Connected / DM Sent (Stage 2)
+    // 2. Complete Initial Connection Task -> Moves to Connection Request Sent (Stage 2), NOT Connected
     $connectionTask = Task::create([
         'external_id' => Uuid::uuid4()->toString(),
-        'name' => 'Send a Connection Request and get accepted',
+        'name' => 'LinkedIn Note: Angle A (Crypto Prop / MMs)',
         'taskable_type' => Lead::class,
         'taskable_id' => $lead->id,
         'user_owner_id' => $this->user->id,
@@ -57,10 +61,10 @@ it('strictly associates sales motion task completion with sequential lead stages
 
     $lead = $lead->fresh();
     expect($lead->pipeline_stage_id)->toBe($stage2->id)
-        ->and($lead->pipelineStage->name)->toBe('Connected / DM Sent')
-        ->and($lead->pipelineStage->name)->not->toBe('Appointment Scheduled');
+        ->and($lead->pipelineStage->name)->toBe('Connection Request Sent')
+        ->and($lead->pipelineStage->name)->not->toBe('Connected / DM Sent');
 
-    // 3. Lead starts engaging: Complete Introductory DM Task -> Moves to Engaged / Qualified (Stage 3)
+    // 3. Prospect connects & we send Introductory DM -> Moves to Connected / DM Sent (Stage 3)
     $dmTask = Task::create([
         'external_id' => Uuid::uuid4()->toString(),
         'name' => 'Send an introductory DM',
@@ -73,9 +77,24 @@ it('strictly associates sales motion task completion with sequential lead stages
 
     $lead = $lead->fresh();
     expect($lead->pipeline_stage_id)->toBe($stage3->id)
+        ->and($lead->pipelineStage->name)->toBe('Connected / DM Sent');
+
+    // 4. Prospect engages / we deliver kit -> Moves to Engaged / Qualified (Stage 4)
+    $engageTask = Task::create([
+        'external_id' => Uuid::uuid4()->toString(),
+        'name' => 'Playbook Scenario 2: Data Engineering Headache & Kit Offer',
+        'taskable_type' => Lead::class,
+        'taskable_id' => $lead->id,
+        'user_owner_id' => $this->user->id,
+    ]);
+
+    $engageTask->update(['completed_at' => now()]);
+
+    $lead = $lead->fresh();
+    expect($lead->pipeline_stage_id)->toBe($stage4->id)
         ->and($lead->pipelineStage->name)->toBe('Engaged / Qualified');
 
-    // 4. Complete Call Transition Task -> Moves to Call Scheduled (Stage 4)
+    // 5. Complete Call Transition Task -> Moves to Call Scheduled (Stage 5)
     $callTask = Task::create([
         'external_id' => Uuid::uuid4()->toString(),
         'name' => 'Playbook Call Transition: Propose 15-Min Technical Sync',
@@ -87,10 +106,10 @@ it('strictly associates sales motion task completion with sequential lead stages
     $callTask->update(['completed_at' => now()]);
 
     $lead = $lead->fresh();
-    expect($lead->pipeline_stage_id)->toBe($stage4->id)
+    expect($lead->pipeline_stage_id)->toBe($stage5->id)
         ->and($lead->pipelineStage->name)->toBe('Call Scheduled');
 
-    // 5. Complete Proposal / SOW Task -> Moves to Proposal Sent (Stage 5)
+    // 6. Complete Proposal / SOW Task -> Moves to Proposal Sent (Stage 6)
     $sowTask = Task::create([
         'external_id' => Uuid::uuid4()->toString(),
         'name' => 'Playbook SOW: Deliver 30-Day Paid Sandbox SOW ($15k–$35k)',
@@ -102,10 +121,10 @@ it('strictly associates sales motion task completion with sequential lead stages
     $sowTask->update(['completed_at' => now()]);
 
     $lead = $lead->fresh();
-    expect($lead->pipeline_stage_id)->toBe($stage5->id)
+    expect($lead->pipeline_stage_id)->toBe($stage6->id)
         ->and($lead->pipelineStage->name)->toBe('Proposal Sent');
 
-    // 6. Complete Contract Task -> Moves to Closed Won (Stage 6)
+    // 7. Complete Contract Task -> Moves to Closed Won (Stage 7)
     $contractTask = Task::create([
         'external_id' => Uuid::uuid4()->toString(),
         'name' => 'Playbook Contract: Execute Annual Enterprise Production Contract ($120k–$240k/yr)',
@@ -117,13 +136,13 @@ it('strictly associates sales motion task completion with sequential lead stages
     $contractTask->update(['completed_at' => now()]);
 
     $lead = $lead->fresh();
-    expect($lead->pipeline_stage_id)->toBe($stage6->id)
+    expect($lead->pipeline_stage_id)->toBe($stage7->id)
         ->and($lead->pipelineStage->name)->toBe('Closed Won');
 });
 
 it('moves to closed lost upon disconnect task completion', function () {
     $stage1 = $this->stages->firstWhere('order', 1);
-    $stage7 = $this->stages->firstWhere('order', 7);
+    $stage8 = $this->stages->firstWhere('order', 8);
 
     $lead = Lead::create([
         'external_id' => Uuid::uuid4()->toString(),
@@ -143,22 +162,33 @@ it('moves to closed lost upon disconnect task completion', function () {
 
     $disconnectTask->update(['completed_at' => now()]);
 
-    expect($lead->fresh()->pipeline_stage_id)->toBe($stage7->id)
+    expect($lead->fresh()->pipeline_stage_id)->toBe($stage8->id)
         ->and($lead->fresh()->pipelineStage->name)->toBe('Closed Lost');
 });
 
-it('advances from Connected to Engaged upon Scenario 1 completion', function () {
-    $stage2 = $this->stages->firstWhere('order', 2);
-    $stage3 = $this->stages->firstWhere('order', 3);
+it('allows manual transition from Connection Request Sent to Connected / DM Sent and then advances to Engaged upon Scenario 1 completion', function () {
+    $stage2 = $this->stages->firstWhere('order', 2); // Connection Request Sent
+    $stage3 = $this->stages->firstWhere('order', 3); // Connected / DM Sent
+    $stage4 = $this->stages->firstWhere('order', 4); // Engaged / Qualified
 
     $lead = Lead::create([
         'external_id' => Uuid::uuid4()->toString(),
-        'title' => 'Connected Quant Lead',
+        'title' => 'Pending Quant Lead',
         'pipeline_id' => $this->pipeline->id,
         'pipeline_stage_id' => $stage2->id,
+        'pipeline_stage_order' => $stage2->order,
         'user_owner_id' => $this->user->id,
     ]);
 
+    // Manually mark as connected via LeadShow
+    Livewire::test(LeadShow::class, ['lead' => $lead])
+        ->call('markConnected')
+        ->assertHasNoErrors();
+
+    expect($lead->fresh()->pipeline_stage_id)->toBe($stage3->id)
+        ->and($lead->fresh()->pipelineStage->name)->toBe('Connected / DM Sent');
+
+    // Completing Scenario 1 once already Connected advances to Engaged / Qualified
     $scenario1 = Task::create([
         'external_id' => Uuid::uuid4()->toString(),
         'name' => 'Playbook Scenario 1: Accept in Silence (Audit Paper)',
@@ -169,6 +199,6 @@ it('advances from Connected to Engaged upon Scenario 1 completion', function () 
 
     $scenario1->update(['completed_at' => now()]);
 
-    expect($lead->fresh()->pipeline_stage_id)->toBe($stage3->id)
+    expect($lead->fresh()->pipeline_stage_id)->toBe($stage4->id)
         ->and($lead->fresh()->pipelineStage->name)->toBe('Engaged / Qualified');
 });
