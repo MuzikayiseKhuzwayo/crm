@@ -154,6 +154,46 @@ return new class extends Migration
             }
         }
 
+        // Reconcile leads in "Engaged / Qualified" whose completed tasks are ONLY connection request + initial DM
+        // (Scenario 1 / Introductory DM) without any subsequent qualification/engagement/kit/call tasks -> move to "Connected / DM Sent"
+        if ($connectedDmSentStage && $engagedStage) {
+            $leadsInEngaged = Lead::where('pipeline_stage_id', $engagedStage->id)
+                ->with('tasks')
+                ->get();
+
+            foreach ($leadsInEngaged as $lead) {
+                $completedTasks = $lead->tasks->filter(fn ($t) => ! is_null($t->completed_at));
+
+                if ($completedTasks->isEmpty()) {
+                    continue;
+                }
+
+                $hasDeepEngagementCompleted = $completedTasks->contains(function ($task) {
+                    $name = strtolower(trim($task->name ?? ''));
+
+                    foreach ([
+                        'scenario 2', 'scenario 3', 'scenario 4', 'evaluation kit',
+                        'blueprint', 'loom teardown', 'discovery', 'qualif',
+                        'requirements', 'onboarding', 'review', 'feedback',
+                        'presentation', 'objection', 'call', 'proposal', 'sow', 'contract',
+                    ] as $kw) {
+                        if (str_contains($name, $kw)) {
+                            return true;
+                        }
+                    }
+
+                    return false;
+                });
+
+                if (! $hasDeepEngagementCompleted) {
+                    $lead->update([
+                        'pipeline_stage_id' => $connectedDmSentStage->id,
+                        'pipeline_stage_order' => $connectedDmSentStage->order,
+                    ]);
+                }
+            }
+        }
+
         // Synchronize pipeline_stage_order for all leads attached to this pipeline
         $stages = PipelineStage::where('pipeline_id', $pipeline->id)->get();
         foreach ($stages as $stage) {
