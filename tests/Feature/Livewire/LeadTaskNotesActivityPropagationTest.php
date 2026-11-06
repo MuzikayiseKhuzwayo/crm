@@ -73,3 +73,53 @@ it('propagates task notes and activities upwards to lead details page with direc
         ->assertSee(route('laravel-crm.tasks.show', $task))
         ->assertSee('Client accepted 5-seat tier, requested redline draft.');
 });
+
+it('does not crash ActivityIndex when a lead has an activity whose task recordable was soft-deleted', function () {
+    $user = User::create(['name' => 'Sales Director', 'email' => 'salesdirector2@example.com']);
+    $this->actingAs($user);
+
+    $lead = Lead::create([
+        'external_id' => Uuid::uuid4()->toString(),
+        'title' => 'RedSquare Software - Quantitative Developer',
+    ]);
+
+    $deletedTask = Task::create([
+        'external_id' => Uuid::uuid4()->toString(),
+        'name' => 'Deleted outreach task',
+        'taskable_type' => get_class($lead),
+        'taskable_id' => $lead->id,
+    ]);
+
+    $lead->activities()->create([
+        'causeable_type' => $user->getMorphClass(),
+        'causeable_id' => $user->id,
+        'timelineable_type' => $lead->getMorphClass(),
+        'timelineable_id' => $lead->id,
+        'recordable_type' => $deletedTask->getMorphClass(),
+        'recordable_id' => $deletedTask->id,
+    ]);
+
+    // Simulate soft-deleted task even if activity was left behind (e.g. from earlier console deletion)
+    Task::withoutEvents(fn () => $deletedTask->delete());
+
+    $activeTask = Task::create([
+        'external_id' => Uuid::uuid4()->toString(),
+        'name' => 'Active outreach task',
+        'taskable_type' => get_class($lead),
+        'taskable_id' => $lead->id,
+    ]);
+
+    $lead->activities()->create([
+        'causeable_type' => $user->getMorphClass(),
+        'causeable_id' => $user->id,
+        'timelineable_type' => $lead->getMorphClass(),
+        'timelineable_id' => $lead->id,
+        'recordable_type' => $activeTask->getMorphClass(),
+        'recordable_id' => $activeTask->id,
+    ]);
+
+    Livewire::test(ActivityIndex::class, ['model' => $lead])
+        ->assertOk()
+        ->assertSee('Active outreach task')
+        ->assertDontSee('Deleted outreach task');
+});

@@ -225,7 +225,7 @@ class TimelineItem extends Component
                         </div>
                     @endif
                     
-                    @if($activity && $activityType)
+                    @if($activity && $activityType && $activity->recordable)
                         <div class="ms-4 mt-2">
                             @livewire('crm-' . $activityType . '-item', [$activityType => $activity->recordable, 'related' => false], key('activity-' . $activityType . '-' . $activity->id))
                         </div>

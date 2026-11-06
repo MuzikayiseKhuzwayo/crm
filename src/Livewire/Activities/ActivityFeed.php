@@ -120,7 +120,8 @@ class ActivityFeed extends Component
     protected function scopedQuery()
     {
         $query = Activity::query()
-            ->with(['causeable', 'timelineable', 'recordable']);
+            ->with(['causeable', 'timelineable', 'recordable'])
+            ->whereHasMorph('recordable', array_values($this->activityTypes));
 
         if ($this->scope === 'mine') {
             $query->where('causeable_id', auth()->id())

@@ -64,10 +64,10 @@ class MeetingObserver
         if (! app()->runningInConsole()) {
             $meeting->user_deleted_id = auth()->user()->id ?? null;
             $meeting->saveQuietly();
+        }
 
-            if ($meeting->activity) {
-                $meeting->activity->delete();
-            }
+        if ($meeting->activity) {
+            $meeting->activity->delete();
         }
     }
 

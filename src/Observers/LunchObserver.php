@@ -64,10 +64,10 @@ class LunchObserver
         if (! app()->runningInConsole()) {
             $lunch->user_deleted_id = auth()->user()->id ?? null;
             $lunch->saveQuietly();
+        }
 
-            if ($lunch->activity) {
-                $lunch->activity->delete();
-            }
+        if ($lunch->activity) {
+            $lunch->activity->delete();
         }
     }
 

@@ -65,7 +65,9 @@ class ActivityIndex extends Component
             return Activity::with(['causeable', 'timelineable', 'recordable'])
                 ->whereIn('id', $activityIds)
                 ->latest()
-                ->get();
+                ->get()
+                ->filter(fn (Activity $activity) => $activity->recordable !== null)
+                ->values();
         }
 
         return [];

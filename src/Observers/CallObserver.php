@@ -64,10 +64,10 @@ class CallObserver
         if (! app()->runningInConsole()) {
             $call->user_deleted_id = auth()->user()->id ?? null;
             $call->saveQuietly();
+        }
 
-            if ($call->activity) {
-                $call->activity->delete();
-            }
+        if ($call->activity) {
+            $call->activity->delete();
         }
     }
 
