@@ -105,7 +105,7 @@
                             @endif
                         @endcan
                         @can('delete crm tasks')
-                            <x-mary-menu-item onclick="modalDeleteTaskItem{{ $task->id }}.showModal()" title="{{ ucfirst(__('laravel-crm::lang.delete')) }}" icon="o-trash" />
+                            <x-mary-menu-item onclick="document.getElementById('modalDeleteTaskItem-{{ $task->id }}-{{ $this->getId() }}')?.showModal()" title="{{ ucfirst(__('laravel-crm::lang.delete')) }}" icon="o-trash" />
                         @endcan
                     </x-mary-dropdown>
                 @endcanany
@@ -143,22 +143,22 @@
                     <small>{{ ucfirst(__('laravel-crm::lang.assigned_to')) }} <a href="{{ route('laravel-crm.users.show', $task->assignedToUser) }}" class="link link-hover link-primary">{{ $task->assignedToUser->name }}</a></small>
                 @endif
             </div>
-
-            @can('delete crm tasks')
-                <dialog id="modalDeleteTaskItem{{ $task->id }}" class="modal">
-                    <div class="modal-box text-left">
-                        <h3 class="text-lg font-bold">Delete task?</h3>
-                        <p class="py-4">You're about to delete this task. This action cannot be reversed.</p>
-                        <div class="modal-action">
-                            <form method="dialog">
-                                <button class="btn">{{ ucfirst(__('laravel-crm::lang.cancel')) }}</button>
-                                <button wire:click="delete" class="btn btn-error text-white">{{ ucfirst(__('laravel-crm::lang.delete')) }}</button>
-                            </form>
-                        </div>
-                    </div>
-                </dialog>
-            @endcan
         @endif
+
+        @can('delete crm tasks')
+            <dialog id="modalDeleteTaskItem-{{ $task->id }}-{{ $this->getId() }}" class="modal">
+                <div class="modal-box text-left">
+                    <h3 class="text-lg font-bold">Delete task?</h3>
+                    <p class="py-4">You're about to delete this task. This action cannot be reversed.</p>
+                    <div class="modal-action">
+                        <form method="dialog">
+                            <button class="btn">{{ ucfirst(__('laravel-crm::lang.cancel')) }}</button>
+                            <button wire:click="delete" class="btn btn-error text-white">{{ ucfirst(__('laravel-crm::lang.delete')) }}</button>
+                        </form>
+                    </div>
+                </div>
+            </dialog>
+        @endcan
     </div>
 </x-mary-card>
 

@@ -38,7 +38,7 @@
                         @endif
                     @endcan
                     @can('delete crm notes')
-                        <x-mary-menu-item onclick="modalDeleteNoteItem{{ $note->id }}.showModal()" title="{{ ucfirst(__('laravel-crm::lang.delete')) }}" />
+                        <x-mary-menu-item onclick="document.getElementById('modalDeleteNoteItem-{{ $note->id }}-{{ $this->getId() }}')?.showModal()" title="{{ ucfirst(__('laravel-crm::lang.delete')) }}" />
                     @endcan
                 </x-mary-dropdown>
             @endcanany
@@ -67,22 +67,22 @@
                     <x-mary-badge value="{{ ucfirst(__('laravel-crm::lang.noted_at')) }} {{ $note->noted_at->format('h:i A') }} on {{ $note->noted_at->toFormattedDateString() }}" class="badge-soft badge-sm" />
                 </div>
             @endif
-
-            @can('delete crm notes')
-                <dialog id="modalDeleteNoteItem{{ $note->id }}" class="modal">
-                    <div class="modal-box text-left">
-                        <h3 class="text-lg font-bold">Delete note?</h3>
-                        <p class="py-4">You're about to delete this note. This action cannot be reversed.</p>
-                        <div class="modal-action">
-                            <form method="dialog">
-                                <button class="btn">{{ ucfirst(__('laravel-crm::lang.cancel')) }}</button>
-                                <button wire:click="delete" class="btn btn-error text-white">{{ ucfirst(__('laravel-crm::lang.delete')) }}</button>
-                            </form>
-                        </div>
-                    </div>
-                </dialog>
-            @endcan
         @endif
+
+        @can('delete crm notes')
+            <dialog id="modalDeleteNoteItem-{{ $note->id }}-{{ $this->getId() }}" class="modal">
+                <div class="modal-box text-left">
+                    <h3 class="text-lg font-bold">Delete note?</h3>
+                    <p class="py-4">You're about to delete this note. This action cannot be reversed.</p>
+                    <div class="modal-action">
+                        <form method="dialog">
+                            <button class="btn">{{ ucfirst(__('laravel-crm::lang.cancel')) }}</button>
+                            <button wire:click="delete" class="btn btn-error text-white">{{ ucfirst(__('laravel-crm::lang.delete')) }}</button>
+                        </form>
+                    </div>
+                </div>
+            </dialog>
+        @endcan
     </div>
 </x-mary-card>
 

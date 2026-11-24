@@ -43,7 +43,7 @@
                 </x-slot:trigger>
                 <x-mary-menu-item wire:click="download" title="{{ ucfirst(__('laravel-crm::lang.download')) }}" />
                 @can('delete crm files')
-                    <x-mary-menu-item onclick="modalDeleteFileItem{{ $file->id }}.showModal()" title="{{ ucfirst(__('laravel-crm::lang.delete')) }}" />
+                    <x-mary-menu-item onclick="document.getElementById('modalDeleteFileItem-{{ $file->id }}-{{ $this->getId() }}')?.showModal()" title="{{ ucfirst(__('laravel-crm::lang.delete')) }}" />
                 @endcan
             </x-mary-dropdown>
         </div>
@@ -56,7 +56,7 @@
         </div>
 
         @can('delete crm files')
-            <dialog id="modalDeleteFileItem{{ $file->id }}" class="modal">
+            <dialog id="modalDeleteFileItem-{{ $file->id }}-{{ $this->getId() }}" class="modal">
                 <div class="modal-box text-left">
                     <h3 class="text-lg font-bold">Delete file?</h3>
                     <p class="py-4">You're about to delete this file. This action cannot be reversed.</p>
