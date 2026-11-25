@@ -89,17 +89,17 @@ return new class extends Migration
 
                 $table->index(['linkedin_campaign_id', 'status', 'next_action_at'], 'crm_lcr_campaign_status_next_idx');
 
-                $table->foreign('linkedin_campaign_id')
+                $table->foreign('linkedin_campaign_id', 'crm_lcr_campaign_id_fk')
                     ->references('id')
                     ->on($prefix.'linkedin_campaigns')
                     ->cascadeOnDelete();
 
-                $table->foreign('lead_id')
+                $table->foreign('lead_id', 'crm_lcr_lead_id_fk')
                     ->references('id')
                     ->on($prefix.'leads')
                     ->nullOnDelete();
 
-                $table->foreign('person_id')
+                $table->foreign('person_id', 'crm_lcr_person_id_fk')
                     ->references('id')
                     ->on($prefix.'people')
                     ->nullOnDelete();
@@ -110,20 +110,20 @@ return new class extends Migration
             Schema::create($prefix.'linkedin_outreach_events', function (Blueprint $table) use ($prefix) {
                 $table->bigIncrements('id');
                 $table->unsignedBigInteger('team_id')->nullable()->index();
-                $table->unsignedBigInteger('linkedin_campaign_id')->index();
-                $table->unsignedBigInteger('linkedin_campaign_recipient_id')->nullable()->index();
+                $table->unsignedBigInteger('linkedin_campaign_id')->index('crm_loe_campaign_id_idx');
+                $table->unsignedBigInteger('linkedin_campaign_recipient_id')->nullable()->index('crm_loe_recipient_id_idx');
                 $table->string('action')->index();
                 $table->unsignedTinyInteger('step')->nullable();
                 $table->json('payload')->nullable();
                 $table->timestamp('occurred_at')->index();
                 $table->timestamps();
 
-                $table->foreign('linkedin_campaign_id')
+                $table->foreign('linkedin_campaign_id', 'crm_loe_campaign_id_fk')
                     ->references('id')
                     ->on($prefix.'linkedin_campaigns')
                     ->cascadeOnDelete();
 
-                $table->foreign('linkedin_campaign_recipient_id')
+                $table->foreign('linkedin_campaign_recipient_id', 'crm_loe_recipient_id_fk')
                     ->references('id')
                     ->on($prefix.'linkedin_campaign_recipients')
                     ->nullOnDelete();
