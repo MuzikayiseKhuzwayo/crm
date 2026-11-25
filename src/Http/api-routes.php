@@ -8,6 +8,7 @@ use VentureDrake\LaravelCrm\Http\Controllers\Api\V2\DeliveryController;
 use VentureDrake\LaravelCrm\Http\Controllers\Api\V2\FeatureController;
 use VentureDrake\LaravelCrm\Http\Controllers\Api\V2\InvoiceController;
 use VentureDrake\LaravelCrm\Http\Controllers\Api\V2\LeadController;
+use VentureDrake\LaravelCrm\Http\Controllers\Api\V2\LinkedinOutreachController;
 use VentureDrake\LaravelCrm\Http\Controllers\Api\V2\MonitorController;
 use VentureDrake\LaravelCrm\Http\Controllers\Api\V2\OrderController;
 use VentureDrake\LaravelCrm\Http\Controllers\Api\V2\OrganizationController;
@@ -29,6 +30,11 @@ use VentureDrake\LaravelCrm\Http\Controllers\Api\V2\TaskController;
 Route::post('auth/token', [AuthController::class, 'issueToken'])
     ->middleware('throttle:6,1')
     ->name('laravel-crm.api.v2.auth.token.issue');
+
+// Allow unauthenticated CORS preflight for Chrome extension LinkedIn outreach clients.
+Route::options('linkedin/{any}', fn () => response('', 204))
+    ->where('any', '.*')
+    ->name('laravel-crm.api.v2.linkedin.cors.preflight');
 
 Route::middleware(['auth:sanctum', 'crm-api', 'laravel-crm.api.team'])->group(function () {
     Route::get('auth/me', [AuthController::class, 'me'])
@@ -97,4 +103,18 @@ Route::middleware(['auth:sanctum', 'crm-api', 'laravel-crm.api.team'])->group(fu
         ->name('laravel-crm.api.v2.automations.generate-playbook-tasks');
     Route::get('system/health', [AutomationController::class, 'health'])
         ->name('laravel-crm.api.v2.system.health');
+
+    // LinkedIn Outreach Extension APIs
+    Route::get('linkedin/status', [LinkedinOutreachController::class, 'status'])
+        ->name('laravel-crm.api.v2.linkedin.status');
+    Route::post('linkedin/tasks/claim', [LinkedinOutreachController::class, 'claim'])
+        ->name('laravel-crm.api.v2.linkedin.tasks.claim');
+    Route::post('linkedin/tasks/{recipient:external_id}/complete', [LinkedinOutreachController::class, 'complete'])
+        ->name('laravel-crm.api.v2.linkedin.tasks.complete');
+    Route::post('linkedin/tasks/{recipient:external_id}/fail', [LinkedinOutreachController::class, 'fail'])
+        ->name('laravel-crm.api.v2.linkedin.tasks.fail');
+    Route::post('linkedin/inbox/sync', [LinkedinOutreachController::class, 'syncInbox'])
+        ->name('laravel-crm.api.v2.linkedin.inbox.sync');
+    Route::post('linkedin/circuit-breaker/reset', [LinkedinOutreachController::class, 'resetCircuitBreaker'])
+        ->name('laravel-crm.api.v2.linkedin.circuit_breaker.reset');
 });

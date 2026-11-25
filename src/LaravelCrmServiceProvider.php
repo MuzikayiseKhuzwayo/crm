@@ -7,6 +7,7 @@ use App\User;
 use Dcblogdev\Xero\Models\XeroToken;
 use Illuminate\Cache\RateLimiting\Limit;
 use Illuminate\Console\Scheduling\Schedule;
+use Illuminate\Contracts\Http\Kernel;
 use Illuminate\Filesystem\Filesystem;
 use Illuminate\Http\Request;
 use Illuminate\Pagination\LengthAwarePaginator;
@@ -101,6 +102,7 @@ use VentureDrake\LaravelCrm\Http\Livewire\SendQuote;
 use VentureDrake\LaravelCrm\Http\Middleware\Authenticate;
 use VentureDrake\LaravelCrm\Http\Middleware\ForceJsonResponse;
 use VentureDrake\LaravelCrm\Http\Middleware\FormComponentsConfig;
+use VentureDrake\LaravelCrm\Http\Middleware\HandleExtensionCors;
 use VentureDrake\LaravelCrm\Http\Middleware\HasCrmAccess;
 use VentureDrake\LaravelCrm\Http\Middleware\LastOnlineAt;
 use VentureDrake\LaravelCrm\Http\Middleware\LogUsage;
@@ -165,6 +167,13 @@ use VentureDrake\LaravelCrm\Livewire\Leads\LeadCreate;
 use VentureDrake\LaravelCrm\Livewire\Leads\LeadEdit;
 use VentureDrake\LaravelCrm\Livewire\Leads\LeadIndex;
 use VentureDrake\LaravelCrm\Livewire\Leads\LeadShow;
+use VentureDrake\LaravelCrm\Livewire\LinkedinCampaigns\LinkedinCampaignCreate;
+use VentureDrake\LaravelCrm\Livewire\LinkedinCampaigns\LinkedinCampaignEdit;
+use VentureDrake\LaravelCrm\Livewire\LinkedinCampaigns\LinkedinCampaignIndex;
+use VentureDrake\LaravelCrm\Livewire\LinkedinCampaigns\LinkedinCampaignShow;
+use VentureDrake\LaravelCrm\Livewire\LinkedinTemplates\LinkedinTemplateCreate;
+use VentureDrake\LaravelCrm\Livewire\LinkedinTemplates\LinkedinTemplateEdit;
+use VentureDrake\LaravelCrm\Livewire\LinkedinTemplates\LinkedinTemplateIndex;
 use VentureDrake\LaravelCrm\Livewire\Lunches\LunchItem;
 use VentureDrake\LaravelCrm\Livewire\Lunches\LunchRelated;
 use VentureDrake\LaravelCrm\Livewire\Meetings\MeetingItem;
@@ -320,6 +329,9 @@ use VentureDrake\LaravelCrm\Models\Invoice;
 use VentureDrake\LaravelCrm\Models\InvoiceLine;
 use VentureDrake\LaravelCrm\Models\Lead;
 use VentureDrake\LaravelCrm\Models\LeadSource;
+use VentureDrake\LaravelCrm\Models\LinkedinCampaign;
+use VentureDrake\LaravelCrm\Models\LinkedinCampaignRecipient;
+use VentureDrake\LaravelCrm\Models\LinkedinTemplate;
 use VentureDrake\LaravelCrm\Models\Lunch;
 use VentureDrake\LaravelCrm\Models\Meeting;
 use VentureDrake\LaravelCrm\Models\Monitor;
@@ -380,6 +392,9 @@ use VentureDrake\LaravelCrm\Observers\InvoiceLineObserver;
 use VentureDrake\LaravelCrm\Observers\InvoiceObserver;
 use VentureDrake\LaravelCrm\Observers\LeadObserver;
 use VentureDrake\LaravelCrm\Observers\LeadSourceObserver;
+use VentureDrake\LaravelCrm\Observers\LinkedinCampaignObserver;
+use VentureDrake\LaravelCrm\Observers\LinkedinCampaignRecipientObserver;
+use VentureDrake\LaravelCrm\Observers\LinkedinTemplateObserver;
 use VentureDrake\LaravelCrm\Observers\LunchObserver;
 use VentureDrake\LaravelCrm\Observers\MeetingObserver;
 use VentureDrake\LaravelCrm\Observers\MonitorCheckObserver;
@@ -432,6 +447,8 @@ use VentureDrake\LaravelCrm\Policies\InvoicePolicy;
 use VentureDrake\LaravelCrm\Policies\LabelPolicy;
 use VentureDrake\LaravelCrm\Policies\LeadPolicy;
 use VentureDrake\LaravelCrm\Policies\LeadSourcePolicy;
+use VentureDrake\LaravelCrm\Policies\LinkedinCampaignPolicy;
+use VentureDrake\LaravelCrm\Policies\LinkedinTemplatePolicy;
 use VentureDrake\LaravelCrm\Policies\LunchPolicy;
 use VentureDrake\LaravelCrm\Policies\MeetingPolicy;
 use VentureDrake\LaravelCrm\Policies\MonitorCheckPolicy;
@@ -526,6 +543,8 @@ class LaravelCrmServiceProvider extends ServiceProvider
         'VentureDrake\LaravelCrm\Models\EmailTemplate' => EmailTemplatePolicy::class,
         'VentureDrake\LaravelCrm\Models\SmsCampaign' => SmsCampaignPolicy::class,
         'VentureDrake\LaravelCrm\Models\SmsTemplate' => SmsTemplatePolicy::class,
+        'VentureDrake\LaravelCrm\Models\LinkedinCampaign' => LinkedinCampaignPolicy::class,
+        'VentureDrake\LaravelCrm\Models\LinkedinTemplate' => LinkedinTemplatePolicy::class,
         'VentureDrake\LaravelCrm\Models\Monitor' => MonitorPolicy::class,
         'VentureDrake\LaravelCrm\Models\MonitorCheck' => MonitorCheckPolicy::class,
     ];
@@ -582,7 +601,13 @@ class LaravelCrmServiceProvider extends ServiceProvider
         // Middleware
         $router->aliasMiddleware('auth.laravel-crm', Authenticate::class);
         $router->aliasMiddleware('laravel-crm.api.json', ForceJsonResponse::class);
+        $router->aliasMiddleware('laravel-crm.api.cors', HandleExtensionCors::class);
         $router->aliasMiddleware('laravel-crm.api.team', SetApiTeamContext::class);
+
+        $kernel = $this->app->make(Kernel::class);
+        if (method_exists($kernel, 'prependToMiddlewarePriority')) {
+            $kernel->prependToMiddlewarePriority(HandleExtensionCors::class);
+        }
 
         RateLimiter::for('laravel-crm-api', function (Request $request) {
             return $request->user()
@@ -678,6 +703,9 @@ class LaravelCrmServiceProvider extends ServiceProvider
         SmsCampaign::observe(SmsCampaignObserver::class);
         SmsTemplate::observe(SmsTemplateObserver::class);
         SmsCampaignRecipient::observe(SmsCampaignRecipientObserver::class);
+        LinkedinCampaign::observe(LinkedinCampaignObserver::class);
+        LinkedinTemplate::observe(LinkedinTemplateObserver::class);
+        LinkedinCampaignRecipient::observe(LinkedinCampaignRecipientObserver::class);
         Feature::observe(FeatureObserver::class);
         FeatureStatus::observe(FeatureStatusObserver::class);
         FeatureComment::observe(FeatureCommentObserver::class);
@@ -1064,6 +1092,13 @@ class LaravelCrmServiceProvider extends ServiceProvider
         Livewire::component('crm-sms-template-create', SmsTemplateCreate::class);
         Livewire::component('crm-sms-template-edit', SmsTemplateEdit::class);
         Livewire::component('crm-sms-template-show', SmsTemplateShow::class);
+        Livewire::component('crm-linkedin-campaign-index', LinkedinCampaignIndex::class);
+        Livewire::component('crm-linkedin-campaign-create', LinkedinCampaignCreate::class);
+        Livewire::component('crm-linkedin-campaign-edit', LinkedinCampaignEdit::class);
+        Livewire::component('crm-linkedin-campaign-show', LinkedinCampaignShow::class);
+        Livewire::component('crm-linkedin-template-index', LinkedinTemplateIndex::class);
+        Livewire::component('crm-linkedin-template-create', LinkedinTemplateCreate::class);
+        Livewire::component('crm-linkedin-template-edit', LinkedinTemplateEdit::class);
         Livewire::component('crm-clicksend-connect', ClickSendConnect::class);
         Livewire::component('crm-deal-index', DealIndex::class);
         Livewire::component('crm-deal-board', DealBoard::class);
@@ -1431,7 +1466,7 @@ class LaravelCrmServiceProvider extends ServiceProvider
         // Mounted under the CRM route prefix (defaults to `crm/api/v2`).
         Route::group([
             'prefix' => trim(config('laravel-crm.route_prefix', 'crm'), '/').'/api/v2',
-            'middleware' => ['api', 'laravel-crm.api.json', 'throttle:laravel-crm-api'],
+            'middleware' => ['api', 'laravel-crm.api.cors', 'laravel-crm.api.json', 'throttle:laravel-crm-api'],
         ], function () {
             $this->loadRoutesFrom(__DIR__.'/Http/api-routes.php');
         });

@@ -108,6 +108,42 @@ Route::group(['prefix' => 'sms-templates', 'middleware' => 'auth.laravel-crm'], 
         ->middleware(['can:update,smsTemplate']);
 });
 
+/* LinkedIn Outreach Campaigns */
+
+Route::group(['prefix' => 'linkedin-campaigns', 'middleware' => 'auth.laravel-crm'], function () {
+    Route::get('', 'VentureDrake\LaravelCrm\Http\Controllers\LinkedinCampaignController@index')
+        ->name('laravel-crm.linkedin-campaigns.index')
+        ->middleware(['can:viewAny,VentureDrake\LaravelCrm\Models\LinkedinCampaign']);
+
+    Route::get('create', 'VentureDrake\LaravelCrm\Http\Controllers\LinkedinCampaignController@create')
+        ->name('laravel-crm.linkedin-campaigns.create')
+        ->middleware(['can:create,VentureDrake\LaravelCrm\Models\LinkedinCampaign']);
+
+    Route::get('{linkedinCampaign}', 'VentureDrake\LaravelCrm\Http\Controllers\LinkedinCampaignController@show')
+        ->name('laravel-crm.linkedin-campaigns.show')
+        ->middleware(['can:view,linkedinCampaign']);
+
+    Route::get('{linkedinCampaign}/edit', 'VentureDrake\LaravelCrm\Http\Controllers\LinkedinCampaignController@edit')
+        ->name('laravel-crm.linkedin-campaigns.edit')
+        ->middleware(['can:update,linkedinCampaign']);
+});
+
+/* LinkedIn Outreach Templates */
+
+Route::group(['prefix' => 'linkedin-templates', 'middleware' => 'auth.laravel-crm'], function () {
+    Route::get('', 'VentureDrake\LaravelCrm\Http\Controllers\LinkedinTemplateController@index')
+        ->name('laravel-crm.linkedin-templates.index')
+        ->middleware(['can:viewAny,VentureDrake\LaravelCrm\Models\LinkedinTemplate']);
+
+    Route::get('create', 'VentureDrake\LaravelCrm\Http\Controllers\LinkedinTemplateController@create')
+        ->name('laravel-crm.linkedin-templates.create')
+        ->middleware(['can:create,VentureDrake\LaravelCrm\Models\LinkedinTemplate']);
+
+    Route::get('{linkedinTemplate}/edit', 'VentureDrake\LaravelCrm\Http\Controllers\LinkedinTemplateController@edit')
+        ->name('laravel-crm.linkedin-templates.edit')
+        ->middleware(['can:update,linkedinTemplate']);
+});
+
 /* Leads */
 
 Route::group(['prefix' => 'leads', 'middleware' => 'auth.laravel-crm'], function () {

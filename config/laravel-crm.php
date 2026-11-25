@@ -265,6 +265,11 @@ return [
     'api' => [
         'token_attempts_per_account' => env('LARAVEL_CRM_API_TOKEN_ATTEMPTS_PER_ACCOUNT', 5),
         'token_attempts_decay_seconds' => env('LARAVEL_CRM_API_TOKEN_ATTEMPTS_DECAY_SECONDS', 600),
+        'allow_chrome_extensions' => env('LARAVEL_CRM_API_ALLOW_CHROME_EXTENSIONS', true),
+        'allowed_extension_ids' => array_values(array_filter(array_map(
+            'trim',
+            explode(',', (string) env('LARAVEL_CRM_API_ALLOWED_EXTENSION_IDS', ''))
+        ))),
     ],
 
     /*

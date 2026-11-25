@@ -184,6 +184,10 @@
                     @endcan
                 @endhassmsmarketingenabled
 
+                @can('viewAny', \VentureDrake\LaravelCrm\Models\LinkedinCampaign::class)
+                    <x-mary-menu-item title="{{ ucfirst(__('laravel-crm::lang.linkedin_outreach')) }}" icon="fab.linkedin" link="{{ url(route('laravel-crm.linkedin-campaigns.index')) }}" />
+                @endcan
+
                 @canany(['view crm activities', 'view crm tasks', 'view crm notes'])
                     <x-mary-menu-item title="{{ ucfirst(__('laravel-crm::lang.activity')) }}" icon="fas.timeline" link="{{ url(route('laravel-crm.activities.index')) }}" />
                 @endcanany
