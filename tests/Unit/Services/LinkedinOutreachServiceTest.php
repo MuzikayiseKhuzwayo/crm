@@ -6,10 +6,13 @@ use VentureDrake\LaravelCrm\Models\Lead;
 use VentureDrake\LaravelCrm\Models\LinkedinCampaign;
 use VentureDrake\LaravelCrm\Models\LinkedinCampaignRecipient;
 use VentureDrake\LaravelCrm\Models\LinkedinOutreachEvent;
+use VentureDrake\LaravelCrm\Models\LinkedinOutreachMessage;
 use VentureDrake\LaravelCrm\Models\LinkedinTemplate;
 use VentureDrake\LaravelCrm\Models\Note;
 use VentureDrake\LaravelCrm\Models\Organization;
 use VentureDrake\LaravelCrm\Models\Person;
+use VentureDrake\LaravelCrm\Models\Pipeline;
+use VentureDrake\LaravelCrm\Models\PipelineStage;
 use VentureDrake\LaravelCrm\Services\LinkedinOutreachService;
 
 afterEach(function () {
@@ -432,7 +435,7 @@ test('syncInboxEvents promotes accepted connects and halts sequence while markin
         ]
     );
 
-    expect($result)->toBe(['accepted' => 1, 'replied' => 1]);
+    expect($result)->toBe(['accepted' => 1, 'replied' => 1, 'outbound_synced' => 0]);
 
     $acceptedRecipient->refresh();
     expect($acceptedRecipient->status)->toBe(LinkedinCampaignRecipient::STATUS_CONNECTED)
@@ -452,4 +455,297 @@ test('syncInboxEvents promotes accepted connects and halts sequence while markin
     expect($replyNote)->not->toBeNull()
         ->and($replyNote->content)->toContain('Yes, happy to jump on a quick call Thursday!')
         ->and(Activity::where('timelineable_id', $leadReplied->id)->where('recordable_id', $replyNote->id)->count())->toBe(1);
+});
+
+test('syncInboxEvents handles manual outbound DMs idempotently and advances stage and next_action_at', function () {
+    $now = Carbon::parse('2026-11-27 12:00:00', 'UTC');
+    Carbon::setTestNow($now);
+
+    $service = new LinkedinOutreachService;
+
+    $pipeline = Pipeline::create([
+        'name' => 'Lead Funnel',
+        'model' => Lead::class,
+        'default' => true,
+        'order' => 1,
+    ]);
+    $stageCold = PipelineStage::create(['pipeline_id' => $pipeline->id, 'name' => 'Cold Prospect', 'order' => 1]);
+    $stageConnectSent = PipelineStage::create(['pipeline_id' => $pipeline->id, 'name' => 'Connection Request Sent', 'order' => 2]);
+    $stageConnectedDm = PipelineStage::create(['pipeline_id' => $pipeline->id, 'name' => 'Connected / DM Sent', 'order' => 3]);
+
+    $campaign = LinkedinCampaign::create([
+        'team_id' => 1,
+        'name' => 'Manual Sync Campaign',
+        'status' => LinkedinCampaign::STATUS_ACTIVE,
+        'min_delay_seconds' => 0,
+        'max_delay_seconds' => 0,
+        'sequence_steps' => [
+            ['step' => 1, 'action' => 'connect', 'body' => 'Connect'],
+            ['step' => 2, 'action' => 'dm', 'body' => 'DM 1', 'delay_hours' => 0],
+            ['step' => 3, 'action' => 'dm', 'body' => 'DM 2', 'delay_hours' => 48],
+        ],
+    ]);
+
+    $lead = Lead::create([
+        'team_id' => 1,
+        'title' => 'John Smith Lead',
+        'pipeline_id' => $pipeline->id,
+        'pipeline_stage_id' => $stageConnectSent->id,
+        'pipeline_stage_order' => 2,
+    ]);
+
+    $recipient = LinkedinCampaignRecipient::create([
+        'team_id' => 1,
+        'linkedin_campaign_id' => $campaign->id,
+        'lead_id' => $lead->id,
+        'linkedin_url' => 'https://www.linkedin.com/in/john-smith/',
+        'status' => LinkedinCampaignRecipient::STATUS_CONNECT_SENT,
+        'current_step' => 1,
+        'connect_sent_at' => $now->copy()->subDay(),
+    ]);
+
+    $sentAt = $now->copy()->subMinutes(15);
+
+    // First sync with "You:" prefix records outbound message, advances step to 2, schedules step 3 (+48h), advances stage
+    $first = $service->syncInboxEvents(1, [], [], [
+        [
+            'slug' => 'john-smith',
+            'snippet' => 'You: Hey John, thanks for connecting! Check https://dubstrata.com/research',
+            'sent_at' => $sentAt->toIso8601String(),
+        ],
+    ]);
+
+    expect($first)->toBe(['accepted' => 0, 'replied' => 0, 'outbound_synced' => 1]);
+
+    $recipient->refresh();
+    expect($recipient->status)->toBe(LinkedinCampaignRecipient::STATUS_IN_SEQUENCE)
+        ->and($recipient->current_step)->toBe(2)
+        ->and($recipient->connected_at)->not->toBeNull()
+        ->and($recipient->last_dm_sent_at->equalTo($sentAt))->toBeTrue()
+        ->and($recipient->next_action_at->equalTo($sentAt->copy()->addHours(48)))->toBeTrue()
+        ->and($lead->fresh()->pipeline_stage_id)->toBe($stageConnectedDm->id)
+        ->and(LinkedinOutreachMessage::where('linkedin_campaign_recipient_id', $recipient->id)->count())->toBe(1);
+
+    // Second sync with same text (without "You:" and different URL/punctuation) is an idempotent no-op
+    $second = $service->syncInboxEvents(1, [], [], [
+        [
+            'slug' => 'john-smith',
+            'snippet' => 'hey john thanks for connecting check https://other.example/url',
+            'sent_at' => $now->toIso8601String(),
+        ],
+    ]);
+
+    expect($second)->toBe(['accepted' => 0, 'replied' => 0, 'outbound_synced' => 0])
+        ->and($recipient->fresh()->current_step)->toBe(2)
+        ->and(LinkedinOutreachMessage::where('linkedin_campaign_recipient_id', $recipient->id)->count())->toBe(1);
+});
+
+test('completeTask supports completed_step and prior_outbound_count jumps and logs idempotent message', function () {
+    $now = Carbon::parse('2026-11-27 10:00:00', 'UTC');
+    Carbon::setTestNow($now);
+
+    $service = new LinkedinOutreachService;
+
+    $campaign = LinkedinCampaign::create([
+        'team_id' => 1,
+        'name' => 'Co-Pilot Jump Campaign',
+        'status' => LinkedinCampaign::STATUS_ACTIVE,
+        'min_delay_seconds' => 0,
+        'max_delay_seconds' => 0,
+        'active_days' => [1, 2, 3, 4, 5, 6, 7],
+        'active_start_hour' => 0,
+        'active_end_hour' => 24,
+        'timezone' => 'UTC',
+        'sequence_steps' => [
+            ['step' => 1, 'action' => 'connect', 'body' => 'Connect'],
+            ['step' => 2, 'action' => 'dm', 'body' => 'DM 1', 'delay_hours' => 0],
+            ['step' => 3, 'action' => 'dm', 'body' => 'DM 2', 'delay_hours' => 24],
+            ['step' => 4, 'action' => 'dm', 'body' => 'DM 3', 'delay_hours' => 72],
+        ],
+    ]);
+
+    $recipient = LinkedinCampaignRecipient::create([
+        'team_id' => 1,
+        'linkedin_campaign_id' => $campaign->id,
+        'linkedin_url' => 'https://www.linkedin.com/in/jump-prospect/',
+        'status' => LinkedinCampaignRecipient::STATUS_CONNECTED,
+        'current_step' => 1,
+        'connected_at' => $now->copy()->subHour(),
+        'next_action_at' => $now->copy()->subMinute(),
+    ]);
+
+    $task = $service->claimNextTask(1, 'copilot-worker');
+    expect($task['step'])->toBe(2)
+        ->and($task['step_messages'])->toHaveCount(3);
+
+    // Co-Pilot user selects DM 2 (step 3) with 1 prior outbound message
+    $service->completeTask($recipient->fresh(), $task['lease_token'], [
+        'sent_text' => 'Hey, floating this back up...',
+        'completed_step' => 3,
+        'prior_outbound_count' => 1,
+    ]);
+
+    $recipient->refresh();
+    expect($recipient->status)->toBe(LinkedinCampaignRecipient::STATUS_IN_SEQUENCE)
+        ->and($recipient->current_step)->toBe(3)
+        ->and($recipient->next_action_at->equalTo($now->copy()->addHours(72)))->toBeTrue()
+        ->and(LinkedinOutreachMessage::where('linkedin_campaign_recipient_id', $recipient->id)->count())->toBe(1);
+
+    // Later inbox sync reporting the exact same worker-sent DM is ignored (no double-advance)
+    $sync = $service->syncInboxEvents(1, [], [], [
+        ['slug' => 'jump-prospect', 'snippet' => 'You: Hey, floating this back up...'],
+    ]);
+    expect($sync['outbound_synced'])->toBe(0)
+        ->and($recipient->fresh()->current_step)->toBe(3);
+});
+
+test('failTask reconciles step_already_sent without failing or burning DM quota', function () {
+    $now = Carbon::parse('2026-11-27 10:00:00', 'UTC');
+    Carbon::setTestNow($now);
+
+    $service = new LinkedinOutreachService;
+
+    $campaign = LinkedinCampaign::create([
+        'team_id' => 1,
+        'name' => 'Reconcile Campaign',
+        'status' => LinkedinCampaign::STATUS_ACTIVE,
+        'min_delay_seconds' => 0,
+        'max_delay_seconds' => 0,
+        'sequence_steps' => [
+            ['step' => 1, 'action' => 'connect', 'body' => 'Connect'],
+            ['step' => 2, 'action' => 'dm', 'body' => 'DM 1', 'delay_hours' => 0],
+            ['step' => 3, 'action' => 'dm', 'body' => 'DM 2', 'delay_hours' => 24],
+        ],
+    ]);
+
+    $recipient = LinkedinCampaignRecipient::create([
+        'team_id' => 1,
+        'linkedin_campaign_id' => $campaign->id,
+        'linkedin_url' => 'https://www.linkedin.com/in/reconcile-user/',
+        'status' => LinkedinCampaignRecipient::STATUS_LEASED,
+        'current_step' => 1,
+        'lease_token' => 'tok-reconcile',
+        'lease_expires_at' => $now->copy()->addMinutes(5),
+    ]);
+
+    $service->failTask(
+        $recipient,
+        'tok-reconcile',
+        'step_already_sent',
+        'Skipped DM: prior intro already sent.',
+        [
+            'prior_outbound_count' => 1,
+            'last_sender' => 'self',
+            'last_outbound_snippet' => 'Hey John, thanks for connecting!',
+        ]
+    );
+
+    $recipient->refresh();
+    expect($recipient->status)->toBe(LinkedinCampaignRecipient::STATUS_IN_SEQUENCE)
+        ->and($recipient->current_step)->toBe(2)
+        ->and($recipient->last_error_code)->toBeNull()
+        ->and($recipient->next_action_at->equalTo($now->copy()->addHours(24)))->toBeTrue()
+        ->and($campaign->fresh()->failed_count)->toBe(0)
+        ->and(LinkedinOutreachEvent::where('action', LinkedinOutreachEvent::ACTION_DM_SENT)->count())->toBe(0)
+        ->and(LinkedinOutreachEvent::where('action', LinkedinOutreachEvent::ACTION_STEP_RECONCILED)->count())->toBe(1)
+        ->and(LinkedinOutreachMessage::where('linkedin_campaign_recipient_id', $recipient->id)->count())->toBe(1);
+});
+
+test('claimNextTask prioritizes DMs over connects, skips stop-outreach stages, and enforces independent quotas', function () {
+    $now = Carbon::parse('2026-11-27 10:00:00', 'UTC');
+    Carbon::setTestNow($now);
+
+    $service = new LinkedinOutreachService;
+
+    $pipeline = Pipeline::create([
+        'name' => 'Lead Funnel',
+        'model' => Lead::class,
+        'default' => true,
+        'order' => 1,
+    ]);
+    $stageCold = PipelineStage::create(['pipeline_id' => $pipeline->id, 'name' => 'Cold Prospect', 'order' => 1]);
+    $stageQualified = PipelineStage::create(['pipeline_id' => $pipeline->id, 'name' => 'Engaged / Qualified', 'order' => 4]);
+
+    $campaign = LinkedinCampaign::create([
+        'team_id' => 1,
+        'name' => 'Priority Campaign',
+        'status' => LinkedinCampaign::STATUS_ACTIVE,
+        'daily_connect_limit' => 1,
+        'daily_dm_limit' => 10,
+        'min_delay_seconds' => 0,
+        'max_delay_seconds' => 0,
+        'active_days' => [1, 2, 3, 4, 5, 6, 7],
+        'active_start_hour' => 0,
+        'active_end_hour' => 24,
+        'timezone' => 'UTC',
+        'sequence_steps' => [
+            ['step' => 1, 'action' => 'connect', 'body' => 'Hi {{first_name}}'],
+            ['step' => 2, 'action' => 'dm', 'body' => 'DM 1 {{first_name}}', 'delay_hours' => 0],
+        ],
+    ]);
+
+    // Exhaust daily connect quota (1/1 used today)
+    LinkedinOutreachEvent::create([
+        'team_id' => 1,
+        'linkedin_campaign_id' => $campaign->id,
+        'action' => LinkedinOutreachEvent::ACTION_CONNECT_SENT,
+        'step' => 1,
+        'occurred_at' => $now->copy()->subMinutes(10),
+    ]);
+
+    // Stop-outreach lead (Qualified) should never be claimed even though connected & due
+    $qualifiedLead = Lead::create([
+        'team_id' => 1,
+        'title' => 'Qualified Lead',
+        'pipeline_id' => $pipeline->id,
+        'pipeline_stage_id' => $stageQualified->id,
+        'pipeline_stage_order' => 4,
+    ]);
+    LinkedinCampaignRecipient::create([
+        'team_id' => 1,
+        'linkedin_campaign_id' => $campaign->id,
+        'lead_id' => $qualifiedLead->id,
+        'linkedin_url' => 'https://www.linkedin.com/in/qualified-lead/',
+        'status' => LinkedinCampaignRecipient::STATUS_CONNECTED,
+        'current_step' => 1,
+        'next_action_at' => $now->copy()->subHours(2),
+    ]);
+
+    // Cold connect recipient (blocked by exhausted connect quota)
+    $coldLead = Lead::create([
+        'team_id' => 1,
+        'title' => 'Cold Lead',
+        'pipeline_id' => $pipeline->id,
+        'pipeline_stage_id' => $stageCold->id,
+        'pipeline_stage_order' => 1,
+    ]);
+    LinkedinCampaignRecipient::create([
+        'team_id' => 1,
+        'linkedin_campaign_id' => $campaign->id,
+        'lead_id' => $coldLead->id,
+        'linkedin_url' => 'https://www.linkedin.com/in/cold-lead/',
+        'status' => LinkedinCampaignRecipient::STATUS_QUEUED,
+        'current_step' => 0,
+        'next_action_at' => $now->copy()->subHours(3),
+    ]);
+
+    // Connected DM recipient (should be claimed despite exhausted connect quota!)
+    $dmRecipient = LinkedinCampaignRecipient::create([
+        'team_id' => 1,
+        'linkedin_campaign_id' => $campaign->id,
+        'linkedin_url' => 'https://www.linkedin.com/in/ready-dm/',
+        'status' => LinkedinCampaignRecipient::STATUS_CONNECTED,
+        'current_step' => 1,
+        'next_action_at' => $now->copy()->subMinute(),
+    ]);
+
+    $claimed = $service->claimNextTask(1, 'worker-priority');
+    expect($claimed)->not->toBeNull()
+        ->and($claimed['recipient_external_id'])->toBe($dmRecipient->external_id)
+        ->and($claimed['action'])->toBe('dm')
+        ->and($claimed['step'])->toBe(2)
+        ->and($claimed['outbound_messages_count'])->toBe(0);
+
+    // Next claim should return null (qualified lead skipped, cold connect blocked by connect quota)
+    expect($service->claimNextTask(1, 'worker-priority'))->toBeNull();
 });

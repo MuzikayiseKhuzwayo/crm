@@ -14,6 +14,7 @@ use VentureDrake\LaravelCrm\Http\Requests\Api\V2\ResetLinkedinCircuitBreakerRequ
 use VentureDrake\LaravelCrm\Http\Requests\Api\V2\SyncLinkedinInboxRequest;
 use VentureDrake\LaravelCrm\Models\LinkedinCampaign;
 use VentureDrake\LaravelCrm\Models\LinkedinCampaignRecipient;
+use VentureDrake\LaravelCrm\Models\LinkedinOutreachMessage;
 use VentureDrake\LaravelCrm\Scopes\BelongsToTeamsScope;
 use VentureDrake\LaravelCrm\Services\LinkedinOutreachService;
 use VentureDrake\LaravelCrm\Services\LinkedinSafetyGovernor;
@@ -101,6 +102,12 @@ class LinkedinOutreachController extends ApiController
                 ])->values()->all(),
                 'due_tasks_count' => $dueTasksCount,
                 'remaining_today' => $remainingToday,
+                'limits' => $activeCampaigns->isEmpty() ? null : [
+                    'daily_connect_limit' => (int) $activeCampaigns->max('daily_connect_limit'),
+                    'weekly_connect_limit' => (int) $activeCampaigns->max('weekly_connect_limit'),
+                    'daily_dm_limit' => (int) $activeCampaigns->max('daily_dm_limit'),
+                    'min_delay_seconds' => (int) $activeCampaigns->min('min_delay_seconds'),
+                ],
                 'next_eligible_at' => $anyAllowed ? null : $earliestNextEligible?->toIso8601String(),
                 'circuit_broken' => $circuitBrokenCampaign !== null,
                 'circuit_broken_reason' => $circuitBrokenCampaign?->circuit_broken_reason,
@@ -141,6 +148,18 @@ class LinkedinOutreachController extends ApiController
             $result['message_body'] = $validated['sent_text'];
         }
 
+        if (array_key_exists('completed_step', $validated) && $validated['completed_step'] !== null) {
+            $result['completed_step'] = (int) $validated['completed_step'];
+        }
+
+        if (array_key_exists('prior_outbound_count', $validated) && $validated['prior_outbound_count'] !== null) {
+            $result['prior_outbound_count'] = (int) $validated['prior_outbound_count'];
+        }
+
+        if (array_key_exists('last_sender', $validated) && $validated['last_sender'] !== null) {
+            $result['last_sender'] = $validated['last_sender'];
+        }
+
         try {
             $this->outreachService->completeTask($recipient, $validated['lease_token'], $result);
         } catch (RuntimeException $e) {
@@ -165,7 +184,8 @@ class LinkedinOutreachController extends ApiController
                 $recipient,
                 $validated['lease_token'],
                 $validated['error_code'],
-                $validated['error_message'] ?? null
+                $validated['error_message'] ?? null,
+                $validated['metadata'] ?? []
             );
         } catch (RuntimeException $e) {
             return response()->json(['message' => $e->getMessage()], 409);
@@ -194,14 +214,16 @@ class LinkedinOutreachController extends ApiController
         $counts = $this->outreachService->syncInboxEvents(
             $teamId,
             $validated['accepted_slugs'] ?? [],
-            $validated['replies'] ?? []
+            $validated['replies'] ?? [],
+            $validated['outbound'] ?? []
         );
 
         return response()->json([
             'data' => [
                 'accepted' => $counts['accepted'],
                 'replied' => $counts['replied'],
-                'updated_recipients' => $counts['accepted'] + $counts['replied'],
+                'outbound_synced' => $counts['outbound_synced'],
+                'updated_recipients' => $counts['accepted'] + $counts['replied'] + $counts['outbound_synced'],
             ],
         ]);
     }
@@ -239,6 +261,70 @@ class LinkedinOutreachController extends ApiController
                     'name' => $campaign->name,
                     'status' => $campaign->status,
                 ])->values()->all(),
+            ],
+        ]);
+    }
+
+    public function updateLimits(Request $request): JsonResponse
+    {
+        $teamId = $this->resolveTeamId($request);
+        $validated = $request->validate([
+            'daily_connect_limit' => ['sometimes', 'integer', 'min:1', 'max:200'],
+            'weekly_connect_limit' => ['sometimes', 'integer', 'min:1', 'max:1000'],
+            'daily_dm_limit' => ['sometimes', 'integer', 'min:1', 'max:500'],
+            'min_delay_seconds' => ['sometimes', 'integer', 'min:0', 'max:3600'],
+            'campaign_id' => ['nullable', 'string'],
+        ]);
+
+        $updates = array_intersect_key($validated, array_flip([
+            'daily_connect_limit',
+            'weekly_connect_limit',
+            'daily_dm_limit',
+            'min_delay_seconds',
+        ]));
+
+        $query = $this->teamCampaignsQuery($teamId);
+        if (! empty($validated['campaign_id'])) {
+            $query->where('external_id', $validated['campaign_id']);
+        } else {
+            $query->whereIn('status', [
+                LinkedinCampaign::STATUS_ACTIVE,
+                LinkedinCampaign::STATUS_PAUSED,
+            ]);
+        }
+
+        $campaigns = $query->get();
+        if (! empty($updates)) {
+            foreach ($campaigns as $campaign) {
+                $campaign->update($updates);
+            }
+        }
+
+        $now = now();
+        $activeCampaigns = $this->teamCampaignsQuery($teamId)
+            ->where('status', LinkedinCampaign::STATUS_ACTIVE)
+            ->get();
+
+        $remainingToday = ['connect' => 0, 'dm' => 0];
+        foreach ($activeCampaigns as $campaign) {
+            $connectEval = $this->safetyGovernor->evaluate($campaign, 'connect', $now);
+            $dmEval = $this->safetyGovernor->evaluate($campaign, 'dm', $now);
+            $remainingToday['connect'] = max($remainingToday['connect'], $connectEval['remaining_today']['connect']);
+            $remainingToday['dm'] = max($remainingToday['dm'], $dmEval['remaining_today']['dm']);
+        }
+
+        $source = $activeCampaigns->isNotEmpty() ? $activeCampaigns : $campaigns;
+
+        return response()->json([
+            'data' => [
+                'updated_count' => $campaigns->count(),
+                'limits' => [
+                    'daily_connect_limit' => (int) ($source->max('daily_connect_limit') ?? ($updates['daily_connect_limit'] ?? 0)),
+                    'weekly_connect_limit' => (int) ($source->max('weekly_connect_limit') ?? ($updates['weekly_connect_limit'] ?? 0)),
+                    'daily_dm_limit' => (int) ($source->max('daily_dm_limit') ?? ($updates['daily_dm_limit'] ?? 0)),
+                    'min_delay_seconds' => (int) ($source->min('min_delay_seconds') ?? ($updates['min_delay_seconds'] ?? 0)),
+                ],
+                'remaining_today' => $remainingToday,
             ],
         ]);
     }
@@ -308,14 +394,14 @@ class LinkedinOutreachController extends ApiController
             ];
         }
 
-        $reason = 'safety_governor_blocked';
+        $reason = null;
         $earliestNextEligible = null;
 
         foreach ($activeCampaigns as $campaign) {
             foreach (['connect', 'dm'] as $action) {
                 $eval = $this->safetyGovernor->evaluate($campaign, $action, $now);
 
-                if (! $eval['allowed'] && $eval['reason'] !== null && $reason === 'safety_governor_blocked') {
+                if (! $eval['allowed'] && $eval['reason'] !== null && $reason === null) {
                     $reason = $eval['reason'];
                 }
 
@@ -327,7 +413,7 @@ class LinkedinOutreachController extends ApiController
         }
 
         return [
-            'reason' => $reason,
+            'reason' => $reason ?? 'no_due_tasks',
             'next_eligible_at' => $earliestNextEligible?->toIso8601String(),
         ];
     }
@@ -337,10 +423,19 @@ class LinkedinOutreachController extends ApiController
      */
     protected function formatRecipientSummary(LinkedinCampaignRecipient $recipient): array
     {
+        $recipient->loadMissing('lead.pipelineStage');
+
+        $outboundCount = LinkedinOutreachMessage::withoutGlobalScope(BelongsToTeamsScope::class)
+            ->where('linkedin_campaign_recipient_id', $recipient->id)
+            ->where('direction', LinkedinOutreachMessage::DIRECTION_OUTBOUND)
+            ->count();
+
         return [
             'id' => $recipient->external_id,
             'status' => $recipient->status,
             'current_step' => (int) $recipient->current_step,
+            'lead_stage' => $recipient->lead?->pipelineStage?->name,
+            'outbound_messages_count' => $outboundCount,
             'connect_sent_at' => $recipient->connect_sent_at?->toIso8601String(),
             'connected_at' => $recipient->connected_at?->toIso8601String(),
             'last_dm_sent_at' => $recipient->last_dm_sent_at?->toIso8601String(),

@@ -13,13 +13,30 @@ use VentureDrake\LaravelCrm\Models\Lead;
 use VentureDrake\LaravelCrm\Models\LinkedinCampaign;
 use VentureDrake\LaravelCrm\Models\LinkedinCampaignRecipient;
 use VentureDrake\LaravelCrm\Models\LinkedinOutreachEvent;
+use VentureDrake\LaravelCrm\Models\LinkedinOutreachMessage;
 use VentureDrake\LaravelCrm\Models\LinkedinTemplate;
 use VentureDrake\LaravelCrm\Models\Person;
+use VentureDrake\LaravelCrm\Models\Pipeline;
+use VentureDrake\LaravelCrm\Models\PipelineStage;
 use VentureDrake\LaravelCrm\Scopes\BelongsToTeamsScope;
 
 class LinkedinOutreachService
 {
     public const MAX_TRANSIENT_ATTEMPTS = 3;
+
+    public const STOP_OUTREACH_STAGE_KEYWORDS = [
+        'replied',
+        'meeting booked',
+        'call scheduled',
+        'proposal',
+        'qualified',
+        'engaged',
+        'won',
+        'lost',
+        'do not contact',
+        'unsubscribed',
+        'disqualified',
+    ];
 
     public const SKIP_ERROR_CODES = [
         'email_required',
@@ -169,16 +186,23 @@ class LinkedinOutreachService
                 return null;
             }
 
-            $candidates = $this->teamRecipientsQuery($teamId)
+            $candidatesQuery = $this->teamRecipientsQuery($teamId)
                 ->whereIn('linkedin_campaign_id', $activeCampaigns->keys())
                 ->dueForAction($now)
                 ->orderByRaw("CASE status WHEN 'connected' THEN 1 WHEN 'in_sequence' THEN 2 WHEN 'queued' THEN 3 ELSE 4 END")
-                ->orderByRaw('CASE WHEN next_action_at IS NULL THEN 0 ELSE 1 END')
+                ->orderByRaw('CASE WHEN next_action_at IS NULL THEN 1 ELSE 0 END')
                 ->orderBy('next_action_at', 'asc')
+                ->orderBy('created_at', 'asc')
                 ->orderBy('id', 'asc')
-                ->limit(50)
-                ->lockForUpdate()
-                ->get();
+                ->limit(50);
+
+            if (DB::connection()->getDriverName() === 'sqlite') {
+                $candidatesQuery->lockForUpdate();
+            } else {
+                $candidatesQuery->lock('for update skip locked');
+            }
+
+            $candidates = $candidatesQuery->get();
 
             $safetyCache = [];
 
@@ -187,6 +211,12 @@ class LinkedinOutreachService
                 $campaign = $activeCampaigns->get($recipient->linkedin_campaign_id);
 
                 if (! $campaign) {
+                    continue;
+                }
+
+                $lead = $this->resolveLead($recipient);
+
+                if ($lead && $this->isLeadInStopOutreachStage($lead)) {
                     continue;
                 }
 
@@ -226,18 +256,24 @@ class LinkedinOutreachService
                 $campaign->last_worker_heartbeat_at = $now;
                 $campaign->saveQuietly();
 
+                $taskStep = (int) ($nextStep['step'] ?? ($recipient->current_step + 1));
                 $messageBody = $this->renderStepMessage($nextStep, $recipient);
-                [$personName, $companyName] = $this->resolveRecipientNames($recipient);
+                [$personName, $companyName] = $this->resolveRecipientNames($recipient, $lead);
+                $stepMessages = $this->buildStepMessages($campaign, $recipient, $action === 'connect' ? 0 : $taskStep);
+                $outboundCount = $this->countOutboundMessages($recipient);
 
                 return [
                     'recipient_external_id' => $recipient->external_id,
                     'lease_token' => $leaseToken,
                     'action' => $action,
-                    'step' => (int) ($nextStep['step'] ?? ($recipient->current_step + 1)),
+                    'step' => $taskStep,
                     'linkedin_url' => $recipient->linkedin_url,
                     'message_body' => $messageBody,
                     'person_name' => $personName,
                     'company_name' => $companyName,
+                    'lead_stage' => $lead?->pipelineStage?->name,
+                    'outbound_messages_count' => $outboundCount,
+                    'step_messages' => $stepMessages,
                 ];
             }
 
@@ -260,12 +296,41 @@ class LinkedinOutreachService
             $campaign = $this->resolveCampaign($recipient);
             $executedStep = $this->getNextStep($campaign, (int) $recipient->current_step);
 
-            $stepNumber = (int) ($result['step'] ?? $executedStep['step'] ?? ($recipient->current_step + 1));
+            $taskStep = (int) ($result['step'] ?? $executedStep['step'] ?? ($recipient->current_step + 1));
             $action = (string) ($result['action'] ?? $executedStep['action'] ?? 'connect');
             $isConnect = $action === 'connect';
+
+            if ($isConnect) {
+                $stepNumber = isset($result['completed_step']) ? (int) $result['completed_step'] : $taskStep;
+            } else {
+                $completedStep = isset($result['completed_step']) ? (int) $result['completed_step'] : $taskStep;
+                $fromPriorCount = isset($result['prior_outbound_count'])
+                    ? $this->resolveStepForDmCount($campaign, ((int) $result['prior_outbound_count']) + 1)
+                    : $taskStep;
+                $stepNumber = max($completedStep, $fromPriorCount);
+                $maxStep = $this->getMaxStep($campaign);
+                if ($maxStep > 0) {
+                    $stepNumber = min($stepNumber, $maxStep);
+                }
+            }
+
             $eventAction = $isConnect
                 ? LinkedinOutreachEvent::ACTION_CONNECT_SENT
                 : LinkedinOutreachEvent::ACTION_DM_SENT;
+
+            $messagePreview = trim((string) ($result['sent_text'] ?? $result['message_body'] ?? $result['message'] ?? ''));
+
+            if ($messagePreview !== '') {
+                $this->recordMessageIfUnseen(
+                    $recipient,
+                    $campaign,
+                    LinkedinOutreachMessage::DIRECTION_OUTBOUND,
+                    LinkedinOutreachMessage::SOURCE_WORKER,
+                    $messagePreview,
+                    $isConnect ? 0 : $stepNumber,
+                    $now
+                );
+            }
 
             LinkedinOutreachEvent::create([
                 'team_id' => $recipient->team_id ?? $campaign->team_id,
@@ -301,6 +366,7 @@ class LinkedinOutreachService
                 $updates['connect_sent_at'] = $now;
                 $updates['next_action_at'] = null;
             } else {
+                $updates['connected_at'] = $recipient->connected_at ?? $now;
                 $updates['last_dm_sent_at'] = $now;
 
                 if ($nextStep !== null) {
@@ -318,7 +384,17 @@ class LinkedinOutreachService
 
             $recipient->update($updates);
 
-            $messagePreview = trim((string) ($result['message_body'] ?? $result['message'] ?? ''));
+            if ($isConnect) {
+                $this->syncLeadStageForOutreachEvent($recipient, 'connect_sent');
+            } else {
+                $dmNumber = $this->resolveDmNumberForStep($campaign, $stepNumber);
+                $this->syncLeadStageForOutreachEvent(
+                    $recipient,
+                    $nextStep === null ? 'sequence_complete' : 'dm_sent',
+                    $dmNumber
+                );
+            }
+
             $actionLabel = $isConnect ? 'LinkedIn connection request sent' : 'LinkedIn DM sent';
             $noteContent = "[{$campaign->name}] {$actionLabel} (Step {$stepNumber})";
 
@@ -332,18 +408,21 @@ class LinkedinOutreachService
 
     /**
      * Handle a failed task execution according to its structured error code.
+     *
+     * @param  array<string, mixed>  $metadata
      */
     public function failTask(
         LinkedinCampaignRecipient $recipient,
         string $leaseToken,
         string $errorCode,
-        ?string $errorMessage = null
+        ?string $errorMessage = null,
+        array $metadata = []
     ): void {
         $this->assertValidLease($recipient, $leaseToken);
 
         $code = strtolower(trim($errorCode));
 
-        DB::transaction(function () use ($recipient, $code, $errorMessage): void {
+        DB::transaction(function () use ($recipient, $code, $errorMessage, $metadata): void {
             $now = now();
             $campaign = $this->resolveCampaign($recipient);
 
@@ -354,6 +433,133 @@ class LinkedinOutreachService
                 'worker_id' => null,
             ];
 
+            if ($code === 'step_already_sent') {
+                $pendingStep = $this->getNextStep($campaign, (int) $recipient->current_step);
+                $taskStep = (int) ($pendingStep['step'] ?? ((int) $recipient->current_step + 1));
+                $priorCount = isset($metadata['prior_outbound_count']) && is_numeric($metadata['prior_outbound_count'])
+                    ? (int) $metadata['prior_outbound_count']
+                    : null;
+                $stepFromPrior = ($priorCount !== null && $priorCount > 0)
+                    ? $this->resolveStepForDmCount($campaign, $priorCount)
+                    : $taskStep;
+
+                $reconciledStep = max((int) $recipient->current_step, $taskStep, $stepFromPrior);
+                $maxStep = $this->getMaxStep($campaign);
+                if ($maxStep > 0) {
+                    $reconciledStep = min($reconciledStep, $maxStep);
+                }
+
+                $lastOutboundSnippet = trim((string) ($metadata['last_outbound_snippet'] ?? ''));
+                if ($lastOutboundSnippet !== '') {
+                    $this->recordMessageIfUnseen(
+                        $recipient,
+                        $campaign,
+                        LinkedinOutreachMessage::DIRECTION_OUTBOUND,
+                        LinkedinOutreachMessage::SOURCE_THREAD_RECONCILE,
+                        $lastOutboundSnippet,
+                        $reconciledStep,
+                        $now
+                    );
+                }
+
+                $lastDmSentAt = $recipient->last_dm_sent_at ?? $now;
+                $nextStep = $this->getNextStep($campaign, $reconciledStep);
+
+                $updates = array_merge($clearLease, [
+                    'connected_at' => $recipient->connected_at ?? $now,
+                    'current_step' => $reconciledStep,
+                    'last_dm_sent_at' => $lastDmSentAt,
+                    'attempt_count' => 0,
+                    'last_error_code' => null,
+                    'last_error_message' => null,
+                ]);
+
+                if ($nextStep !== null) {
+                    $delayHours = (int) ($nextStep['delay_hours'] ?? 24);
+                    $jitterSeconds = $this->computeJitterSeconds($campaign);
+
+                    $updates['status'] = LinkedinCampaignRecipient::STATUS_IN_SEQUENCE;
+                    $updates['next_action_at'] = $lastDmSentAt->copy()->addHours($delayHours)->addSeconds($jitterSeconds);
+                } else {
+                    $updates['status'] = LinkedinCampaignRecipient::STATUS_COMPLETED;
+                    $updates['completed_at'] = $now;
+                    $updates['next_action_at'] = null;
+                }
+
+                $recipient->update($updates);
+
+                LinkedinOutreachEvent::create([
+                    'team_id' => $recipient->team_id ?? $campaign->team_id,
+                    'linkedin_campaign_id' => $campaign->id,
+                    'linkedin_campaign_recipient_id' => $recipient->id,
+                    'action' => LinkedinOutreachEvent::ACTION_STEP_RECONCILED,
+                    'step' => $reconciledStep,
+                    'payload' => array_merge($metadata, [
+                        'error_code' => $code,
+                        'message' => $errorMessage,
+                    ]),
+                    'occurred_at' => $now,
+                ]);
+
+                $dmNumber = $this->resolveDmNumberForStep($campaign, $reconciledStep);
+                $this->syncLeadStageForOutreachEvent(
+                    $recipient,
+                    $nextStep === null ? 'sequence_complete' : 'dm_sent',
+                    $dmNumber
+                );
+
+                return;
+            }
+
+            if ($code === 'reply_detected') {
+                $snippet = trim((string) ($metadata['reply_snippet'] ?? $metadata['snippet'] ?? $errorMessage ?? ''));
+
+                if ($snippet !== '') {
+                    $this->recordMessageIfUnseen(
+                        $recipient,
+                        $campaign,
+                        LinkedinOutreachMessage::DIRECTION_INBOUND,
+                        LinkedinOutreachMessage::SOURCE_THREAD_RECONCILE,
+                        $snippet,
+                        (int) $recipient->current_step,
+                        $now
+                    );
+                }
+
+                $recipient->update(array_merge($clearLease, [
+                    'status' => LinkedinCampaignRecipient::STATUS_REPLIED,
+                    'replied_at' => $now,
+                    'next_action_at' => null,
+                    'attempt_count' => 0,
+                    'last_error_code' => null,
+                    'last_error_message' => null,
+                ]));
+
+                $campaign->increment('replied_count');
+
+                LinkedinOutreachEvent::create([
+                    'team_id' => $recipient->team_id ?? $campaign->team_id,
+                    'linkedin_campaign_id' => $campaign->id,
+                    'linkedin_campaign_recipient_id' => $recipient->id,
+                    'action' => LinkedinOutreachEvent::ACTION_REPLY_RECEIVED,
+                    'step' => (int) $recipient->current_step,
+                    'payload' => array_merge($metadata, [
+                        'error_code' => $code,
+                        'snippet' => $snippet,
+                    ]),
+                    'occurred_at' => $now,
+                ]);
+
+                $lead = $this->resolveLead($recipient);
+                if ($lead) {
+                    $lead->update(['relay_status' => 'engaged']);
+                }
+
+                $this->syncLeadStageForOutreachEvent($recipient, 'replied');
+
+                return;
+            }
+
             if ($code === 'already_connected') {
                 $firstDmStep = $this->getFirstDmStep($campaign);
 
@@ -363,18 +569,21 @@ class LinkedinOutreachService
                     'linkedin_campaign_recipient_id' => $recipient->id,
                     'action' => LinkedinOutreachEvent::ACTION_ACCEPTED,
                     'step' => (int) $recipient->current_step + 1,
-                    'payload' => ['error_code' => $code, 'message' => $errorMessage],
+                    'payload' => array_merge($metadata, ['error_code' => $code, 'message' => $errorMessage]),
                     'occurred_at' => $now,
                 ]);
 
                 $campaign->increment('accepted_count');
 
                 if ($firstDmStep !== null) {
+                    $delayHours = (int) ($firstDmStep['delay_hours'] ?? 0);
+                    $nextActionAt = $delayHours > 0 ? $now->copy()->addHours($delayHours) : $now;
+
                     $recipient->update(array_merge($clearLease, [
                         'status' => LinkedinCampaignRecipient::STATUS_CONNECTED,
                         'connected_at' => $recipient->connected_at ?? $now,
                         'current_step' => max(0, ((int) $firstDmStep['step']) - 1),
-                        'next_action_at' => $now,
+                        'next_action_at' => $nextActionAt,
                         'attempt_count' => 0,
                         'last_error_code' => null,
                         'last_error_message' => null,
@@ -391,6 +600,8 @@ class LinkedinOutreachService
                     ]));
                 }
 
+                $this->syncLeadStageForOutreachEvent($recipient, 'connected');
+
                 return;
             }
 
@@ -403,6 +614,8 @@ class LinkedinOutreachService
                     'last_error_code' => $code,
                     'last_error_message' => $errorMessage,
                 ]));
+
+                $this->syncLeadStageForOutreachEvent($recipient, 'connect_sent');
 
                 return;
             }
@@ -501,18 +714,21 @@ class LinkedinOutreachService
     }
 
     /**
-     * Synchronize accepted connection invitations and inbound replies from LinkedIn inbox polling.
+     * Synchronize accepted connection invitations, inbound replies, and manual outbound DMs
+     * from LinkedIn inbox polling.
      *
      * @param  array<int, string>  $acceptedSlugs
      * @param  array<int, array{slug?: string, snippet?: string, replied_at?: string|null}>  $replies
-     * @return array{accepted: int, replied: int}
+     * @param  array<int, array{slug?: string, snippet?: string, sent_at?: string|null}>  $outbound
+     * @return array{accepted: int, replied: int, outbound_synced: int}
      */
-    public function syncInboxEvents(?int $teamId, array $acceptedSlugs, array $replies): array
+    public function syncInboxEvents(?int $teamId, array $acceptedSlugs, array $replies, array $outbound = []): array
     {
-        return DB::transaction(function () use ($teamId, $acceptedSlugs, $replies): array {
+        return DB::transaction(function () use ($teamId, $acceptedSlugs, $replies, $outbound): array {
             $now = now();
             $acceptedCount = 0;
             $repliedCount = 0;
+            $outboundSyncedCount = 0;
 
             $normalizedAccepted = array_values(array_unique(array_filter(array_map(
                 fn ($slug) => $this->normalizeSlug((string) $slug),
@@ -559,6 +775,8 @@ class LinkedinOutreachService
                         'occurred_at' => $now,
                     ]);
 
+                    $this->syncLeadStageForOutreachEvent($recipient, 'connected');
+
                     $acceptedCount++;
                 }
             }
@@ -584,6 +802,18 @@ class LinkedinOutreachService
 
                 foreach ($matchingRecipients as $recipient) {
                     $campaign = $this->resolveCampaign($recipient);
+
+                    if ($snippet !== '') {
+                        $this->recordMessageIfUnseen(
+                            $recipient,
+                            $campaign,
+                            LinkedinOutreachMessage::DIRECTION_INBOUND,
+                            LinkedinOutreachMessage::SOURCE_INBOX_SYNC,
+                            $snippet,
+                            (int) $recipient->current_step,
+                            $repliedAt
+                        );
+                    }
 
                     $recipient->update([
                         'status' => LinkedinCampaignRecipient::STATUS_REPLIED,
@@ -625,13 +855,121 @@ class LinkedinOutreachService
                         ]);
                     }
 
+                    $this->syncLeadStageForOutreachEvent($recipient, 'replied');
+
                     $repliedCount++;
+                }
+            }
+
+            foreach ($outbound as $item) {
+                $slug = $this->normalizeSlug((string) ($item['slug'] ?? ''));
+                $rawSnippet = (string) ($item['snippet'] ?? '');
+                $cleanSnippet = LinkedinOutreachMessage::stripSenderPrefix($rawSnippet);
+
+                if ($slug === null || $cleanSnippet === '') {
+                    continue;
+                }
+
+                $sentAt = ! empty($item['sent_at']) ? Carbon::parse($item['sent_at']) : $now;
+
+                $matchingRecipients = $this->teamRecipientsQuery($teamId)
+                    ->where('normalized_linkedin_slug', $slug)
+                    ->whereNotIn('status', [
+                        LinkedinCampaignRecipient::STATUS_REPLIED,
+                        LinkedinCampaignRecipient::STATUS_COMPLETED,
+                        LinkedinCampaignRecipient::STATUS_SKIPPED,
+                        LinkedinCampaignRecipient::STATUS_FAILED,
+                    ])
+                    ->get();
+
+                foreach ($matchingRecipients as $recipient) {
+                    $campaign = $this->resolveCampaign($recipient);
+                    $nextDmStep = $this->getNextDmStep($campaign, (int) $recipient->current_step);
+                    $maxStep = $this->getMaxStep($campaign);
+                    $newStep = $nextDmStep !== null
+                        ? (int) $nextDmStep['step']
+                        : max((int) $recipient->current_step, $maxStep);
+
+                    $recorded = $this->recordMessageIfUnseen(
+                        $recipient,
+                        $campaign,
+                        LinkedinOutreachMessage::DIRECTION_OUTBOUND,
+                        LinkedinOutreachMessage::SOURCE_INBOX_SYNC,
+                        $cleanSnippet,
+                        $newStep,
+                        $sentAt
+                    );
+
+                    if (! $recorded) {
+                        continue;
+                    }
+
+                    $wasUnconnected = $recipient->connected_at === null;
+                    $lastDmSentAt = $recipient->last_dm_sent_at && $recipient->last_dm_sent_at->gt($sentAt)
+                        ? $recipient->last_dm_sent_at
+                        : $sentAt;
+
+                    $afterStep = $this->getNextStep($campaign, $newStep);
+
+                    $updates = [
+                        'connected_at' => $recipient->connected_at ?? $sentAt,
+                        'current_step' => $newStep,
+                        'last_dm_sent_at' => $lastDmSentAt,
+                    ];
+
+                    if ($afterStep !== null) {
+                        $delayHours = (int) ($afterStep['delay_hours'] ?? 24);
+                        $jitterSeconds = $this->computeJitterSeconds($campaign);
+
+                        $updates['status'] = LinkedinCampaignRecipient::STATUS_IN_SEQUENCE;
+                        $updates['next_action_at'] = $lastDmSentAt->copy()->addHours($delayHours)->addSeconds($jitterSeconds);
+                    } else {
+                        $updates['status'] = LinkedinCampaignRecipient::STATUS_COMPLETED;
+                        $updates['completed_at'] = $now;
+                        $updates['next_action_at'] = null;
+                    }
+
+                    $recipient->update($updates);
+
+                    if ($wasUnconnected) {
+                        $campaign->increment('accepted_count');
+                    }
+
+                    $campaign->increment('dms_sent_count');
+
+                    LinkedinOutreachEvent::create([
+                        'team_id' => $recipient->team_id ?? $campaign->team_id,
+                        'linkedin_campaign_id' => $campaign->id,
+                        'linkedin_campaign_recipient_id' => $recipient->id,
+                        'action' => LinkedinOutreachEvent::ACTION_DM_SENT,
+                        'step' => $newStep,
+                        'payload' => [
+                            'slug' => $slug,
+                            'snippet' => $cleanSnippet,
+                            'sent_at' => $sentAt->toIso8601String(),
+                            'source' => LinkedinOutreachMessage::SOURCE_INBOX_SYNC,
+                        ],
+                        'occurred_at' => $sentAt,
+                    ]);
+
+                    $noteContent = "[{$campaign->name}] LinkedIn DM synced from inbox (Step {$newStep})\n\n{$cleanSnippet}";
+                    $this->logCrmNoteAndActivity($recipient, $campaign, $noteContent, $sentAt);
+
+                    $dmNumber = $this->resolveDmNumberForStep($campaign, $newStep);
+                    $this->syncLeadStageForOutreachEvent(
+                        $recipient,
+                        $afterStep === null ? 'sequence_complete' : 'dm_sent',
+                        $dmNumber
+                    );
+
+                    $outboundSyncedCount++;
                 }
             }
 
             return [
                 'accepted' => $acceptedCount,
                 'replied' => $repliedCount,
+                'outbound_synced' => $outboundSyncedCount,
             ];
         });
     }
@@ -697,6 +1035,262 @@ class LinkedinOutreachService
     }
 
     /**
+     * @return array<int, array<string, mixed>>
+     */
+    protected function getDmSteps(LinkedinCampaign $campaign): array
+    {
+        $dmSteps = [];
+
+        foreach ($this->sortedSteps($campaign) as $step) {
+            $action = strtolower((string) ($step['action'] ?? ''));
+
+            if (in_array($action, ['dm', 'follow_up', 'message'], true)) {
+                $dmSteps[] = $step;
+            }
+        }
+
+        return $dmSteps;
+    }
+
+    /**
+     * @return array<string, mixed>|null
+     */
+    protected function getNextDmStep(LinkedinCampaign $campaign, int $currentStep): ?array
+    {
+        foreach ($this->getDmSteps($campaign) as $step) {
+            if ((int) ($step['step'] ?? 0) > $currentStep) {
+                return $step;
+            }
+        }
+
+        return null;
+    }
+
+    protected function getMaxStep(LinkedinCampaign $campaign): int
+    {
+        $steps = $this->sortedSteps($campaign);
+
+        if (empty($steps)) {
+            return 0;
+        }
+
+        $last = end($steps);
+
+        return (int) ($last['step'] ?? 0);
+    }
+
+    protected function resolveStepForDmCount(LinkedinCampaign $campaign, int $dmCount): int
+    {
+        $dmSteps = $this->getDmSteps($campaign);
+
+        if (empty($dmSteps)) {
+            return max(1, $dmCount);
+        }
+
+        $index = max(0, min($dmCount - 1, count($dmSteps) - 1));
+
+        return (int) ($dmSteps[$index]['step'] ?? $dmCount);
+    }
+
+    protected function resolveDmNumberForStep(LinkedinCampaign $campaign, int $stepNumber): int
+    {
+        $dmSteps = $this->getDmSteps($campaign);
+
+        foreach ($dmSteps as $idx => $step) {
+            if ((int) ($step['step'] ?? 0) === $stepNumber) {
+                return $idx + 1;
+            }
+        }
+
+        $count = 0;
+        foreach ($dmSteps as $step) {
+            if ((int) ($step['step'] ?? 0) <= $stepNumber) {
+                $count++;
+            }
+        }
+
+        return max(1, $count);
+    }
+
+    /**
+     * Build rendered DM step templates for Co-Pilot variant selection.
+     *
+     * @return array<int, array{step: int, label: string, body: string}>
+     */
+    protected function buildStepMessages(LinkedinCampaign $campaign, LinkedinCampaignRecipient $recipient, int $minStep = 0): array
+    {
+        $messages = [];
+        $dmIndex = 0;
+
+        foreach ($this->getDmSteps($campaign) as $step) {
+            $dmIndex++;
+            $stepNumber = (int) ($step['step'] ?? $dmIndex);
+
+            if ($minStep > 0 && $stepNumber < $minStep) {
+                continue;
+            }
+
+            $body = $this->renderStepMessage($step, $recipient);
+            if ($body === '') {
+                continue;
+            }
+
+            $messages[] = [
+                'step' => $stepNumber,
+                'label' => trim((string) ($step['label'] ?? "DM {$dmIndex}")),
+                'body' => $body,
+            ];
+        }
+
+        return $messages;
+    }
+
+    protected function recordMessageIfUnseen(
+        LinkedinCampaignRecipient $recipient,
+        LinkedinCampaign $campaign,
+        string $direction,
+        string $source,
+        string $bodySnippet,
+        ?int $step,
+        Carbon $occurredAt
+    ): bool {
+        $cleaned = LinkedinOutreachMessage::stripSenderPrefix($bodySnippet);
+        if ($cleaned === '') {
+            return false;
+        }
+
+        $contentHash = LinkedinOutreachMessage::computeContentHash($cleaned);
+
+        $exists = LinkedinOutreachMessage::withoutGlobalScope(BelongsToTeamsScope::class)
+            ->where('linkedin_campaign_recipient_id', $recipient->id)
+            ->where('direction', $direction)
+            ->where('content_hash', $contentHash)
+            ->exists();
+
+        if ($exists) {
+            return false;
+        }
+
+        LinkedinOutreachMessage::create([
+            'team_id' => $recipient->team_id ?? $campaign->team_id,
+            'linkedin_campaign_id' => $campaign->id,
+            'linkedin_campaign_recipient_id' => $recipient->id,
+            'direction' => $direction,
+            'step' => $step,
+            'source' => $source,
+            'body_snippet' => mb_substr($cleaned, 0, 2000, 'UTF-8'),
+            'content_hash' => $contentHash,
+            'occurred_at' => $occurredAt,
+        ]);
+
+        return true;
+    }
+
+    protected function countOutboundMessages(LinkedinCampaignRecipient $recipient): int
+    {
+        return LinkedinOutreachMessage::withoutGlobalScope(BelongsToTeamsScope::class)
+            ->where('linkedin_campaign_recipient_id', $recipient->id)
+            ->where('direction', LinkedinOutreachMessage::DIRECTION_OUTBOUND)
+            ->count();
+    }
+
+    protected function isLeadInStopOutreachStage(Lead $lead): bool
+    {
+        if ($lead->converted_at !== null) {
+            return true;
+        }
+
+        $stageName = strtolower(trim((string) ($lead->pipelineStage?->name ?? '')));
+        if ($stageName === '') {
+            return false;
+        }
+
+        foreach (self::STOP_OUTREACH_STAGE_KEYWORDS as $keyword) {
+            if (str_contains($stageName, $keyword)) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    protected function syncLeadStageForOutreachEvent(
+        LinkedinCampaignRecipient $recipient,
+        string $eventType,
+        int $dmNumber = 0
+    ): ?string {
+        $lead = $this->resolveLead($recipient);
+
+        if (! $lead) {
+            return null;
+        }
+
+        $pipeline = $lead->pipeline_id
+            ? Pipeline::withoutGlobalScope(BelongsToTeamsScope::class)->find($lead->pipeline_id)
+            : Pipeline::withoutGlobalScope(BelongsToTeamsScope::class)->where('model', Lead::class)->first();
+
+        if (! $pipeline) {
+            return $lead->pipelineStage?->name;
+        }
+
+        $stages = PipelineStage::withoutGlobalScope(BelongsToTeamsScope::class)
+            ->where('pipeline_id', $pipeline->id)
+            ->orderBy('order', 'asc')
+            ->orderBy('id', 'asc')
+            ->get();
+
+        if ($stages->isEmpty()) {
+            return $lead->pipelineStage?->name;
+        }
+
+        $keywords = match ($eventType) {
+            'connect_sent' => ['connect sent', 'connection request sent', 'connection request'],
+            'connected' => ['connected', 'connected / dm sent'],
+            'dm_sent' => array_filter([
+                $dmNumber > 0 ? "dm {$dmNumber} sent" : null,
+                'connected / dm sent',
+                'dm sent',
+            ]),
+            'sequence_complete' => ['sequence complete', 'connected / dm sent', 'dm sent'],
+            'replied' => ['replied', 'engaged / qualified', 'engaged', 'qualified'],
+            default => [],
+        };
+
+        $targetStage = null;
+        foreach ($keywords as $keyword) {
+            $match = $stages->first(
+                fn (PipelineStage $stage): bool => strtolower(trim((string) $stage->name)) === $keyword
+            ) ?? $stages->first(
+                fn (PipelineStage $stage): bool => str_contains(strtolower((string) $stage->name), $keyword)
+            );
+
+            if ($match) {
+                $targetStage = $match;
+                break;
+            }
+        }
+
+        if (! $targetStage) {
+            return $lead->pipelineStage?->name;
+        }
+
+        $currentRank = $stages->search(fn (PipelineStage $s): bool => (int) $s->id === (int) $lead->pipeline_stage_id);
+        $targetRank = $stages->search(fn (PipelineStage $s): bool => (int) $s->id === (int) $targetStage->id);
+
+        if ($currentRank === false || ($targetRank !== false && $targetRank > $currentRank)) {
+            $lead->update([
+                'pipeline_id' => $targetStage->pipeline_id,
+                'pipeline_stage_id' => $targetStage->id,
+                'pipeline_stage_order' => $targetStage->order,
+            ]);
+
+            return $targetStage->name;
+        }
+
+        return $lead->pipelineStage?->name;
+    }
+
+    /**
      * @return array<string, mixed>|null
      */
     protected function getFirstDmStep(LinkedinCampaign $campaign): ?array
@@ -758,9 +1352,9 @@ class LinkedinOutreachService
     /**
      * @return array{0: string, 1: string}
      */
-    protected function resolveRecipientNames(LinkedinCampaignRecipient $recipient): array
+    protected function resolveRecipientNames(LinkedinCampaignRecipient $recipient, ?Lead $lead = null): array
     {
-        $lead = $this->resolveLead($recipient);
+        $lead ??= $this->resolveLead($recipient);
         $person = $this->resolvePerson($recipient, $lead);
         $organization = $lead?->organization ?? $person?->organization;
 
@@ -847,7 +1441,7 @@ class LinkedinOutreachService
         }
 
         return Lead::withoutGlobalScope(BelongsToTeamsScope::class)
-            ->with(['person', 'organization'])
+            ->with(['person', 'organization', 'pipelineStage'])
             ->find($recipient->lead_id);
     }
 

@@ -22,6 +22,8 @@ class LinkedinOutreachEvent extends Model
 
     public const ACTION_CIRCUIT_BREAKER_TRIPPED = 'circuit_breaker_tripped';
 
+    public const ACTION_STEP_RECONCILED = 'step_reconciled';
+
     public const ACTIONS = [
         self::ACTION_CONNECT_SENT,
         self::ACTION_ACCEPTED,
@@ -30,6 +32,7 @@ class LinkedinOutreachEvent extends Model
         self::ACTION_SKIPPED,
         self::ACTION_FAILED,
         self::ACTION_CIRCUIT_BREAKER_TRIPPED,
+        self::ACTION_STEP_RECONCILED,
     ];
 
     protected $guarded = ['id'];

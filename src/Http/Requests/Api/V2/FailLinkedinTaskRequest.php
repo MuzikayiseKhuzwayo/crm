@@ -10,6 +10,8 @@ class FailLinkedinTaskRequest extends FormRequest
     public const ERROR_CODES = [
         'already_connected',
         'pending_invite',
+        'step_already_sent',
+        'reply_detected',
         'email_required',
         'profile_unavailable',
         'cannot_message',
@@ -30,6 +32,7 @@ class FailLinkedinTaskRequest extends FormRequest
             'lease_token' => ['required', 'string', 'max:255'],
             'error_code' => ['required', 'string', Rule::in(self::ERROR_CODES)],
             'error_message' => ['nullable', 'string'],
+            'metadata' => ['nullable', 'array'],
         ];
     }
 }

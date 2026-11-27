@@ -20,6 +20,10 @@ class SyncLinkedinInboxRequest extends FormRequest
             'replies.*.slug' => ['required', 'string', 'max:255'],
             'replies.*.snippet' => ['nullable', 'string'],
             'replies.*.replied_at' => ['nullable', 'date'],
+            'outbound' => ['nullable', 'array'],
+            'outbound.*.slug' => ['required', 'string', 'max:255'],
+            'outbound.*.snippet' => ['required', 'string'],
+            'outbound.*.sent_at' => ['nullable', 'date'],
         ];
     }
 }

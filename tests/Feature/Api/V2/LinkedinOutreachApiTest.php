@@ -352,6 +352,7 @@ test('POST linkedin/inbox/sync updates accepted connections, replies, and lead r
     expect($response->json('data'))->toBe([
         'accepted' => 1,
         'replied' => 1,
+        'outbound_synced' => 0,
         'updated_recipients' => 2,
     ]);
 
@@ -439,4 +440,97 @@ test('CORS middleware allows chrome-extension origins safely without weakening a
         ->getJson('/crm/api/v2/linkedin/status');
     $blockedExt->assertOk();
     expect($blockedExt->headers->get('Access-Control-Allow-Origin'))->toBeNull();
+});
+
+test('API v2 supports step_messages on claim, completed_step on complete, step_already_sent on fail, and outbound inbox sync', function () {
+    $user = linkedinApiUser();
+    $headers = linkedinApiHeaders($user);
+
+    $campaign = makeActiveCampaign([
+        'sequence_steps' => [
+            ['step' => 1, 'action' => 'connect', 'body' => 'Hi {{first_name}}!'],
+            ['step' => 2, 'action' => 'dm', 'delay_hours' => 0, 'body' => 'DM 1 for {{first_name}}'],
+            ['step' => 3, 'action' => 'dm', 'delay_hours' => 24, 'body' => 'DM 2 for {{first_name}}'],
+            ['step' => 4, 'action' => 'dm', 'delay_hours' => 48, 'body' => 'DM 3 for {{first_name}}'],
+        ],
+    ]);
+
+    $person = Person::create(['first_name' => 'Grace', 'last_name' => 'Hopper']);
+    $recipient = makeDueRecipient($campaign, [
+        'person_id' => $person->id,
+        'normalized_linkedin_slug' => 'grace-hopper',
+        'linkedin_url' => 'https://www.linkedin.com/in/grace-hopper/',
+        'status' => LinkedinCampaignRecipient::STATUS_CONNECTED,
+        'current_step' => 1,
+        'connected_at' => now()->subHour(),
+    ]);
+
+    // 1. Claim includes step_messages and outbound_messages_count
+    $claim = $this->withHeaders($headers)
+        ->postJson('/crm/api/v2/linkedin/tasks/claim', ['worker_id' => 'ext-copilot'])
+        ->assertOk()
+        ->json('data');
+
+    expect($claim['action'])->toBe('dm')
+        ->and($claim['step'])->toBe(2)
+        ->and($claim['outbound_messages_count'])->toBe(0)
+        ->and($claim['step_messages'])->toHaveCount(3)
+        ->and($claim['step_messages'][0]['label'])->toBe('DM 1')
+        ->and($claim['step_messages'][0]['body'])->toBe('DM 1 for Grace');
+
+    // 2. Fail with step_already_sent reconciles forward instead of failing
+    $fail = $this->withHeaders($headers)
+        ->postJson("/crm/api/v2/linkedin/tasks/{$recipient->external_id}/fail", [
+            'lease_token' => $claim['lease_token'],
+            'error_code' => 'step_already_sent',
+            'error_message' => 'Intro already sent',
+            'metadata' => [
+                'prior_outbound_count' => 1,
+                'last_sender' => 'self',
+                'last_outbound_snippet' => 'DM 1 for Grace',
+            ],
+        ])
+        ->assertOk()
+        ->json('data');
+
+    expect($fail['status'])->toBe(LinkedinCampaignRecipient::STATUS_IN_SEQUENCE)
+        ->and($fail['current_step'])->toBe(2)
+        ->and($fail['outbound_messages_count'])->toBe(1)
+        ->and($fail['last_error_code'])->toBeNull();
+
+    // 3. Manual outbound DM via inbox/sync advances to step 3 and deduplicates on retry
+    $sync1 = $this->withHeaders($headers)
+        ->postJson('/crm/api/v2/linkedin/inbox/sync', [
+            'outbound' => [
+                [
+                    'slug' => 'grace-hopper',
+                    'snippet' => 'You: DM 2 for Grace manually sent',
+                    'sent_at' => now()->toIso8601String(),
+                ],
+            ],
+        ])
+        ->assertOk()
+        ->json('data');
+
+    expect($sync1)->toBe([
+        'accepted' => 0,
+        'replied' => 0,
+        'outbound_synced' => 1,
+        'updated_recipients' => 1,
+    ]);
+    expect($recipient->fresh()->current_step)->toBe(3);
+
+    $sync2 = $this->withHeaders($headers)
+        ->postJson('/crm/api/v2/linkedin/inbox/sync', [
+            'outbound' => [
+                [
+                    'slug' => 'grace-hopper',
+                    'snippet' => 'DM 2 for Grace manually sent',
+                ],
+            ],
+        ])
+        ->assertOk()
+        ->json('data');
+
+    expect($sync2['outbound_synced'])->toBe(0);
 });

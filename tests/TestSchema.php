@@ -1655,5 +1655,26 @@ class TestSchema
                 $table->timestamps();
             });
         }
+
+        if (! Schema::hasTable($prefix.'linkedin_outreach_messages')) {
+            Schema::create($prefix.'linkedin_outreach_messages', function (Blueprint $table) {
+                $table->bigIncrements('id');
+                $table->unsignedBigInteger('team_id')->nullable()->index();
+                $table->unsignedBigInteger('linkedin_campaign_id')->index();
+                $table->unsignedBigInteger('linkedin_campaign_recipient_id')->index();
+                $table->string('direction', 20)->index();
+                $table->unsignedTinyInteger('step')->nullable();
+                $table->string('source', 32)->default('worker');
+                $table->text('body_snippet');
+                $table->char('content_hash', 64);
+                $table->timestamp('occurred_at')->index();
+                $table->timestamps();
+
+                $table->unique(
+                    ['linkedin_campaign_recipient_id', 'direction', 'content_hash'],
+                    'crm_lom_recip_dir_hash_uq'
+                );
+            });
+        }
     }
 }

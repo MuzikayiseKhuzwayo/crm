@@ -117,4 +117,6 @@ Route::middleware(['auth:sanctum', 'crm-api', 'laravel-crm.api.team'])->group(fu
         ->name('laravel-crm.api.v2.linkedin.inbox.sync');
     Route::post('linkedin/circuit-breaker/reset', [LinkedinOutreachController::class, 'resetCircuitBreaker'])
         ->name('laravel-crm.api.v2.linkedin.circuit_breaker.reset');
+    Route::post('linkedin/limits', [LinkedinOutreachController::class, 'updateLimits'])
+        ->name('laravel-crm.api.v2.linkedin.limits.update');
 });

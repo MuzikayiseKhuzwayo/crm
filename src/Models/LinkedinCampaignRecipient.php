@@ -124,6 +124,11 @@ class LinkedinCampaignRecipient extends Model
         return $this->hasMany(LinkedinOutreachEvent::class, 'linkedin_campaign_recipient_id');
     }
 
+    public function messages()
+    {
+        return $this->hasMany(LinkedinOutreachMessage::class, 'linkedin_campaign_recipient_id');
+    }
+
     /**
      * Strip query params, fragments, and trailing slashes to extract the canonical /in/<slug> identifier.
      */
@@ -169,6 +174,8 @@ class LinkedinCampaignRecipient extends Model
 
         return $query
             ->whereIn('status', self::ACTIONABLE_STATUSES)
+            ->whereNull('replied_at')
+            ->whereNull('completed_at')
             ->where(function (Builder $q) use ($at) {
                 $q->whereNull('next_action_at')
                     ->orWhere('next_action_at', '<=', $at);
